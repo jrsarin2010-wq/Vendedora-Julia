@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import crypto from "node:crypto";
 import { db } from "@workspace/db";
 import {
   leadsTable,
@@ -16,8 +17,34 @@ import { sendWhatsAppMessage, sendTelegramAlert } from "../lib/integrations";
 
 const router: IRouter = Router();
 
+// Senha secreta que só o seu WhatsApp (Evolution) conhece. Se estiver
+// configurada, a Júlia só processa mensagens que tragam essa senha — assim
+// ninguém de fora consegue forjar mensagens e gastar seu crédito de IA.
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET ?? "";
+
+function secretMatches(provided: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(WEBHOOK_SECRET);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 // POST /api/webhook/whatsapp
 router.post("/webhook/whatsapp", async (req, res) => {
+  // Tranca: confere a senha secreta (cabeçalho x-webhook-secret ou ?secret=).
+  if (WEBHOOK_SECRET) {
+    const provided =
+      req.header("x-webhook-secret") ??
+      (typeof req.query.secret === "string" ? req.query.secret : "");
+    if (!provided || !secretMatches(provided)) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+  } else {
+    req.log.warn(
+      "WEBHOOK_SECRET não configurado — webhook aceitando qualquer origem",
+    );
+  }
+
   // Acknowledge immediately to avoid Evolution API timeout
   res.json({ ok: true });
 

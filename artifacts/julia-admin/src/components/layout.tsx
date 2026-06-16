@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { logout } from "@/lib/auth-api";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -24,6 +25,11 @@ export function Layout({ children }: LayoutProps) {
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location]);
+
+  async function handleLogout() {
+    await logout();
+    window.location.reload();
+  }
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden font-sans">
@@ -60,9 +66,9 @@ export function Layout({ children }: LayoutProps) {
         </nav>
 
         <div className="p-4 border-t border-border mt-auto">
-          <div className="flex items-center gap-3 px-2 py-2 text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-md cursor-pointer transition-colors" data-testid="nav-logout">
+          <div className="flex items-center gap-3 px-2 py-2 text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-md cursor-pointer transition-colors" data-testid="nav-logout" onClick={handleLogout}>
             <LogOut size={18} />
-            Sign Out
+            Sair
           </div>
         </div>
       </aside>

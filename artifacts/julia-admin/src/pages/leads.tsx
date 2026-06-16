@@ -21,7 +21,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Search, Filter, AlertTriangle, MessageSquare } from "lucide-react";
-import { useDebounce } from "@/hooks/use-debounce"; // Assuming this exists or I'll create a simple one or just not use debounce for now
 
 // Simple debounce hook for local use
 function useDebounceLocal<T>(value: T, delay: number): T {
@@ -158,7 +157,9 @@ export default function Leads() {
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-foreground">{lead.name || "Unknown Dentist"}</span>
                               {lead.handoffRequested && (
-                                <AlertTriangle className="h-3 w-3 text-destructive" title="Handoff Requested" />
+                                <span title="Handoff Requested">
+                                  <AlertTriangle className="h-3 w-3 text-destructive" />
+                                </span>
                               )}
                             </div>
                             <span className="text-xs text-muted-foreground font-mono">{lead.phone}</span>
