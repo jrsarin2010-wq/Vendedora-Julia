@@ -45,6 +45,50 @@ export async function sendWhatsAppMessage(
   }
 }
 
+/**
+ * Busca o áudio (ou outra mídia) de uma mensagem do WhatsApp já decifrado,
+ * em base64, usando a Evolution API. O WhatsApp criptografa as mídias, então
+ * não dá pra ler direto do payload — é preciso pedir à Evolution.
+ *
+ * Retorna o base64 da mídia, ou null se não conseguir (sem derrubar o fluxo).
+ */
+export async function fetchWhatsAppMediaBase64(
+  messageId: string,
+): Promise<string | null> {
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+    logger.warn("Evolution API not configured — cannot fetch media");
+    return null;
+  }
+
+  try {
+    const url = `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${EVOLUTION_INSTANCE}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: EVOLUTION_API_KEY,
+      },
+      body: JSON.stringify({ message: { key: { id: messageId } } }),
+      signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      logger.error(
+        { status: response.status, body },
+        "Evolution getBase64FromMediaMessage error",
+      );
+      return null;
+    }
+
+    const data = (await response.json()) as { base64?: string };
+    return data?.base64 ?? null;
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch WhatsApp media");
+    return null;
+  }
+}
+
 interface HandoffAlert {
   type: "handoff";
   lead: Lead;

@@ -7,14 +7,14 @@ import {
   followUpsTable,
 } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { openai, speechToText, detectAudioFormat } from "@workspace/integrations-openai-ai-server";
 import {
   JULIA_SYSTEM_PROMPT,
   JULIA_EXTRACTION_PROMPT,
   FOLLOW_UP_TEMPLATES,
   FOLLOW_UP_DELAYS_HOURS,
 } from "../julia-persona";
-import { sendWhatsAppMessage, sendTelegramAlert } from "../lib/integrations";
+import { sendWhatsAppMessage, sendTelegramAlert, fetchWhatsAppMediaBase64 } from "../lib/integrations";
 
 const router: IRouter = Router();
 
@@ -73,6 +73,28 @@ router.post("/webhook/whatsapp", async (req, res) => {
     else if (msg?.extendedTextMessage?.text) text = msg.extendedTextMessage.text;
     else if (msg?.message?.conversation) text = msg.message.conversation;
     else if (msg?.message?.extendedTextMessage?.text) text = msg.message.extendedTextMessage.text;
+
+    // Se não veio texto, talvez seja um ÁUDIO. A Júlia transcreve e segue
+    // o fluxo normal como se fosse texto. Nunca derruba o fluxo se falhar.
+    if (!text.trim()) {
+      const audioMsg = msg?.audioMessage ?? msg?.message?.audioMessage;
+      const messageId: string | undefined = key?.id;
+      if (audioMsg && messageId) {
+        try {
+          const base64 = await fetchWhatsAppMediaBase64(messageId);
+          if (base64) {
+            const buffer = Buffer.from(base64, "base64");
+            const detected = detectAudioFormat(buffer);
+            // WhatsApp manda áudio em ogg/opus; se não reconhecer, tenta ogg.
+            const fmt = detected === "unknown" ? "ogg" : detected;
+            text = (await speechToText(buffer, fmt)).trim();
+            req.log.info({ phone }, "Áudio do WhatsApp transcrito");
+          }
+        } catch (err) {
+          req.log.warn({ err, phone }, "Falha ao transcrever áudio do WhatsApp");
+        }
+      }
+    }
 
     if (!text.trim()) return;
 
