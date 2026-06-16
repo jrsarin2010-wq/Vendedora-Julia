@@ -10,6 +10,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import {
   JULIA_SYSTEM_PROMPT,
+  JULIA_EXTRACTION_PROMPT,
   FOLLOW_UP_TEMPLATES,
   FOLLOW_UP_DELAYS_HOURS,
 } from "../julia-persona";
@@ -162,6 +163,62 @@ router.post("/webhook/whatsapp", async (req, res) => {
 
     // Send via Evolution API
     await sendWhatsAppMessage(phone, reply);
+
+    // Analista de bastidor: lê a conversa e anota a dor e a objeção do lead,
+    // pra você receber o lead com contexto. Roda DEPOIS de enviar a resposta
+    // (não atrasa o dentista) e nunca derruba o fluxo se falhar.
+    try {
+      const transcript = [
+        ...history.map(
+          (m) =>
+            `${m.direction === "inbound" ? "Dentista" : "Júlia"}: ${m.content}`,
+        ),
+        `Júlia: ${reply}`,
+      ].join("\n");
+
+      const extraction = await openai.chat.completions.create(
+        {
+          model: "gpt-5.4",
+          max_completion_tokens: 200,
+          messages: [
+            { role: "system", content: JULIA_EXTRACTION_PROMPT },
+            { role: "user", content: transcript },
+          ],
+        },
+        { timeout: 20_000 },
+      );
+
+      const rawExtraction = extraction.choices[0]?.message?.content?.trim() ?? "";
+      const jsonText = rawExtraction.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(jsonText) as {
+        painPoints?: string | null;
+        mainObjection?: string | null;
+      };
+
+      const update: { painPoints?: string; mainObjection?: string; updatedAt?: Date } = {};
+      if (parsed.painPoints && parsed.painPoints.trim()) {
+        update.painPoints = parsed.painPoints.trim();
+      }
+      if (parsed.mainObjection && parsed.mainObjection.trim()) {
+        update.mainObjection = parsed.mainObjection.trim();
+      }
+
+      if (Object.keys(update).length > 0) {
+        update.updatedAt = new Date();
+        await db
+          .update(leadsTable)
+          .set(update)
+          .where(eq(leadsTable.id, lead.id));
+        // reflete em memória pra o alerta do Telegram já sair com o contexto
+        if (update.painPoints) lead.painPoints = update.painPoints;
+        if (update.mainObjection) lead.mainObjection = update.mainObjection;
+      }
+    } catch (err) {
+      req.log.warn(
+        { err, leadId: lead.id },
+        "Extração de dor/objeção falhou (seguindo sem)",
+      );
+    }
 
     const lowerReply = reply.toLowerCase();
     const lowerText = text.toLowerCase();

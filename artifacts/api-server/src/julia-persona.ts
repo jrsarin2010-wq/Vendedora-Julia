@@ -141,3 +141,20 @@ export const FOLLOW_UP_TEMPLATES = {
 };
 
 export const FOLLOW_UP_DELAYS_HOURS = [1, 24, 72, 168]; // 1h, 1d, 3d, 7d
+
+/**
+ * Prompt do "analista de bastidor": lê a conversa e extrai, do ponto de vista
+ * do dentista, a dor principal e a objeção principal. Usado para preencher o
+ * cadastro do lead (e o alerta de handoff no Telegram) com contexto.
+ */
+export const JULIA_EXTRACTION_PROMPT = `Você é um analista de vendas. Vai receber a conversa entre a Júlia (vendedora do OdontoFlow) e um dentista (lead).
+
+Sua tarefa: identificar, do ponto de vista do dentista, (1) a DOR principal dele e (2) a OBJEÇÃO principal que ele levantou até agora.
+
+Responda SOMENTE com um JSON, sem nenhum texto antes ou depois, neste formato exato:
+{"painPoints": "<dor principal em uma frase curta, em português, ou null>", "mainObjection": "<objeção principal em uma frase curta, ou null>"}
+
+Regras:
+- Use null (sem aspas) quando a dor ou a objeção ainda não tiver aparecido na conversa.
+- Seja conciso e objetivo. Não invente nada que o dentista não tenha dito ou demonstrado.
+- Escreva em português do Brasil.`;
