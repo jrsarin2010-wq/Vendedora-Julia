@@ -6,7 +6,7 @@ import {
   leadMessagesTable,
   followUpsTable,
 } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import {
   JULIA_SYSTEM_PROMPT,
@@ -99,11 +99,17 @@ router.post("/webhook/whatsapp", async (req, res) => {
         .where(eq(leadsTable.id, lead.id));
     }
 
-    // Cancel any pending follow-ups since lead replied
+    // Cancela só os follow-ups PENDENTES (o lead respondeu, então a leva
+    // armada não deve mais disparar). Os já enviados ficam no histórico.
     await db
       .update(followUpsTable)
       .set({ status: "cancelled" })
-      .where(eq(followUpsTable.leadId, lead.id));
+      .where(
+        and(
+          eq(followUpsTable.leadId, lead.id),
+          eq(followUpsTable.status, "pending"),
+        ),
+      );
 
     // Save inbound message
     await db.insert(leadMessagesTable).values({
@@ -195,7 +201,10 @@ router.post("/webhook/whatsapp", async (req, res) => {
       }
     }
 
-    // Schedule follow-ups if lead hasn't closed
+    // Arma uma leva NOVA de follow-ups, contando a partir de agora.
+    // Como acabamos de cancelar os pendentes acima, não há leva ativa — então
+    // sempre criamos uma nova. Assim, se o lead sumir, a cadência recomeça do
+    // último contato. (Só não arma se o lead já fechou ou foi perdido.)
     if (!["closed", "lost"].includes(lead.status)) {
       const scheduledFollowUps = FOLLOW_UP_DELAYS_HOURS.map((hours, idx) => ({
         leadId: lead.id,
@@ -205,16 +214,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         status: "pending" as const,
       }));
 
-      // Only add if no pending follow-ups exist
-      const existing = await db
-        .select({ id: followUpsTable.id })
-        .from(followUpsTable)
-        .where(eq(followUpsTable.leadId, lead.id))
-        .limit(1);
-
-      if (existing.length === 0) {
-        await db.insert(followUpsTable).values(scheduledFollowUps);
-      }
+      await db.insert(followUpsTable).values(scheduledFollowUps);
     }
   } catch (err) {
     req.log.error({ err }, "Webhook processing error");
