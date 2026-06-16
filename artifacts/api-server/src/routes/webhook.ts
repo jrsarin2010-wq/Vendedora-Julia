@@ -163,7 +163,52 @@ router.post("/webhook/whatsapp", async (req, res) => {
     // Send via Evolution API
     await sendWhatsAppMessage(phone, reply);
 
-    // Check if handoff needed
+    const lowerReply = reply.toLowerCase();
+    const lowerText = text.toLowerCase();
+
+    // Pedido de parar de receber mensagens (opt-out). Respeitamos na hora:
+    // o lead deixa de receber follow-ups e NÃO vira handoff (ele quer parar,
+    // não falar com humano).
+    const optOutPhrases = [
+      "parar de receber",
+      "para de receber",
+      "pare de receber",
+      "não quero receber",
+      "nao quero receber",
+      "para de me mandar",
+      "pare de me mandar",
+      "não me manda",
+      "nao me manda",
+      "não me mande",
+      "nao me mande",
+      "para de mandar",
+      "pare de mandar",
+      "sair da lista",
+      "me tira da lista",
+      "descadastr",
+      "me remove",
+      "não perturbe",
+      "nao perturbe",
+      "não enviar mais",
+      "nao enviar mais",
+      "stop",
+    ];
+    const optedOut = optOutPhrases.some((p) => lowerText.includes(p));
+
+    if (optedOut) {
+      const optOutNote = "[OPT-OUT] Lead pediu para parar de receber mensagens.";
+      await db
+        .update(leadsTable)
+        .set({
+          status: "lost",
+          notes: lead.notes ? `${optOutNote}\n${lead.notes}` : optOutNote,
+          updatedAt: new Date(),
+        })
+        .where(eq(leadsTable.id, lead.id));
+      lead.status = "lost"; // impede que a leva de follow-up abaixo seja armada
+    }
+
+    // Check if handoff needed (não dispara em caso de opt-out)
     const handoffKeywords = [
       "falar com humano",
       "falar com pessoa",
@@ -172,14 +217,12 @@ router.post("/webhook/whatsapp", async (req, res) => {
       "responsável",
       "dono",
       "gerente",
-      "cancelar",
     ];
-    const lowerReply = reply.toLowerCase();
-    const lowerText = text.toLowerCase();
     const handoffRequested =
-      handoffKeywords.some((k) => lowerText.includes(k)) ||
-      lowerReply.includes("vou passar para") ||
-      lowerReply.includes("nosso time");
+      !optedOut &&
+      (handoffKeywords.some((k) => lowerText.includes(k)) ||
+        lowerReply.includes("vou passar para") ||
+        lowerReply.includes("nosso time"));
 
     if (handoffRequested && !lead.handoffRequested) {
       await db
