@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { rm, cp, access } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -118,6 +118,21 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+
+  // Copia o PAINEL (frontend) buildado para dentro do dist do servidor,
+  // pra ele poder servir tudo num deploy só. Se o painel ainda não foi
+  // buildado, apenas avisa e segue (o servidor roda só como API).
+  const adminDist = path.resolve(artifactDir, "../julia-admin/dist/public");
+  const publicOut = path.resolve(distDir, "public");
+  try {
+    await access(adminDist);
+    await cp(adminDist, publicOut, { recursive: true });
+    console.log("[build] painel copiado para dist/public");
+  } catch {
+    console.warn(
+      "[build] painel (julia-admin/dist/public) não encontrado — pulando cópia (build o painel antes para servir junto)",
+    );
+  }
 }
 
 buildAll().catch((err) => {
