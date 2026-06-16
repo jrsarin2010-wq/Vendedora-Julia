@@ -23,6 +23,13 @@ import {
 
 const router: IRouter = Router();
 
+// Modelos de IA da Júlia (configuráveis por variável de ambiente, pra trocar
+// fácil no futuro sem mexer no código):
+//  - resposta de venda: rápido e econômico (GPT-5.4 Mini)
+//  - analista de dor/objeção: tarefa simples, o mais barato (GPT-5.4 Nano)
+const REPLY_MODEL = process.env.JULIA_REPLY_MODEL ?? "gpt-5.4-mini";
+const EXTRACTION_MODEL = process.env.JULIA_EXTRACTION_MODEL ?? "gpt-5.4-nano";
+
 // Senha secreta que só o seu WhatsApp (Evolution) conhece. Se estiver
 // configurada, a Júlia só processa mensagens que tragam essa senha — assim
 // ninguém de fora consegue forjar mensagens e gastar seu crédito de IA.
@@ -172,7 +179,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
     // Call OpenAI (com timeout: se a IA demorar demais, abortamos em vez de travar)
     const completion = await openai.chat.completions.create(
       {
-        model: "gpt-5.4",
+        model: REPLY_MODEL,
         max_completion_tokens: 512,
         messages: chatMessages,
       },
@@ -227,7 +234,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
 
       const extraction = await openai.chat.completions.create(
         {
-          model: "gpt-5.4",
+          model: EXTRACTION_MODEL,
           max_completion_tokens: 200,
           messages: [
             { role: "system", content: JULIA_EXTRACTION_PROMPT },
