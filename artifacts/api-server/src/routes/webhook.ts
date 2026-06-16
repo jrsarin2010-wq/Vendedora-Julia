@@ -7,14 +7,19 @@ import {
   followUpsTable,
 } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
-import { openai, speechToText, detectAudioFormat } from "@workspace/integrations-openai-ai-server";
+import { openai, speechToText, textToSpeech, detectAudioFormat } from "@workspace/integrations-openai-ai-server";
 import {
   JULIA_SYSTEM_PROMPT,
   JULIA_EXTRACTION_PROMPT,
   FOLLOW_UP_TEMPLATES,
   FOLLOW_UP_DELAYS_HOURS,
 } from "../julia-persona";
-import { sendWhatsAppMessage, sendTelegramAlert, fetchWhatsAppMediaBase64 } from "../lib/integrations";
+import {
+  sendWhatsAppMessage,
+  sendTelegramAlert,
+  fetchWhatsAppMediaBase64,
+  sendWhatsAppAudio,
+} from "../lib/integrations";
 
 const router: IRouter = Router();
 
@@ -76,6 +81,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
 
     // Se não veio texto, talvez seja um ÁUDIO. A Júlia transcreve e segue
     // o fluxo normal como se fosse texto. Nunca derruba o fluxo se falhar.
+    let inboundWasAudio = false;
     if (!text.trim()) {
       const audioMsg = msg?.audioMessage ?? msg?.message?.audioMessage;
       const messageId: string | undefined = key?.id;
@@ -88,6 +94,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
             // WhatsApp manda áudio em ogg/opus; se não reconhecer, tenta ogg.
             const fmt = detected === "unknown" ? "ogg" : detected;
             text = (await speechToText(buffer, fmt)).trim();
+            inboundWasAudio = true;
             req.log.info({ phone }, "Áudio do WhatsApp transcrito");
           }
         } catch (err) {
@@ -183,8 +190,28 @@ router.post("/webhook/whatsapp", async (req, res) => {
       messageType: "text",
     });
 
-    // Send via Evolution API
-    await sendWhatsAppMessage(phone, reply);
+    // Entrega da resposta: se o dentista mandou áudio, a Júlia responde por
+    // ÁUDIO (mesmo formato, mais natural). Se a voz falhar por qualquer
+    // motivo, cai pra texto — o lead nunca fica sem resposta.
+    let delivered = false;
+    if (inboundWasAudio) {
+      try {
+        const audioBuffer = await Promise.race([
+          textToSpeech(reply, "nova", "opus"),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("tts timeout")), 30_000),
+          ),
+        ]);
+        if (audioBuffer.length > 0) {
+          delivered = await sendWhatsAppAudio(phone, audioBuffer.toString("base64"));
+        }
+      } catch (err) {
+        req.log.warn({ err, phone }, "Falha ao gerar/enviar áudio — caindo pra texto");
+      }
+    }
+    if (!delivered) {
+      await sendWhatsAppMessage(phone, reply);
+    }
 
     // Analista de bastidor: lê a conversa e anota a dor e a objeção do lead,
     // pra você receber o lead com contexto. Roda DEPOIS de enviar a resposta

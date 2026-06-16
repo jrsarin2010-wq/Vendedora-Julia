@@ -89,6 +89,47 @@ export async function fetchWhatsAppMediaBase64(
   }
 }
 
+/**
+ * Envia uma mensagem de ÁUDIO (nota de voz) pelo WhatsApp via Evolution.
+ * Recebe o áudio em base64. Retorna true se enviou, false caso contrário
+ * (pra quem chama poder cair pra texto se falhar).
+ */
+export async function sendWhatsAppAudio(
+  phone: string,
+  audioBase64: string,
+): Promise<boolean> {
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+    logger.warn({ phone }, "Evolution API not configured — skipping WhatsApp audio send");
+    return false;
+  }
+
+  try {
+    const url = `${EVOLUTION_API_URL}/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: EVOLUTION_API_KEY,
+      },
+      body: JSON.stringify({ number: phone, audio: audioBase64 }),
+      signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      logger.error(
+        { phone, status: response.status, body },
+        "Evolution sendWhatsAppAudio error",
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logger.error({ err, phone }, "Failed to send WhatsApp audio");
+    return false;
+  }
+}
+
 interface HandoffAlert {
   type: "handoff";
   lead: Lead;
