@@ -1,0 +1,473 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification for Júlia Vendedora - AI sales agent for OdontoFlow
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: leads
+    description: Lead management
+  - name: messages
+    description: Lead conversation messages
+  - name: followups
+    description: Scheduled follow-ups
+  - name: stats
+    description: Dashboard statistics
+  - name: webhook
+    description: WhatsApp webhook
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /leads:
+    get:
+      operationId: listLeads
+      tags: [leads]
+      summary: List all leads
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [hot, warm, cold, closed, lost]
+        - name: funnelStage
+          in: query
+          schema:
+            type: string
+            enum: [new, contacted, qualified, interested, objection, closing, closed, lost]
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of leads
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadListResponse"
+
+  /leads/{id}:
+    get:
+      operationId: getLead
+      tags: [leads]
+      summary: Get a lead by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lead detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateLead
+      tags: [leads]
+      summary: Update a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadUpdate"
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /leads/{id}/messages:
+    get:
+      operationId: listLeadMessages
+      tags: [messages]
+      summary: Get conversation messages for a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /leads/{id}/followups:
+    get:
+      operationId: getLeadFollowups
+      tags: [followups]
+      summary: Get follow-ups for a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of follow-ups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FollowUp"
+
+  /stats:
+    get:
+      operationId: getDashboardStats
+      tags: [stats]
+      summary: Get dashboard statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /stats/funnel:
+    get:
+      operationId: getFunnelStats
+      tags: [stats]
+      summary: Get funnel breakdown by stage
+      responses:
+        "200":
+          description: Funnel breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FunnelStage"
+
+  /stats/recent-activity:
+    get:
+      operationId: getRecentActivity
+      tags: [stats]
+      summary: Get recent lead activity
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  /webhook/whatsapp:
+    post:
+      operationId: whatsappWebhook
+      tags: [webhook]
+      summary: Receive WhatsApp messages from Evolution API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookPayload"
+      responses:
+        "200":
+          description: Webhook received
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookAck"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Lead:
+      type: object
+      required:
+        - id
+        - phone
+        - funnelStage
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        name:
+          type: ["string", "null"]
+        phone:
+          type: string
+        origin:
+          type: ["string", "null"]
+        funnelStage:
+          type: string
+          enum: [new, contacted, qualified, interested, objection, closing, closed, lost]
+        painPoints:
+          type: ["string", "null"]
+        mainObjection:
+          type: ["string", "null"]
+        planInterest:
+          type: ["string", "null"]
+          enum: [basic, essencial, pro, null]
+        status:
+          type: string
+          enum: [hot, warm, cold, closed, lost]
+        notes:
+          type: ["string", "null"]
+        lastMessageAt:
+          type: ["string", "null"]
+        handoffRequested:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    LeadUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        funnelStage:
+          type: string
+          enum: [new, contacted, qualified, interested, objection, closing, closed, lost]
+        painPoints:
+          type: string
+        mainObjection:
+          type: string
+        planInterest:
+          type: string
+          enum: [basic, essencial, pro]
+        status:
+          type: string
+          enum: [hot, warm, cold, closed, lost]
+        notes:
+          type: string
+        handoffRequested:
+          type: boolean
+
+    LeadListResponse:
+      type: object
+      required:
+        - leads
+        - total
+      properties:
+        leads:
+          type: array
+          items:
+            $ref: "#/components/schemas/Lead"
+        total:
+          type: integer
+
+    Message:
+      type: object
+      required:
+        - id
+        - leadId
+        - direction
+        - content
+        - messageType
+        - createdAt
+      properties:
+        id:
+          type: integer
+        leadId:
+          type: integer
+        direction:
+          type: string
+          enum: [inbound, outbound]
+        content:
+          type: string
+        messageType:
+          type: string
+          enum: [text, audio, image]
+        createdAt:
+          type: string
+
+    FollowUp:
+      type: object
+      required:
+        - id
+        - leadId
+        - scheduledAt
+        - touchNumber
+        - status
+        - createdAt
+      properties:
+        id:
+          type: integer
+        leadId:
+          type: integer
+        scheduledAt:
+          type: string
+        touchNumber:
+          type: integer
+        messageTemplate:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, sent, cancelled]
+        createdAt:
+          type: string
+
+    DashboardStats:
+      type: object
+      required:
+        - totalLeads
+        - hotLeads
+        - closedLeads
+        - lostLeads
+        - conversionRate
+        - pendingFollowups
+        - handoffsPending
+      properties:
+        totalLeads:
+          type: integer
+        hotLeads:
+          type: integer
+        closedLeads:
+          type: integer
+        lostLeads:
+          type: integer
+        conversionRate:
+          type: number
+        pendingFollowups:
+          type: integer
+        handoffsPending:
+          type: integer
+
+    FunnelStage:
+      type: object
+      required:
+        - stage
+        - count
+      properties:
+        stage:
+          type: string
+        count:
+          type: integer
+
+    ActivityItem:
+      type: object
+      required:
+        - leadId
+        - leadName
+        - phone
+        - event
+        - funnelStage
+        - status
+        - timestamp
+      properties:
+        leadId:
+          type: integer
+        leadName:
+          type: ["string", "null"]
+        phone:
+          type: string
+        event:
+          type: string
+        funnelStage:
+          type: string
+        status:
+          type: string
+        timestamp:
+          type: string
+
+    WebhookPayload:
+      type: object
+      properties:
+        event:
+          type: string
+        instance:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+
+    WebhookAck:
+      type: object
+      required:
+        - ok
+      properties:
+        ok:
+          type: boolean

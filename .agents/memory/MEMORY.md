@@ -1,0 +1,3 @@
+- [Orval TS2308 collision](orval-collision.md) — ops with both path params AND query params create duplicate `<Op>Params` types; fix by removing query params from such ops.
+- [Stats conversionRate format](stats-format.md) — backend returns whole integer (13 = 13%); frontend must NOT multiply by 100.
+- [Lib build order](lib-build-order.md) — run `typecheck:libs` before leaf artifact typechecks after any lib/* change to avoid false TS2305 errors.
