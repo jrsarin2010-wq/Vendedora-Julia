@@ -58,7 +58,10 @@ const PADROES_SERVICO: RegExp[] = [
   /\bpara (cancelar|sair), (responda|envie|digite)\b/i,
   /\bmensagem autom[áa]tica\b/i,
   /\bn[ãa]o responda (esta|essa) mensagem\b/i,
-  /\bpromo[çc][ãa]o exclusiva\b/i,
+  // NÃO existe padrão para "promoção exclusiva" aqui, e é de propósito: o
+  // próprio CaptaClin tem promoção (os 3 primeiros meses), então um dentista
+  // interessado pode perfeitamente abrir com "vi a promoção de vocês". Barrar
+  // isso silenciaria justamente o lead que a gente mais quer.
   /\bganhe (at[eé] )?r\$/i,
   /\bclique (aqui|no link) para (resgatar|ativar|desbloquear)\b/i,
 ];
