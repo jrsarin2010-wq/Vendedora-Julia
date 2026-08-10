@@ -9,7 +9,7 @@ import {
   useGetLeadFollowups,
   getGetLeadFollowupsQueryKey
 } from "@workspace/api-client-react";
-import { ArrowLeft, User, Phone, Save, AlertTriangle, MessageCircle, Calendar, Bot } from "lucide-react";
+import { ArrowLeft, User, Phone, Save, AlertTriangle, MessageCircle, Calendar, Bot, PauseCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -94,6 +94,17 @@ export default function LeadDetail() {
     updateLeadMutation.mutate({ id, data: { handoffRequested: false } });
   };
 
+  // A Júlia se cala por 5 minutos quando alguém responde o dentista pelo
+  // celular, e cada mensagem nova renova o prazo. Este botão devolve a conversa
+  // para ela antes disso — para quando você respondeu uma coisa pontual e quer
+  // que ela siga conduzindo.
+  const pausadaAte = lead?.pausedUntil ? new Date(lead.pausedUntil) : null;
+  const estaPausada = Boolean(pausadaAte && pausadaAte.getTime() > Date.now());
+
+  const handleRetomar = () => {
+    updateLeadMutation.mutate({ id, data: { pausedUntil: null } });
+  };
+
   const [apagando, setApagando] = useState(false);
   const [, navegar] = useLocation();
 
@@ -162,6 +173,12 @@ export default function LeadDetail() {
                   <AlertTriangle className="h-3 w-3" /> Quer falar com você
                 </Badge>
               )}
+              {estaPausada && pausadaAte && (
+                <Badge variant="outline" className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800" data-testid="badge-pausada">
+                  <PauseCircle className="h-3 w-3" /> Júlia pausada até{" "}
+                  {pausadaAte.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                </Badge>
+              )}
             </div>
             <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2 font-mono">
               <Phone className="h-3 w-3" /> {lead.phone}
@@ -170,6 +187,11 @@ export default function LeadDetail() {
         </div>
         
         <div className="flex items-center gap-2">
+          {estaPausada && (
+            <Button variant="outline" size="sm" onClick={handleRetomar} disabled={updateLeadMutation.isPending} data-testid="btn-retomar-julia">
+              Devolver para a Júlia
+            </Button>
+          )}
           {lead.handoffRequested && (
             <Button variant="outline" size="sm" onClick={handleResolveHandoff} disabled={updateLeadMutation.isPending} data-testid="btn-resolve-handoff">
               Já falei com ele

@@ -74,6 +74,30 @@ export function evento(
   };
 }
 
+/**
+ * Mensagem que SAIU do número da clínica (`fromMe: true`). É o payload que a
+ * Evolution manda tanto quando a Júlia responde pela API quanto quando um
+ * humano digita no celular — distinguir os dois é justamente o ponto da
+ * Rodada 29, e quem decide é o `key.id` estar ou não registrado como nosso.
+ */
+export function eventoFromMe(
+  texto: string,
+  numero = "5585999998888",
+  id?: string,
+): unknown {
+  return {
+    event: "messages.upsert",
+    data: {
+      key: {
+        id: id ?? `SAIU${seq++}`,
+        remoteJid: `${numero}@s.whatsapp.net`,
+        fromMe: true,
+      },
+      message: { conversation: texto },
+    },
+  };
+}
+
 /** Como `evento`, mas com um tipo de mídia em vez de texto. */
 export function eventoMidia(
   tipo: string,

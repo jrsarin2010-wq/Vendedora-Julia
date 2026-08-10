@@ -18,4 +18,6 @@ export interface LeadUpdate {
   status?: LeadUpdateStatus;
   notes?: string;
   handoffRequested?: boolean;
+  /** @nullable */
+  pausedUntil?: null;
 }

@@ -296,6 +296,8 @@ components:
           type: ["string", "null"]
         lastMessageAt:
           type: ["string", "null"]
+        pausedUntil:
+          type: ["string", "null"]
         handoffRequested:
           type: boolean
         createdAt:
@@ -325,6 +327,11 @@ components:
           type: string
         handoffRequested:
           type: boolean
+        # Retomar a Júlia antes do prazo: o painel manda null para limpar a
+        # pausa. Só aceita null de propósito — quem PAUSA é o humano falando
+        # pelo WhatsApp, não um botão; aqui a única ação é liberar.
+        pausedUntil:
+          type: "null"
 
     LeadListResponse:
       type: object

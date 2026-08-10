@@ -18,6 +18,7 @@ export const leadsTable = {
   funnelStage: "funnelStage",
   name: "name",
   lastMessageAt: "lastMessageAt",
+  pausedUntil: "pausedUntil",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
 };
@@ -88,7 +89,8 @@ function thenable(executar) {
     orderBy() {
       return b;
     },
-    innerJoin() {
+    innerJoin(tabela, cond) {
+      b._join = { tabela, cond };
       return b;
     },
     set(v) {
@@ -119,12 +121,38 @@ function filtrar(linhas, b) {
 }
 
 export const db = {
-  select() {
+  /**
+   * `projecao` só é usada quando há `innerJoin` — é o
+   * `select({ followUp: followUpsTable, lead: leadsTable })` do agendador de
+   * follow-ups. Sem ela o retorno continua sendo a lista de linhas cruas, que
+   * é o que todo o resto do código espera.
+   */
+  select(projecao) {
     return thenable((b) => {
       const linhas = linhasDe(b._t);
       // O webhook pede as mensagens em ordem decrescente e inverte depois.
       const base = b._t.__t === "messages" ? linhas.slice().reverse() : linhas.slice();
-      return filtrar(base, b);
+      const casadas = filtrar(base, b);
+
+      if (!b._join || !projecao) return casadas;
+
+      // A condição do join vem como { col, val }, e nas tabelas do stub cada
+      // coluna é a string do próprio nome — então `col` é a coluna da tabela
+      // base e `val` a da tabela juntada. `eq(followUps.leadId, leads.id)`
+      // vira { col: "leadId", val: "id" }.
+      const { tabela, cond } = b._join;
+      const outras = linhasDe(tabela);
+      const juntadas = [];
+      for (const linha of casadas) {
+        const par = outras.find((o) => o[cond.val] === linha[cond.col]);
+        if (!par) continue; // innerJoin: sem par, a linha some
+        const registro = {};
+        for (const [chave, t] of Object.entries(projecao)) {
+          registro[chave] = t.__t === tabela.__t ? par : linha;
+        }
+        juntadas.push(registro);
+      }
+      return juntadas;
     });
   },
 

@@ -1,5 +1,32 @@
 import { type Lead } from "@workspace/db";
 import { logger } from "./logger";
+import { registrarEnviadaPorNos } from "./enviadas-por-nos";
+
+/**
+ * Anota o id da mensagem que a Evolution acabou de criar, para o webhook saber
+ * depois que este `fromMe` foi nosso e não de um humano no celular.
+ *
+ * Nunca derruba o envio: a mensagem JÁ foi entregue quando chegamos aqui. Se o
+ * corpo vier num formato inesperado, o pior caso é a Júlia se calar por 5
+ * minutos naquela conversa — ruim, mas muito melhor do que estourar uma exceção
+ * depois de entregue e fazer quem chamou achar que falhou.
+ */
+async function anotarIdEnviado(response: Response, phone: string): Promise<void> {
+  try {
+    const corpo = (await response.json()) as { key?: { id?: string } };
+    const id = corpo?.key?.id;
+    if (id) {
+      registrarEnviadaPorNos(id);
+      return;
+    }
+    logger.warn(
+      { phone },
+      "Evolution não devolveu key.id — a Júlia pode se auto-pausar nesta conversa",
+    );
+  } catch (err) {
+    logger.warn({ err, phone }, "Não consegui ler o key.id da resposta da Evolution");
+  }
+}
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? "";
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID ?? "";
@@ -121,6 +148,7 @@ export async function sendWhatsAppMessage(
       logger.error({ phone, status: response.status, body }, "Evolution API error");
       return false;
     }
+    await anotarIdEnviado(response, phone);
     return true;
   } catch (err) {
     logger.error({ err, phone }, "Failed to send WhatsApp message");
@@ -221,6 +249,9 @@ export async function sendWhatsAppAudio(
       );
       return false;
     }
+    // O áudio de demonstração também volta como `fromMe`. Sem anotar o id aqui,
+    // a Júlia se pausaria sozinha toda vez que mandasse uma demo.
+    await anotarIdEnviado(response, phone);
     return true;
   } catch (err) {
     logger.error({ err, phone }, "Failed to send WhatsApp audio");

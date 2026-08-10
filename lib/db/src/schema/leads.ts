@@ -63,6 +63,11 @@ export const leadsTable = pgTable("leads", {
   // destruiria o efeito, e passar do teto de duas por conversa.
   demosEnviadas: text("demos_enviadas"),
   lastMessageAt: timestamp("last_message_at"),
+  // Até quando a Júlia fica calada nesta conversa porque um humano assumiu.
+  // Preenchido quando chega uma mensagem `fromMe` que NÃO fomos nós que
+  // enviamos — ou seja, alguém respondeu pelo celular. Nulo (ou no passado)
+  // significa conversa normal.
+  pausedUntil: timestamp("paused_until"),
   handoffRequested: boolean("handoff_requested").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

@@ -69,6 +69,8 @@ export interface Lead {
   notes?: string | null;
   /** @nullable */
   lastMessageAt?: string | null;
+  /** @nullable */
+  pausedUntil?: string | null;
   handoffRequested?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -117,6 +119,8 @@ export interface LeadUpdate {
   status?: LeadUpdateStatus;
   notes?: string;
   handoffRequested?: boolean;
+  /** @nullable */
+  pausedUntil?: null;
 }
 
 export interface LeadListResponse {

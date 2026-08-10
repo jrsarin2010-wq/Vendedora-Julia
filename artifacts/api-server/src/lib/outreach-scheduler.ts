@@ -98,12 +98,31 @@ export async function rodarCicloDeAbordagem(
     .orderBy(asc(leadsTable.createdAt))
     .limit(10);
 
-  const lead = candidatos.find((c) => leadElegivel(c).elegivel);
+  // Um humano falando com o lead agora congela a abordagem — mas NÃO é
+  // inelegibilidade. Fica fora de `leadElegivel` de propósito: aquilo é uma
+  // decisão permanente (marca "skipped" logo abaixo), e a pausa é temporária.
+  // Se entrasse lá, cinco minutos de conversa do Dr. Sarinho tirariam o lead da
+  // fila para sempre.
+  //
+  // O caso real: ele manda mensagem pelo celular para uma clínica importada
+  // antes da Júlia. Sem esta trava, a abordagem fria dela cairia por cima da
+  // mensagem dele, para a mesma pessoa.
+  const pausado = (c: { pausedUntil: Date | null }) =>
+    Boolean(c.pausedUntil && new Date(c.pausedUntil).getTime() > Date.now());
+
+  const lead = candidatos.find((c) => !pausado(c) && leadElegivel(c).elegivel);
 
   if (!lead) {
     // Marca como "skipped" quem está travado na fila por ser inelegível, para
     // não reavaliar os mesmos leads a cada minuto para sempre.
     for (const c of candidatos) {
+      if (pausado(c)) {
+        logger.info(
+          { leadId: c.id, pausedUntil: c.pausedUntil },
+          "Lead pausado (humano assumiu) — abordagem adiada, segue na fila",
+        );
+        continue;
+      }
       const { elegivel, motivo } = leadElegivel(c);
       if (!elegivel && motivo) {
         await db

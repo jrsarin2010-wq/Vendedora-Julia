@@ -28,6 +28,8 @@ export interface Lead {
   notes?: string | null;
   /** @nullable */
   lastMessageAt?: string | null;
+  /** @nullable */
+  pausedUntil?: string | null;
   handoffRequested?: boolean;
   createdAt: string;
   updatedAt: string;

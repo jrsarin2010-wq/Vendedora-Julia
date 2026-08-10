@@ -44,6 +44,7 @@ export const ListLeadsResponse = zod.object({
   "status": zod.enum(['hot', 'warm', 'cold', 'closed', 'lost']),
   "notes": zod.string().nullish(),
   "lastMessageAt": zod.string().nullish(),
+  "pausedUntil": zod.string().nullish(),
   "handoffRequested": zod.boolean().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -71,6 +72,7 @@ export const GetLeadResponse = zod.object({
   "status": zod.enum(['hot', 'warm', 'cold', 'closed', 'lost']),
   "notes": zod.string().nullish(),
   "lastMessageAt": zod.string().nullish(),
+  "pausedUntil": zod.string().nullish(),
   "handoffRequested": zod.boolean().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -92,7 +94,8 @@ export const UpdateLeadBody = zod.object({
   "planInterest": zod.enum(['basic', 'essencial', 'pro']).optional(),
   "status": zod.enum(['hot', 'warm', 'cold', 'closed', 'lost']).optional(),
   "notes": zod.string().optional(),
-  "handoffRequested": zod.boolean().optional()
+  "handoffRequested": zod.boolean().optional(),
+  "pausedUntil": zod.null().optional()
 })
 
 export const UpdateLeadResponse = zod.object({
@@ -107,6 +110,7 @@ export const UpdateLeadResponse = zod.object({
   "status": zod.enum(['hot', 'warm', 'cold', 'closed', 'lost']),
   "notes": zod.string().nullish(),
   "lastMessageAt": zod.string().nullish(),
+  "pausedUntil": zod.string().nullish(),
   "handoffRequested": zod.boolean().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()

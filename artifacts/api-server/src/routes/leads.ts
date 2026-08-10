@@ -92,6 +92,10 @@ router.patch("/leads/:id", async (req, res) => {
     if (body.status !== undefined) updateData.status = body.status;
     if (body.notes !== undefined) updateData.notes = body.notes;
     if (body.handoffRequested !== undefined) updateData.handoffRequested = body.handoffRequested;
+    // Retomar a Júlia antes dos 5 minutos. O schema só admite null, então isto
+    // nunca cria uma pausa pelo painel — quem pausa é o humano respondendo pelo
+    // WhatsApp. Aqui a única operação possível é liberar.
+    if (body.pausedUntil !== undefined) updateData.pausedUntil = null;
 
     const updated = await db
       .update(leadsTable)

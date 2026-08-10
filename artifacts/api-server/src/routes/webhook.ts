@@ -29,6 +29,7 @@ import {
   pastaDemos,
 } from "../lib/demos";
 import { pareceCelularReal, padraoDeServico } from "../lib/filtro-spam";
+import { enviadaPorNos } from "../lib/enviadas-por-nos";
 
 const router: IRouter = Router();
 
@@ -73,6 +74,42 @@ function secretMatches(provided: string): boolean {
   const a = Buffer.from(provided);
   const b = Buffer.from(WEBHOOK_SECRET);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+/**
+ * Quanto tempo a Júlia fica calada depois que um humano responde pelo celular.
+ * Cada mensagem dele renova o prazo, então na prática ela só volta 5 minutos
+ * depois da ÚLTIMA mensagem dele — enquanto ele estiver conversando, ela não
+ * atravessa.
+ */
+const PAUSA_HUMANA_MS =
+  (Number(process.env.PAUSA_HUMANA_MINUTOS) || 5) * 60 * 1000;
+
+/**
+ * Um humano respondeu este contato pelo celular: cala a Júlia por um tempo.
+ *
+ * Só atualiza lead que JÁ EXISTE. Se o Dr. puxar conversa com alguém que nunca
+ * falou com a Júlia, não há nada para pausar — e criar um lead a partir de uma
+ * mensagem nossa encheria o painel de gente que nunca respondeu.
+ */
+async function pausarPorHumano(
+  remoteJid: string,
+  req: { log: { info: (o: unknown, m: string) => void } },
+): Promise<void> {
+  const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@c.us", "");
+  if (!phone || phone.includes("@")) return;
+
+  const lead = (
+    await db.select().from(leadsTable).where(eq(leadsTable.phone, phone)).limit(1)
+  )[0];
+  if (!lead) return;
+
+  const ate = new Date(Date.now() + PAUSA_HUMANA_MS);
+  await db
+    .update(leadsTable)
+    .set({ pausedUntil: ate, updatedAt: new Date() })
+    .where(eq(leadsTable.id, lead.id));
+  req.log.info({ leadId: lead.id, ate }, "Humano assumiu — Júlia pausada");
 }
 
 // IDs de mensagem já processados, pra não responder duas vezes se o Evolution
@@ -122,7 +159,20 @@ router.post("/webhook/whatsapp", async (req, res) => {
     const msgData = payload.data;
     const key = msgData?.key ?? msgData?.message?.key;
     const fromMe = key?.fromMe ?? false;
-    if (fromMe) return; // Ignore messages sent by us
+    if (fromMe) {
+      // `fromMe` cobre DUAS coisas diferentes: o que a Júlia mandou pela API e
+      // o que uma pessoa digitou no celular. A segunda significa que o humano
+      // assumiu a conversa — e aí a Júlia precisa se calar, senão os dois
+      // respondem o dentista ao mesmo tempo.
+      //
+      // A distinção é por IDENTIDADE (guardamos o id de tudo que enviamos), não
+      // pelo campo `source` do payload — ver lib/enviadas-por-nos.ts para o
+      // porquê.
+      if (!enviadaPorNos(key?.id)) {
+        await pausarPorHumano(String(key?.remoteJid ?? ""), req);
+      }
+      return;
+    }
 
     // Antes de QUALQUER processamento: se este webhook já foi tratado, sai.
     if (jaProcessado(key?.id)) {
@@ -257,6 +307,16 @@ router.post("/webhook/whatsapp", async (req, res) => {
         .where(eq(leadsTable.id, lead.id));
     }
 
+    // O humano assumiu esta conversa há pouco? Então a Júlia não fala.
+    //
+    // Isto NÃO faz o webhook sair: o que o dentista escreveu continua sendo
+    // gravado no histórico logo abaixo. É só a RESPOSTA que é suprimida — se a
+    // gente descartasse a mensagem, a Júlia voltaria da pausa sem saber o que
+    // foi conversado enquanto esteve fora.
+    const pausada = Boolean(
+      lead.pausedUntil && new Date(lead.pausedUntil).getTime() > Date.now(),
+    );
+
     if (!text.trim()) {
       // Chegou algo que não é texto (imagem, vídeo, documento, figurinha,
       // localização, contato) ou um áudio que não deu pra transcrever. Antes
@@ -278,7 +338,15 @@ router.post("/webhook/whatsapp", async (req, res) => {
         temTipo("locationMessage") ||
         temTipo("contactMessage");
 
-      if (temMidia) {
+      if (temMidia && pausada) {
+        // Mídia durante a pausa: o humano está conduzindo, e um "me manda por
+        // texto" da Júlia no meio da conversa dele é justamente a interrupção
+        // que a pausa existe para evitar.
+        req.log.info(
+          { leadId: lead.id, pausedUntil: lead.pausedUntil },
+          "Conversa pausada (humano assumiu) — aviso de mídia não enviado",
+        );
+      } else if (temMidia) {
         const aviso = ehFigurinha
           ? "haha 😄 Me conta em texto o que você precisa que eu te ajudo!"
           : ehAudio
@@ -322,6 +390,18 @@ router.post("/webhook/whatsapp", async (req, res) => {
       content: text,
       messageType: "text",
     });
+
+    // Daqui para baixo é a Júlia respondendo. Se o humano assumiu, ela para
+    // AQUI — depois de gravar o que o dentista disse (para ela ter o contexto
+    // quando voltar) e antes de gastar crédito de IA com uma resposta que não
+    // pode ser enviada.
+    if (pausada) {
+      req.log.info(
+        { leadId: lead.id, pausedUntil: lead.pausedUntil },
+        "Conversa pausada (humano assumiu) — não respondendo",
+      );
+      return;
+    }
 
     // Get last N messages for context.
     // Buscamos as 30 MAIS RECENTES (desc) e depois invertemos para a ordem
