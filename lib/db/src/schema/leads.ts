@@ -58,6 +58,10 @@ export const leadsTable = pgTable("leads", {
   planInterest: planInterestEnum("plan_interest"),
   status: leadStatusEnum("status").notNull().default("cold"),
   notes: text("notes"),
+  // Áudios de demonstração já enviados a este lead, separados por vírgula
+  // ("vou_pensar,fora_do_horario"). É o que impede repetir a mesma demo, que
+  // destruiria o efeito, e passar do teto de duas por conversa.
+  demosEnviadas: text("demos_enviadas"),
   lastMessageAt: timestamp("last_message_at"),
   handoffRequested: boolean("handoff_requested").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -133,6 +133,23 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
       "[build] painel (julia-admin/dist/public) não encontrado — pulando cópia (build o painel antes para servir junto)",
     );
   }
+
+  // Os áudios de demonstração. Vão para dist/assets/demos porque o
+  // src/lib/demos.ts os procura ao lado do próprio bundle — o diretório de
+  // trabalho muda conforme quem sobe o processo, o caminho do módulo não.
+  const demosSrc = path.resolve(artifactDir, "assets/demos");
+  const demosOut = path.resolve(distDir, "assets/demos");
+  try {
+    await access(demosSrc);
+    await cp(demosSrc, demosOut, { recursive: true });
+    console.log("[build] áudios de demonstração copiados para dist/assets/demos");
+  } catch {
+    // Não é fatal: sem os arquivos a Júlia só deixa de mandar a demo, e o
+    // webhook loga isso. Mas em produção é sinal de que algo está errado.
+    console.warn(
+      "[build] assets/demos não encontrado — a Júlia vai responder sem os áudios de demonstração",
+    );
+  }
 }
 
 buildAll().catch((err) => {

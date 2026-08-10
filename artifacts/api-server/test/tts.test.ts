@@ -176,14 +176,20 @@ const gravada = saidas("outbound")[0] as any;
 ok("gravou a resposta no histórico", gravada !== undefined);
 ok("gravou como text, não audio", gravada?.messageType === "text", gravada?.messageType);
 
-secao("no webhook — voz funcionando, o dentista recebe ÁUDIO");
+secao("Rodada 27 — mesmo com a voz FUNCIONANDO, a resposta vai por texto");
+// Até a Rodada 26 este caso respondia por áudio. A Rodada 27 desligou isso:
+// a voz virou demonstração pré-gravada, e a conversa é sempre texto. Se
+// alguém reconectar o `gerarVoz` ao webhook sem querer, esta asserção quebra.
 resposta = () => respostaOk(4096);
+chamadas.length = 0;
 ctrl.transcript = "quanto custa?";
 wa.media = "QUFBQQ==";
 await post(eventoMidia("audioMessage"));
-ok("respondeu por ÁUDIO", wa.enviadas[0]?.tipo === "audio", JSON.stringify(wa.enviadas));
+ok("respondeu por TEXTO", wa.enviadas[0]?.tipo === "text", JSON.stringify(wa.enviadas));
+ok("nenhum áudio saiu", !wa.enviadas.some((e: any) => e.tipo === "audio"));
 const gravadaAudio = saidas("outbound")[0] as any;
-ok("gravou como audio", gravadaAudio?.messageType === "audio", gravadaAudio?.messageType);
+ok("gravou como text", gravadaAudio?.messageType === "text", gravadaAudio?.messageType);
+ok("a Cartesia nem foi chamada para responder", chamadas.length === 0, String(chamadas.length));
 
 secao("no webhook — quem escreveu TEXTO continua recebendo texto");
 resposta = () => respostaOk(4096);

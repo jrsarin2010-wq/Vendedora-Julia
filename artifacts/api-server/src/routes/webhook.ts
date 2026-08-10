@@ -21,7 +21,13 @@ import {
   fetchWhatsAppMediaBase64,
   sendWhatsAppAudio,
 } from "../lib/integrations";
-import { gerarVoz } from "../lib/tts";
+import {
+  extrairDemo,
+  lerDemo,
+  podeEnviar,
+  registrar,
+  pastaDemos,
+} from "../lib/demos";
 import { pareceCelularReal, padraoDeServico } from "../lib/filtro-spam";
 
 const router: IRouter = Router();
@@ -171,7 +177,9 @@ router.post("/webhook/whatsapp", async (req, res) => {
 
     // Se não veio texto, talvez seja um ÁUDIO. A Júlia transcreve e segue
     // o fluxo normal como se fosse texto. Nunca derruba o fluxo se falhar.
-    let inboundWasAudio = false;
+    //
+    // A transcrição CONTINUA na Rodada 27 — ela precisa entender quem manda
+    // áudio. O que saiu foi a resposta por voz: ela responde sempre por texto.
     if (!text.trim()) {
       const audioMsg = msg?.audioMessage ?? msg?.message?.audioMessage;
       const messageId: string | undefined = key?.id;
@@ -184,7 +192,6 @@ router.post("/webhook/whatsapp", async (req, res) => {
             // WhatsApp manda áudio em ogg/opus; se não reconhecer, tenta ogg.
             const fmt = detected === "unknown" ? "ogg" : detected;
             text = (await speechToText(buffer, fmt)).trim();
-            inboundWasAudio = true;
             req.log.info({ phone }, "Áudio do WhatsApp transcrito");
           }
         } catch (err) {
@@ -381,23 +388,26 @@ router.post("/webhook/whatsapp", async (req, res) => {
       return;
     }
 
-    // Entrega da resposta: se o dentista mandou áudio, a Júlia responde por
-    // ÁUDIO (mesmo formato, mais natural). Se a voz falhar por qualquer
-    // motivo, cai pra texto — o lead nunca fica sem resposta.
+    // A Júlia responde SEMPRE por texto, inclusive para quem mandou áudio
+    // (Rodada 27). A voz dela deixou de ser conversa e virou demonstração: em
+    // vez de sintetizar a resposta a cada mensagem, ela manda uma das três
+    // gravações prontas quando quer PROVAR alguma coisa.
+    //
+    // O modelo pede a demo terminando a resposta com [DEMO:nome]. O marcador
+    // sai do texto aqui — o dentista nunca pode ver isso.
+    const { texto: textoLimpo, demo: demoPedida } = extrairDemo(reply);
+
     let delivered = false;
-    let entregueComoAudio = false;
-    if (inboundWasAudio) {
-      // O gerarVoz já tenta Cartesia, depois OpenAI, e tem timeout interno —
-      // por isso o Promise.race manual saiu daqui. Devolve null quando nenhuma
-      // voz saiu, e aí a entrega segue por texto logo abaixo.
-      const audioBuffer = await gerarVoz(reply);
-      if (audioBuffer) {
-        delivered = await sendWhatsAppAudio(phone, audioBuffer.toString("base64"));
-        entregueComoAudio = delivered;
-      }
-    }
-    if (!delivered) {
-      delivered = await sendWhatsAppMessage(phone, reply);
+    if (textoLimpo) {
+      delivered = await sendWhatsAppMessage(phone, textoLimpo);
+    } else {
+      // Resposta que era só o marcador. Áudio solto, sem uma frase
+      // apresentando, confunde — então não mandamos nada e isso aparece no log.
+      req.log.error(
+        { leadId: lead.id, demoPedida },
+        "Modelo respondeu só com o marcador de demo — nada foi enviado",
+      );
+      return;
     }
 
     // A resposta só entra no histórico se REALMENTE chegou. Gravar antes de
@@ -408,14 +418,60 @@ router.post("/webhook/whatsapp", async (req, res) => {
       await db.insert(leadMessagesTable).values({
         leadId: lead.id,
         direction: "outbound",
-        content: reply,
-        messageType: entregueComoAudio ? "audio" : "text",
+        content: textoLimpo,
+        messageType: "text",
       });
     } else {
       req.log.error(
         { leadId: lead.id, phone },
         "Resposta NÃO entregue — não gravada no histórico",
       );
+    }
+
+    // O ÁUDIO DE DEMONSTRAÇÃO, depois do texto — a narração prepara o ouvido.
+    // Tudo aqui é bônus: o texto já foi entregue, então nenhuma falha daqui
+    // para baixo pode interromper a conversa.
+    if (delivered && demoPedida) {
+      const permissao = podeEnviar(demoPedida, lead.demosEnviadas);
+      if (!permissao.pode) {
+        req.log.info(
+          { leadId: lead.id, demo: demoPedida, motivo: permissao.motivo },
+          "Demo não enviada",
+        );
+      } else {
+        const mp3 = await lerDemo(demoPedida);
+        if (!mp3) {
+          req.log.error(
+            { leadId: lead.id, demo: demoPedida, pasta: pastaDemos() },
+            "Arquivo da demo não encontrado — só o texto foi entregue",
+          );
+        } else {
+          const enviou = await sendWhatsAppAudio(phone, mp3.toString("base64"));
+          if (enviou) {
+            await db.insert(leadMessagesTable).values({
+              leadId: lead.id,
+              direction: "outbound",
+              content: `[áudio de demonstração: ${demoPedida}]`,
+              messageType: "audio",
+            });
+            // Só marca depois de entregue: se o envio falhou, ela pode tentar
+            // essa mesma demo de novo na próxima mensagem.
+            await db
+              .update(leadsTable)
+              .set({
+                demosEnviadas: registrar(lead.demosEnviadas, demoPedida),
+                updatedAt: new Date(),
+              })
+              .where(eq(leadsTable.id, lead.id));
+            req.log.info({ leadId: lead.id, demo: demoPedida }, "Demo enviada");
+          } else {
+            req.log.error(
+              { leadId: lead.id, demo: demoPedida },
+              "Demo não entregue — só o texto chegou",
+            );
+          }
+        }
+      }
     }
 
     // Analista de bastidor: lê a conversa e anota a dor e a objeção do lead,
@@ -427,7 +483,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
           (m) =>
             `${m.direction === "inbound" ? "Dentista" : "Júlia"}: ${m.content}`,
         ),
-        `Júlia: ${reply}`,
+        `Júlia: ${textoLimpo}`,
       ].join("\n");
 
       const extraction = await openai.chat.completions.create(

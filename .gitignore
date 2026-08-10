@@ -7,6 +7,8 @@ out-tsc
 *.tsbuildinfo
 # bundles temporários gerados por `pnpm test`
 artifacts/api-server/test/.build/
+# idem, do script que gera os áudios de demonstração
+artifacts/api-server/scripts/.build/
 .expo
 .expo-shared
 

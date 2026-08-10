@@ -59,6 +59,16 @@ function configTts() {
   };
 }
 
+/**
+ * Cartesia pura, sem rede de segurança. Exportada para o `gerar-demos.mjs`:
+ * ali a queda para a OpenAI seria um desastre silencioso — gravaria os áudios
+ * definitivos com OUTRA voz, e ninguém perceberia até um dentista ouvir. Na
+ * geração das demos, falhar alto é o comportamento certo.
+ */
+export async function gerarVozCartesia(texto: string): Promise<Buffer> {
+  return cartesiaTextToSpeech(texto);
+}
+
 async function cartesiaTextToSpeech(texto: string): Promise<Buffer> {
   const { chave, voz, modelo } = configTts();
   if (!chave) throw new Error("CARTESIA_API_KEY não configurada");
