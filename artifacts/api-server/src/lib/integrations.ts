@@ -22,10 +22,19 @@ function configEvolution() {
 /**
  * Monta a URL de um endpoint da Evolution para a instância configurada.
  *
- * O nome da instância vai codificado. Isto NÃO é preciosismo: o nome real
- * tem espaço ("Vendedora CaptaClin"), e um espaço cru na URL vira 404 na
- * Evolution. Como o `sendWhatsAppMessage` só devolve false e loga, o sintoma
- * seria a Júlia parar de responder sem nenhum erro visível no deploy.
+ * O nome da instância vai codificado. Uma ressalva honesta sobre o motivo:
+ * para o nome atual ("Vendedora CaptaClin"), o ESPAÇO sozinho não quebrava —
+ * o parser de URL do Node normaliza espaço para %20 automaticamente, então o
+ * código antigo funcionava por sorte. Medido, não suposto.
+ *
+ * O que o parser NÃO normaliza são os caracteres que já têm significado na
+ * URL: "#" trunca tudo que vem depois, "?" vira query string e "/" vira outro
+ * segmento de caminho. Um nome de instância com qualquer um deles produziria
+ * uma requisição para o lugar errado — e, como o envio só devolve false e
+ * loga, o sintoma seria a Júlia parar de responder sem erro visível.
+ *
+ * Ou seja: isto é blindagem contra o nome mudar, não o conserto de um bug
+ * ativo. Vale ter porque o nome da instância é configuração, não código.
  */
 export function urlDaEvolution(caminho: string): string {
   const { base, instancia } = configEvolution();

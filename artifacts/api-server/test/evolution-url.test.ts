@@ -1,10 +1,15 @@
 /**
  * Rodada 25 — a URL da Evolution.
  *
- * A instância real chama-se "Vendedora CaptaClin", com espaço. Um espaço cru
- * na URL vira 404 na Evolution, e como o envio só devolve false e loga, o
- * sintoma seria a Júlia parar de responder sem erro visível no deploy — a
- * mesma falha invisível que as rodadas anteriores passaram consertando.
+ * Ressalva importante para quem ler isto depois: o ESPAÇO do nome atual
+ * ("Vendedora CaptaClin") não estava quebrando nada. O parser de URL do Node
+ * normaliza espaço para %20 sozinho, então o código antigo funcionava.
+ *
+ * O que justifica estes testes são os caracteres que o parser NÃO normaliza,
+ * porque já têm significado na URL: "#" trunca o resto, "?" vira query string
+ * e "/" vira outro segmento de caminho. O nome da instância é configuração —
+ * pode mudar sem ninguém revisar o código — e um desses caracteres mandaria a
+ * requisição para o lugar errado em silêncio.
  *
  * Este arquivo NÃO usa o stub de integrações: ele importa o módulo de verdade,
  * porque é justamente a montagem da URL que está sob teste.
