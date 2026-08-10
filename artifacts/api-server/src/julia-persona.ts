@@ -254,13 +254,26 @@ Extraia, do ponto de vista do dentista:
 2. A OBJEÇÃO principal que ele levantou.
 3. O NOME dele, se ele tiver dito.
 4. O PLANO que despertou interesse, se algum.
+5. A ETAPA em que a negociação está agora.
 
 Responda SOMENTE com um JSON, sem nada antes ou depois, neste formato exato:
-{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>"}
+{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>"}
+
+Etapas possíveis, em ordem:
+- new: mal começou, ainda não se sabe nada da clínica dele.
+- contacted: já trocaram mensagem, mas ele ainda não contou nada da rotina.
+- qualified: ele já contou como funciona o WhatsApp/atendimento da clínica.
+- interested: demonstrou interesse — perguntou como funciona, quanto custa.
+- objection: levantou uma objeção que ainda não foi resolvida.
+- closing: está falando de plano, teste grátis, link ou próximo passo concreto.
+- closed: disse que vai assinar ou já assinou.
+- lost: disse que não quer, ou pediu para não receber mais mensagens.
 
 Regras:
 - Use null (sem aspas) quando a informação ainda não apareceu.
 - Não invente nada que o dentista não tenha dito ou demonstrado.
 - Em "name", só o primeiro nome, sem "Dr." nem "Dra.".
 - Em "planInterest", use exatamente uma destas palavras: basic, essencial, pro.
+- Em "funnelStage", use exatamente uma das etapas listadas acima.
+- Julgue a etapa pelo que o DENTISTA fez, não pelo que a Júlia ofereceu.
 - Escreva em português do Brasil.`;

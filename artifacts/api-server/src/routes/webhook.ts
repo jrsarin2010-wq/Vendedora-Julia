@@ -31,6 +31,31 @@ const router: IRouter = Router();
 const REPLY_MODEL = process.env.JULIA_REPLY_MODEL ?? "gpt-5.4-mini";
 const EXTRACTION_MODEL = process.env.JULIA_EXTRACTION_MODEL ?? "gpt-5.4-nano";
 
+// Etapas do funil, na ordem em que uma negociação avança. Serve para a regra
+// MONOTÔNICA abaixo: o extrator sugere a etapa, mas ela só pode ir para frente.
+// Sem isso, uma mensagem casual ("obrigado!") faria o modelo rebaixar um lead
+// de "closing" para "qualified" — pior do que a etapa congelada que havia antes.
+const FUNNEL_ORDER = [
+  "new",
+  "contacted",
+  "qualified",
+  "interested",
+  "objection",
+  "closing",
+  "closed",
+] as const;
+
+type FunnelStage = (typeof FUNNEL_ORDER)[number] | "lost";
+
+// "closed" e "lost" são terminais: podem ser marcados de qualquer ponto.
+function podeAvancar(atual: string, novo: FunnelStage): boolean {
+  if (novo === "lost" || novo === "closed") return atual !== novo;
+  const i = FUNNEL_ORDER.indexOf(atual as (typeof FUNNEL_ORDER)[number]);
+  const j = FUNNEL_ORDER.indexOf(novo);
+  if (i === -1 || j === -1) return false;
+  return j > i;
+}
+
 // Senha secreta que só o seu WhatsApp (Evolution) conhece. Se estiver
 // configurada, a Júlia só processa mensagens que tragam essa senha — assim
 // ninguém de fora consegue forjar mensagens e gastar seu crédito de IA.
@@ -297,6 +322,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         mainObjection?: string | null;
         name?: string | null;
         planInterest?: string | null;
+        funnelStage?: string | null;
       };
 
       const update: {
@@ -304,6 +330,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         mainObjection?: string;
         name?: string;
         planInterest?: "basic" | "essencial" | "pro";
+        funnelStage?: FunnelStage;
         updatedAt?: Date;
       } = {};
       if (parsed.painPoints && parsed.painPoints.trim()) {
@@ -322,6 +349,18 @@ router.post("/webhook/whatsapp", async (req, res) => {
       ) {
         update.planInterest = parsed.planInterest as "basic" | "essencial" | "pro";
       }
+      // Etapa do funil: só grava se for válida E se for um avanço. Antes ficava
+      // travada em "new" para sempre, e a ficha afirmava ao modelo que um lead
+      // de 20 mensagens era novo — fazendo a Júlia reabrir descoberta com quem
+      // já tinha discutido preço.
+      const stageSugerida = parsed.funnelStage as FunnelStage | undefined;
+      if (
+        stageSugerida &&
+        (FUNNEL_ORDER as readonly string[]).concat("lost").includes(stageSugerida) &&
+        podeAvancar(lead.funnelStage, stageSugerida)
+      ) {
+        update.funnelStage = stageSugerida;
+      }
 
       if (Object.keys(update).length > 0) {
         update.updatedAt = new Date();
@@ -333,6 +372,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         if (update.painPoints) lead.painPoints = update.painPoints;
         if (update.mainObjection) lead.mainObjection = update.mainObjection;
         if (update.name) lead.name = update.name;
+        if (update.funnelStage) lead.funnelStage = update.funnelStage;
       }
     } catch (err) {
       req.log.warn(
