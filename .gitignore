@@ -57,6 +57,8 @@ Thumbs.db
 gh-token.txt
 *.token
 *token.txt
+*key.txt
+evolution-key.txt
 .env
 .env.*
 !.env.example

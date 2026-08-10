@@ -28,6 +28,18 @@ const stubDir = path.join(here, "stubs");
 const plugin = {
   name: "stubs",
   setup(build) {
+    // Saída de emergência: um import terminado em "?real" carrega o módulo DE
+    // VERDADE, mesmo que ele esteja na lista de trocas abaixo. Serve para o
+    // teste que precisa exercitar a própria integração — hoje, a montagem da
+    // URL da Evolution. Registrado ANTES das trocas porque o esbuild usa a
+    // primeira regra que casar.
+    build.onResolve({ filter: /\?real$/ }, (args) => ({
+      path: path.resolve(
+        path.dirname(args.importer),
+        `${args.path.replace(/\?real$/, "")}.ts`,
+      ),
+    }));
+
     const trocas = [
       [/^@workspace\/db$/, "db.mjs"],
       [/^@workspace\/integrations-openai-ai-server$/, "openai.mjs"],

@@ -1,12 +1,36 @@
 import { type Lead } from "@workspace/db";
 import { logger } from "./logger";
 
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL ?? "";
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY ?? "";
-const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE ?? "julia";
-
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? "";
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID ?? "";
+
+/**
+ * Configuração da Evolution, lida A CADA chamada em vez de uma vez no
+ * carregamento do módulo — assim o valor efetivo é sempre o que está no
+ * ambiente agora, e o teste consegue mudar a configuração sem recarregar nada.
+ */
+function configEvolution() {
+  return {
+    // Tira a barra do fim: a URL é montada por concatenação, e uma barra
+    // sobrando produziria ".../..//message/sendText/...".
+    base: (process.env.EVOLUTION_API_URL ?? "").replace(/\/+$/, ""),
+    chave: process.env.EVOLUTION_API_KEY ?? "",
+    instancia: process.env.EVOLUTION_INSTANCE ?? "julia",
+  };
+}
+
+/**
+ * Monta a URL de um endpoint da Evolution para a instância configurada.
+ *
+ * O nome da instância vai codificado. Isto NÃO é preciosismo: o nome real
+ * tem espaço ("Vendedora CaptaClin"), e um espaço cru na URL vira 404 na
+ * Evolution. Como o `sendWhatsAppMessage` só devolve false e loga, o sintoma
+ * seria a Júlia parar de responder sem nenhum erro visível no deploy.
+ */
+export function urlDaEvolution(caminho: string): string {
+  const { base, instancia } = configEvolution();
+  return `${base}/${caminho}/${encodeURIComponent(instancia)}`;
+}
 
 // Tempo máximo de espera por qualquer serviço externo (em ms).
 // Se estourar, a chamada é abortada em vez de deixar a Júlia travada esperando.
@@ -21,18 +45,19 @@ export async function sendWhatsAppMessage(
   phone: string,
   message: string
 ): Promise<boolean> {
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+  const { base, chave } = configEvolution();
+  if (!base || !chave) {
     logger.warn({ phone }, "Evolution API not configured — skipping WhatsApp send");
     return false;
   }
 
   try {
-    const url = `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`;
+    const url = urlDaEvolution("message/sendText");
     const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: EVOLUTION_API_KEY,
+        apikey: chave,
       },
       body: JSON.stringify({
         number: phone,
@@ -63,18 +88,19 @@ export async function sendWhatsAppMessage(
 export async function fetchWhatsAppMediaBase64(
   messageId: string,
 ): Promise<string | null> {
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+  const { base, chave } = configEvolution();
+  if (!base || !chave) {
     logger.warn("Evolution API not configured — cannot fetch media");
     return null;
   }
 
   try {
-    const url = `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${EVOLUTION_INSTANCE}`;
+    const url = urlDaEvolution("chat/getBase64FromMediaMessage");
     const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: EVOLUTION_API_KEY,
+        apikey: chave,
       },
       body: JSON.stringify({ message: { key: { id: messageId } } }),
       signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
@@ -106,18 +132,19 @@ export async function sendWhatsAppAudio(
   phone: string,
   audioBase64: string,
 ): Promise<boolean> {
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+  const { base, chave } = configEvolution();
+  if (!base || !chave) {
     logger.warn({ phone }, "Evolution API not configured — skipping WhatsApp audio send");
     return false;
   }
 
   try {
-    const url = `${EVOLUTION_API_URL}/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`;
+    const url = urlDaEvolution("message/sendWhatsAppAudio");
     const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: EVOLUTION_API_KEY,
+        apikey: chave,
       },
       body: JSON.stringify({ number: phone, audio: audioBase64 }),
       signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
