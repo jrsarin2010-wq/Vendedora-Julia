@@ -7,7 +7,7 @@ import {
   followUpsTable,
 } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
-import { openai, speechToText, textToSpeech, detectAudioFormat } from "@workspace/integrations-openai-ai-server";
+import { openai, speechToText, detectAudioFormat } from "@workspace/integrations-openai-ai-server";
 import {
   JULIA_SYSTEM_PROMPT,
   JULIA_EXTRACTION_PROMPT,
@@ -21,6 +21,7 @@ import {
   fetchWhatsAppMediaBase64,
   sendWhatsAppAudio,
 } from "../lib/integrations";
+import { gerarVoz } from "../lib/tts";
 import { pareceCelularReal, padraoDeServico } from "../lib/filtro-spam";
 
 const router: IRouter = Router();
@@ -386,19 +387,13 @@ router.post("/webhook/whatsapp", async (req, res) => {
     let delivered = false;
     let entregueComoAudio = false;
     if (inboundWasAudio) {
-      try {
-        const audioBuffer = await Promise.race([
-          textToSpeech(reply, "nova", "opus"),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("tts timeout")), 30_000),
-          ),
-        ]);
-        if (audioBuffer.length > 0) {
-          delivered = await sendWhatsAppAudio(phone, audioBuffer.toString("base64"));
-          entregueComoAudio = delivered;
-        }
-      } catch (err) {
-        req.log.warn({ err, phone }, "Falha ao gerar/enviar áudio — caindo pra texto");
+      // O gerarVoz já tenta Cartesia, depois OpenAI, e tem timeout interno —
+      // por isso o Promise.race manual saiu daqui. Devolve null quando nenhuma
+      // voz saiu, e aí a entrega segue por texto logo abaixo.
+      const audioBuffer = await gerarVoz(reply);
+      if (audioBuffer) {
+        delivered = await sendWhatsAppAudio(phone, audioBuffer.toString("base64"));
+        entregueComoAudio = delivered;
       }
     }
     if (!delivered) {
