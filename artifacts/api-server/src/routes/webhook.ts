@@ -13,6 +13,7 @@ import {
   JULIA_EXTRACTION_PROMPT,
   FOLLOW_UP_TEMPLATES,
   FOLLOW_UP_DELAYS_HOURS,
+  buildLeadBriefing,
 } from "../julia-persona";
 import {
   sendWhatsAppMessage,
@@ -168,8 +169,31 @@ router.post("/webhook/whatsapp", async (req, res) => {
 
     const history = recentHistory.reverse();
 
+    // MEMÓRIA: monta a ficha deste dentista (nome, dor, objeção, etapa, quanto
+    // tempo sumiu) e entrega junto do prompt. É isso que faz a Júlia retomar a
+    // conversa como quem lembra da pessoa, em vez de começar do zero.
+    const lastMessageAt = lead.lastMessageAt ?? null;
+    const daysSinceLastMessage = lastMessageAt
+      ? Math.floor((Date.now() - new Date(lastMessageAt).getTime()) / 86_400_000)
+      : null;
+    // "Voltando" = ficou 1 dia ou mais sem falar e já tem conversa anterior.
+    const isReturning =
+      history.length > 1 && daysSinceLastMessage !== null && daysSinceLastMessage >= 1;
+
+    const leadBriefing = buildLeadBriefing({
+      name: lead.name,
+      funnelStage: lead.funnelStage,
+      painPoints: lead.painPoints,
+      mainObjection: lead.mainObjection,
+      planInterest: lead.planInterest,
+      daysSinceLastMessage,
+      isReturning,
+      totalMessages: history.length,
+    });
+
     const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
       { role: "system", content: JULIA_SYSTEM_PROMPT },
+      { role: "system", content: leadBriefing },
       ...history.map((m) => ({
         role: m.direction === "inbound" ? ("user" as const) : ("assistant" as const),
         content: m.content,
@@ -249,14 +273,32 @@ router.post("/webhook/whatsapp", async (req, res) => {
       const parsed = JSON.parse(jsonText) as {
         painPoints?: string | null;
         mainObjection?: string | null;
+        name?: string | null;
+        planInterest?: string | null;
       };
 
-      const update: { painPoints?: string; mainObjection?: string; updatedAt?: Date } = {};
+      const update: {
+        painPoints?: string;
+        mainObjection?: string;
+        name?: string;
+        planInterest?: "basic" | "essencial" | "pro";
+        updatedAt?: Date;
+      } = {};
       if (parsed.painPoints && parsed.painPoints.trim()) {
         update.painPoints = parsed.painPoints.trim();
       }
       if (parsed.mainObjection && parsed.mainObjection.trim()) {
         update.mainObjection = parsed.mainObjection.trim();
+      }
+      // Só grava o nome se ainda não temos um (não sobrescreve o que já sabíamos).
+      if (!lead.name && parsed.name && parsed.name.trim()) {
+        update.name = parsed.name.trim();
+      }
+      if (
+        parsed.planInterest &&
+        ["basic", "essencial", "pro"].includes(parsed.planInterest)
+      ) {
+        update.planInterest = parsed.planInterest as "basic" | "essencial" | "pro";
       }
 
       if (Object.keys(update).length > 0) {
@@ -268,6 +310,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         // reflete em memória pra o alerta do Telegram já sair com o contexto
         if (update.painPoints) lead.painPoints = update.painPoints;
         if (update.mainObjection) lead.mainObjection = update.mainObjection;
+        if (update.name) lead.name = update.name;
       }
     } catch (err) {
       req.log.warn(
@@ -366,7 +409,10 @@ router.post("/webhook/whatsapp", async (req, res) => {
         leadId: lead.id,
         scheduledAt: new Date(Date.now() + hours * 60 * 60 * 1000),
         touchNumber: idx + 1,
-        messageTemplate: FOLLOW_UP_TEMPLATES[((idx + 1) as keyof typeof FOLLOW_UP_TEMPLATES)](lead.name),
+        messageTemplate: FOLLOW_UP_TEMPLATES[((idx + 1) as keyof typeof FOLLOW_UP_TEMPLATES)](
+          lead.name,
+          lead.painPoints,
+        ),
         status: "pending" as const,
       }));
 
