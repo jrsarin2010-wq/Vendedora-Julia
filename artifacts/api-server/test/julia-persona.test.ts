@@ -268,4 +268,68 @@ ok(
   FOLLOW_UP_TEMPLATES[4]("Marina", DOR).includes("— perde paciente que chama fora do horário —"),
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 30 — o que a primeira conversa real (dentista vindo da landing)
+// mostrou que faltava. Ela disse "cobre o titular mais até 4 profissionais
+// extras" e ENGOLIU o "(R$97/mês cada)" que já estava na lista de planos: o
+// dentista ia assinar esperando R$297 e receber R$394. Estas asserções travam
+// as cinco regras que nasceram daquela conversa.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 30 — profissional adicional nunca sai sem preço");
+ok(
+  "a regra de nunca omitir o R$97 está no prompt",
+  JULIA_SYSTEM_PROMPT.includes("profissional adicional CUSTA") &&
+    JULIA_SYSTEM_PROMPT.includes("sem dizer que cada um custa R$97/mês"),
+);
+ok("traz a conta fechada dos dois profissionais", JULIA_SYSTEM_PROMPT.includes("R$297 + R$97 = R$394"));
+ok(
+  "marca como ERRADO exatamente a frase que ela usou na conversa real",
+  JULIA_SYSTEM_PROMPT.includes('ERRADO: "O Essencial cobre o titular mais até 4 profissionais extras."'),
+);
+ok(
+  "registra a exceção do Pro (segundo profissional já incluso)",
+  JULIA_SYSTEM_PROMPT.includes("no PRO, o primeiro profissional extra JÁ ESTÁ INCLUSO"),
+);
+
+secao("Rodada 30 — nome sempre, e nunca 'Dr.' no vácuo");
+ok('proíbe "Dr." sozinho', JULIA_SYSTEM_PROMPT.includes('NUNCA escreva "Dr." sozinho, sem nome'));
+ok(
+  "manda responder a pergunta primeiro e emendar o nome",
+  JULIA_SYSTEM_PROMPT.includes("Mesmo quando ele já chega com uma pergunta, você PRECISA do nome dele"),
+);
+
+secao("Rodada 30 — preço se fala");
+ok("a regra PREÇO SE FALA está no prompt", JULIA_SYSTEM_PROMPT.includes("PREÇO SE FALA"));
+ok(
+  "a promoção dos 3 meses entra como argumento",
+  JULIA_SYSTEM_PROMPT.includes("R$297 nos 3 primeiros meses, depois vai pra R$397"),
+);
+
+secao("Rodada 30 — fechar no sinal de compra");
+ok(
+  "existe a seção de sinal de compra",
+  JULIA_SYSTEM_PROMPT.includes("## RECONHEÇA O SINAL DE COMPRA E PARE DE VENDER"),
+);
+for (const sinal of ["como faço para assinar?", "pode ser", "qual você indica?"]) {
+  ok(`lista o sinal de compra: ${sinal}`, JULIA_SYSTEM_PROMPT.includes(sinal));
+}
+ok("manda PARAR de vender depois do sinal", JULIA_SYSTEM_PROMPT.includes("3. PARE."));
+
+secao("Rodada 30 — jargão traduzido");
+ok(
+  "traduz Remarketing de leads",
+  JULIA_SYSTEM_PROMPT.includes('"Remarketing de leads"') &&
+    JULIA_SYSTEM_PROMPT.includes("ela volta a chamar quem sumiu sem marcar"),
+);
+ok(
+  "traduz CRM de leads",
+  JULIA_SYSTEM_PROMPT.includes('"CRM de leads"') &&
+    JULIA_SYSTEM_PROMPT.includes("você vê todo mundo que chamou a clínica"),
+);
+ok(
+  "só usa o termo técnico se o dentista usar primeiro",
+  JULIA_SYSTEM_PROMPT.includes("Use o nome técnico só se o próprio dentista usar primeiro"),
+);
+
 fim();
