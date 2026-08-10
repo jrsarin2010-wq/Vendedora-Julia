@@ -76,8 +76,30 @@ router.post("/webhook/whatsapp", async (req, res) => {
 
     const phoneRaw: string =
       key?.remoteJid ?? msgData?.remoteJid ?? "";
+
+    // Grupo, status e lista de transmissão NÃO são lead. Sem esta trava, um
+    // JID de grupo ("...@g.us") passa direto pelo replace abaixo, vira
+    // "telefone", cria lead e a Júlia começa a vender DENTRO do grupo —
+    // inclusive em grupo de colegas dentistas.
+    if (
+      phoneRaw.endsWith("@g.us") ||
+      phoneRaw.endsWith("@broadcast") ||
+      phoneRaw.startsWith("status@")
+    ) {
+      req.log.info({ remoteJid: phoneRaw }, "Mensagem de grupo/status ignorada");
+      return;
+    }
+
     const phone = phoneRaw.replace("@s.whatsapp.net", "").replace("@c.us", "");
     if (!phone) return;
+
+    // Rede de segurança: se ainda sobrou "@", é um tipo de JID que a gente não
+    // conhece (newsletter, @lid, o que o WhatsApp inventar). Melhor ignorar e
+    // registrar do que tratar como telefone e responder para o lugar errado.
+    if (phone.includes("@")) {
+      req.log.warn({ remoteJid: phoneRaw }, "JID desconhecido ignorado");
+      return;
+    }
 
     // Get or decode message text
     let text = "";
