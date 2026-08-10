@@ -46,9 +46,46 @@ export function urlDaEvolution(caminho: string): string {
 const EXTERNAL_TIMEOUT_MS = 10_000;
 
 /**
+ * Tempo que uma pessoa levaria digitando este texto, para a Júlia não
+ * responder instantaneamente. Velocidade de celular, não de teclado.
+ *
+ * Exportada porque é a única parte testável desta borda: o resto é rede.
+ */
+export function tempoDeDigitacao(texto: string): number {
+  const MS_POR_CARACTERE = 45; // ~26 caracteres por segundo é rápido demais; 45ms ≈ digitação de celular
+  const MINIMO_MS = 2_000; // nunca instantâneo
+  const MAXIMO_MS = 12_000; // acima disso o dentista acha que sumiu
+  const base = texto.length * MS_POR_CARACTERE;
+  const variacao = 0.85 + Math.random() * 0.3; // ±15%, porque tempo exato é robô
+  return Math.min(MAXIMO_MS, Math.max(MINIMO_MS, Math.round(base * variacao)));
+}
+
+/** O teto de `tempoDeDigitacao`. Serve para o orçamento de timeout abaixo. */
+export const MAXIMO_DIGITACAO_MS = 12_000;
+
+/**
  * Envia uma mensagem de TEXTO pelo WhatsApp via Evolution.
  * Retorna true se entregou, false caso contrário — quem chama precisa saber,
  * porque gravar no histórico uma resposta que não chegou faz o painel mentir.
+ *
+ * DIGITAÇÃO HUMANIZADA (Rodada 28): mandamos `delay` (ms) e `presence`, e a
+ * Evolution mostra "digitando..." pelo tempo pedido antes de entregar.
+ *
+ * O detalhe que decide o timeout, verificado no código da Evolution e não
+ * suposto: o `delay` é BLOQUEANTE do nosso lado. Em
+ * `whatsapp.baileys.service.ts`, `sendMessageWithTyping` faz
+ * `await delay(options.delay)` DENTRO do handler, antes do `sendMessage` — ou
+ * seja, a resposta HTTP só volta depois de o atraso inteiro passar. Com o
+ * timeout fixo de 10s, um texto longo (atraso de até 12s) seria abortado por
+ * nós e a mensagem NÃO sairia.
+ *
+ * Por isso o timeout desta chamada é o orçamento normal MAIS o atraso pedido:
+ * os 10s continuam valendo para a rede e o processamento, e o tempo de
+ * "digitação" entra por cima, sem comer o prazo do resto.
+ *
+ * Não há risco para o webhook: a rota já responde `{ ok: true }` antes de
+ * processar (routes/webhook.ts), então a Evolution nunca fica esperando por
+ * nós — o atraso vive apenas neste fetch.
  */
 export async function sendWhatsAppMessage(
   phone: string,
@@ -59,6 +96,8 @@ export async function sendWhatsAppMessage(
     logger.warn({ phone }, "Evolution API not configured — skipping WhatsApp send");
     return false;
   }
+
+  const atraso = tempoDeDigitacao(message);
 
   try {
     const url = urlDaEvolution("message/sendText");
@@ -71,8 +110,10 @@ export async function sendWhatsAppMessage(
       body: JSON.stringify({
         number: phone,
         text: message,
+        delay: atraso,
+        presence: "composing",
       }),
-      signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
+      signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS + atraso),
     });
 
     if (!response.ok) {
@@ -136,6 +177,19 @@ export async function fetchWhatsAppMediaBase64(
  * Envia uma mensagem de ÁUDIO (nota de voz) pelo WhatsApp via Evolution.
  * Recebe o áudio em base64. Retorna true se enviou, false caso contrário
  * (pra quem chama poder cair pra texto se falhar).
+ *
+ * SEM atraso de digitação, de propósito. Duas razões:
+ *
+ * 1. O áudio de demo vai logo DEPOIS de um texto que já esperou até 12s
+ *    "digitando". Somar outro atraso aqui deixaria o dentista olhando para a
+ *    tela sem nada acontecer por perto de meio minuto.
+ * 2. A demo é uma gravação pronta, não uma fala improvisada na hora.
+ *
+ * Registro do que foi verificado, para quem quiser mudar de ideia depois: a
+ * Evolution SUPORTA atraso aqui, e com a presença certa — `audioWhatsapp`
+ * passa `{ presence: 'recording', delay }` fixo, então apareceria "gravando
+ * áudio...", nunca "digitando...". A porta está aberta; a escolha de não usar
+ * é pelo ritmo da conversa, não por limitação da API.
  */
 export async function sendWhatsAppAudio(
   phone: string,
