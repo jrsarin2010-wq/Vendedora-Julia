@@ -345,9 +345,11 @@ Extraia, do ponto de vista do dentista:
 3. O NOME dele, se ele tiver dito.
 4. O PLANO que despertou interesse, se algum.
 5. A ETAPA em que a negociação está agora.
+6. Se ele JÁ VIROU CLIENTE (assinou, contratou, pagou ou já começou a usar/testar o CaptaClin).
+7. Se ele PEDIU PARA PARAR de receber mensagens.
 
 Responda SOMENTE com um JSON, sem nada antes ou depois, neste formato exato:
-{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>"}
+{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>}
 
 Etapas possíveis, em ordem:
 - new: mal começou, ainda não se sabe nada da clínica dele.
@@ -366,4 +368,18 @@ Regras:
 - Em "planInterest", use exatamente uma destas palavras: basic, essencial, pro.
 - Em "funnelStage", use exatamente uma das etapas listadas acima.
 - Julgue a etapa pelo que o DENTISTA fez, não pelo que a Júlia ofereceu.
-- Escreva em português do Brasil.`;
+
+Regras de "isCustomer" (seja CONSERVADOR — na dúvida, false):
+- true SOMENTE se o próprio dentista confirmar que assinou, contratou, pagou, ativou ou já está usando/testando o CaptaClin.
+  Ex: "já assinei", "acabei de contratar", "paguei agora", "já tô testando aqui", "ativei ontem".
+- false se foi só a Júlia que ofereceu, mandou link ou explicou como assinar.
+- false para intenção futura: "vou assinar", "acho que vou pegar", "me manda o link".
+
+Regras de "wantsToStop" (seja CONSERVADOR — na dúvida, false):
+- true quando o dentista pede, de qualquer forma, para não receber mais mensagens.
+  Ex: "chega", "não insista", "por favor pare", "não me procure mais", "para com isso", "me deixa em paz", "não tenho interesse, obrigado".
+- false para adiamento ou recusa de compra que NÃO é pedido de parada:
+  "vou pensar", "agora não", "depois eu vejo", "tá caro", "não posso agora", "me chama semana que vem".
+- Na dúvida entre adiar e parar, use false. Errar aqui silencia um lead vivo.
+
+Escreva em português do Brasil.`;

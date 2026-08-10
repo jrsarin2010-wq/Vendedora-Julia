@@ -323,6 +323,8 @@ router.post("/webhook/whatsapp", async (req, res) => {
         name?: string | null;
         planInterest?: string | null;
         funnelStage?: string | null;
+        isCustomer?: boolean;
+        wantsToStop?: boolean;
       };
 
       const update: {
@@ -373,6 +375,55 @@ router.post("/webhook/whatsapp", async (req, res) => {
         if (update.mainObjection) lead.mainObjection = update.mainObjection;
         if (update.name) lead.name = update.name;
         if (update.funnelStage) lead.funnelStage = update.funnelStage;
+      }
+
+      // Virou cliente? Para de vender pra quem já comprou.
+      //
+      // Este bloco roda ANTES do trecho que arma a leva nova de follow-ups
+      // (mais abaixo), então mexer em lead.status já basta para a guarda de lá
+      // barrar o armamento. O cancelamento explícito abaixo é redundante hoje
+      // — os pendentes já foram cancelados quando o lead respondeu — mas fica
+      // como proteção caso essa ordem mude um dia.
+      if (parsed.isCustomer === true && lead.status !== "closed") {
+        await db
+          .update(leadsTable)
+          .set({ status: "closed", updatedAt: new Date() })
+          .where(eq(leadsTable.id, lead.id));
+        await db
+          .update(followUpsTable)
+          .set({ status: "cancelled" })
+          .where(
+            and(
+              eq(followUpsTable.leadId, lead.id),
+              eq(followUpsTable.status, "pending"),
+            ),
+          );
+        lead.status = "closed";
+        req.log.info({ leadId: lead.id }, "Lead virou cliente — follow-ups encerrados");
+      }
+
+      // Pediu pra parar (com palavras que a lista fixa não pega)? Respeita.
+      if (parsed.wantsToStop === true && lead.status !== "lost" && lead.status !== "closed") {
+        const nota = "[OPT-OUT] Lead pediu para parar de receber mensagens.";
+        await db
+          .update(leadsTable)
+          .set({
+            status: "lost",
+            notes: lead.notes ? `${nota}\n${lead.notes}` : nota,
+            updatedAt: new Date(),
+          })
+          .where(eq(leadsTable.id, lead.id));
+        await db
+          .update(followUpsTable)
+          .set({ status: "cancelled" })
+          .where(
+            and(
+              eq(followUpsTable.leadId, lead.id),
+              eq(followUpsTable.status, "pending"),
+            ),
+          );
+        lead.status = "lost";
+        req.log.info({ leadId: lead.id }, "Opt-out detectado por intenção — follow-ups encerrados");
       }
     } catch (err) {
       req.log.warn(
@@ -487,9 +538,22 @@ router.post("/webhook/whatsapp", async (req, res) => {
     // Antes, um falso positivo queimava a flag e o pedido real semanas depois
     // passava batido. O update é idempotente; o alerta é que repete.
     if (handoffRequested) {
+      // Não rebaixa quem já é cliente ("closed") nem quem pediu para parar
+      // ("lost"). O handoff roda DEPOIS da extração; sem esta guarda, um
+      // cliente que escrevesse "me liga" voltaria para "hot" e a leva de
+      // follow-up de VENDA seria armada de novo para quem já pagou.
+      const statusAposHandoff =
+        lead.status === "closed" || lead.status === "lost"
+          ? lead.status
+          : ("hot" as const);
+
       await db
         .update(leadsTable)
-        .set({ handoffRequested: true, status: "hot", updatedAt: new Date() })
+        .set({
+          handoffRequested: true,
+          status: statusAposHandoff,
+          updatedAt: new Date(),
+        })
         .where(eq(leadsTable.id, lead.id));
 
       // Reload for updated data
