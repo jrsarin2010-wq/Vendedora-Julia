@@ -1,5 +1,5 @@
 /**
- * FILTRO ANTI-SPAM — o que NÃO é dentista falando.
+ * REGRAS DE TELEFONE E DE CONTEÚDO — o que NÃO é dentista falando.
  *
  * Sem isto, qualquer mensagem que chegue no número vira lead e recebe resposta:
  * banco, operadora, promoção, código de verificação, corretora de empréstimo.
@@ -26,6 +26,28 @@ export function pareceCelularReal(phone: string): boolean {
   const ddd = Number(semPais.slice(0, 2));
   if (ddd < 11 || ddd > 99) return false; // DDD inválido
   return true;
+}
+
+/**
+ * Põe um telefone digitado à mão no formato do WhatsApp (só dígitos, com o
+ * 55 na frente), ou devolve null se não der para aproveitar.
+ *
+ * Aceita o que vem de planilha: "(85) 99999-8888", "+55 85 99999-8888",
+ * "85 99999 8888", "5585999998888".
+ *
+ * A decisão de pôr ou não o 55 é pelo TAMANHO, nunca por "já começa com 55".
+ * O DDD 55 existe de verdade (Santa Maria/RS): o número 55999998888 tem 11
+ * dígitos e começa com "55", mas esse "55" é o DDD, não o país. Pela regra de
+ * tamanho ele vira 5555999998888, que é o certo; pela regra de prefixo ficaria
+ * com 11 dígitos e seria descartado como inválido.
+ */
+export function normalizarTelefone(bruto: string): string | null {
+  const digitos = (bruto ?? "").replace(/\D/g, "");
+  // 10 = DDD + 8 dígitos, 11 = DDD + 9 dígitos → falta o código do país.
+  const comPais =
+    digitos.length === 10 || digitos.length === 11 ? `55${digitos}` : digitos;
+  // A validação é a MESMA usada no webhook para barrar robô de banco.
+  return pareceCelularReal(comPais) ? comPais : null;
 }
 
 /**

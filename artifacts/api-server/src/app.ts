@@ -31,6 +31,13 @@ app.use(
 );
 app.use(cors({ origin: true, credentials: true }));
 app.use(cookieParser());
+// A importação de leads manda um lote grande de uma vez (até 2000 dentistas),
+// e o limite padrão de 100kb do express.json rejeitaria o corpo antes de a
+// rota ver qualquer coisa — com um erro feio do próprio express, em vez da
+// mensagem que explica o que fazer. Este parser cobre SÓ essa rota e vem
+// ANTES do global; o global depois enxerga o corpo já lido e não faz nada.
+// Fica restrito assim de propósito: o webhook continua com o limite apertado.
+app.use("/api/leads/import", express.json({ limit: "2mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

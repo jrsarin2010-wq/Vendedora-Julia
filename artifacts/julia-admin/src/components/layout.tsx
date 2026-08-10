@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Users, LayoutDashboard, Settings, Bot, Menu, Bell, Search, LogOut } from "lucide-react";
+import { Users, LayoutDashboard, Settings, Bot, Menu, Bell, Search, LogOut, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -14,12 +14,27 @@ interface LayoutProps {
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leads", label: "Leads", icon: Users },
+  { href: "/leads/import", label: "Importar", icon: Upload },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
+
+/**
+ * Qual item do menu fica aceso. Vence o href MAIS LONGO que casa com a rota
+ * atual — sem isso, em "/leads/import" tanto "Leads" quanto "Importar"
+ * acenderiam, já que "/leads/import" começa com "/leads".
+ */
+function hrefAtivo(location: string): string {
+  const candidatos = navItems
+    .map((i) => i.href)
+    .filter((href) => location === href || (href !== "/" && location.startsWith(`${href}/`)));
+  if (candidatos.length === 0) return "/";
+  return candidatos.reduce((a, b) => (b.length > a.length ? b : a));
+}
 
 export function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const ativo = hrefAtivo(location);
 
   // Close mobile menu on navigation
   useEffect(() => {
@@ -47,7 +62,7 @@ export function Layout({ children }: LayoutProps) {
 
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+            const isActive = ativo === item.href;
             return (
               <Link key={item.href} href={item.href} data-testid={`nav-${item.label.toLowerCase()}`}>
                 <div
@@ -96,7 +111,7 @@ export function Layout({ children }: LayoutProps) {
                 </div>
                 <nav className="px-4 space-y-1">
                   {navItems.map((item) => {
-                    const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+                    const isActive = ativo === item.href;
                     return (
                       <Link key={item.href} href={item.href} data-testid={`mobile-nav-${item.label.toLowerCase()}`}>
                         <div

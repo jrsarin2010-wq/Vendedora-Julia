@@ -10,6 +10,7 @@ import { Layout } from "@/components/layout";
 import Dashboard from "@/pages/dashboard";
 import Leads from "@/pages/leads";
 import LeadDetail from "@/pages/lead-detail";
+import Import from "@/pages/import";
 import Settings from "@/pages/settings";
 import Login from "@/pages/login";
 import { checkAuth } from "@/lib/auth-api";
@@ -29,6 +30,8 @@ function Router() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/leads" component={Leads} />
+        {/* Antes de "/leads/:id", senão "import" seria lido como id. */}
+        <Route path="/leads/import" component={Import} />
         <Route path="/leads/:id" component={LeadDetail} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
