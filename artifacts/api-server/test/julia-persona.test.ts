@@ -197,6 +197,48 @@ ok(
     JULIA_SYSTEM_PROMPT.indexOf("## PLANOS E PREÇOS"),
 );
 
+secao("Rodada 29 — ela não entrega o nome do dono");
+ok(
+  "a seção agora é genérica",
+  JULIA_SYSTEM_PROMPT.includes("## QUANDO PASSAR PARA UMA PESSOA"),
+);
+ok(
+  "a antiga seção com o nome sumiu",
+  !JULIA_SYSTEM_PROMPT.includes("QUANDO CHAMAR O DR. SARINHO"),
+);
+ok(
+  "ela oferece 'alguém do suporte' / 'alguém do time'",
+  JULIA_SYSTEM_PROMPT.includes("alguém do suporte") &&
+    JULIA_SYSTEM_PROMPT.includes("alguém do time"),
+);
+ok(
+  "depois de avisar, ela para de vender",
+  JULIA_SYSTEM_PROMPT.includes("PARE de vender"),
+);
+ok(
+  "a credencial 'criado por um dentista' continua viva",
+  JULIA_SYSTEM_PROMPT.includes("criado por um DENTISTA"),
+);
+{
+  // O ponto da rodada: o nome não pode estar disponível para ela citar. A
+  // única ocorrência tolerada é dentro da própria regra que a proíbe de dizer.
+  const linhasComNome = JULIA_SYSTEM_PROMPT.split("\n").filter((l) => /Sarinho/.test(l));
+  ok(
+    "o nome aparece no máximo uma vez, e só dentro da proibição",
+    linhasComNome.length === 1 && linhasComNome[0].startsWith("NUNCA diga"),
+    linhasComNome.join(" | "),
+  );
+  ok(
+    "o nome completo saiu de vez do prompt",
+    !JULIA_SYSTEM_PROMPT.includes("José Renato"),
+  );
+}
+ok(
+  "a LGPD não oferece mais o dono como atendente",
+  !JULIA_SYSTEM_PROMPT.includes("ofereça falar com o Dr. Sarinho") &&
+    !JULIA_SYSTEM_PROMPT.includes("contato do Dr. Sarinho"),
+);
+
 secao("tratamento.ts — unidade");
 ok("Michele é feminino apesar de não terminar em -a", detectarTratamento("Michele") === "dra");
 ok("Elias é masculino apesar de terminar em -s", detectarTratamento("Elias") === "dr");
