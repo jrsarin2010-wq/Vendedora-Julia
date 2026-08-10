@@ -18,6 +18,7 @@ import {
 import {
   sendWhatsAppMessage,
   sendTelegramAlert,
+  sendTelegramPausa,
   fetchWhatsAppMediaBase64,
   sendWhatsAppAudio,
 } from "../lib/integrations";
@@ -104,12 +105,23 @@ async function pausarPorHumano(
   )[0];
   if (!lead) return;
 
+  // Já estava pausada? Então isto é a segunda, terceira, décima mensagem dele
+  // na mesma conversa: renova o prazo, mas NÃO avisa de novo. Avisar a cada
+  // mensagem faria o Telegram repetir de volta o que ele acabou de digitar.
+  const jaEstavaPausada = Boolean(
+    lead.pausedUntil && new Date(lead.pausedUntil).getTime() > Date.now(),
+  );
+
   const ate = new Date(Date.now() + PAUSA_HUMANA_MS);
   await db
     .update(leadsTable)
     .set({ pausedUntil: ate, updatedAt: new Date() })
     .where(eq(leadsTable.id, lead.id));
   req.log.info({ leadId: lead.id, ate }, "Humano assumiu — Júlia pausada");
+
+  if (!jaEstavaPausada) {
+    await sendTelegramPausa({ type: "pausa", lead, ate });
+  }
 }
 
 // IDs de mensagem já processados, pra não responder duas vezes se o Evolution

@@ -28,8 +28,19 @@ async function anotarIdEnviado(response: Response, phone: string): Promise<void>
   }
 }
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? "";
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID ?? "";
+/**
+ * Configuração do Telegram, lida A CADA chamada — mesma decisão do
+ * `configEvolution()` logo abaixo, e pelo mesmo motivo: o valor efetivo passa a
+ * ser o que está no ambiente agora, e o teste consegue exercitar o caminho
+ * "configurado" sem recarregar módulo. Lido no topo do arquivo, o alerta ficava
+ * intestável: quem definisse a variável depois do import não mudava nada.
+ */
+function configTelegram() {
+  return {
+    token: process.env.TELEGRAM_BOT_TOKEN ?? "",
+    chatId: process.env.TELEGRAM_CHAT_ID ?? "",
+  };
+}
 
 /**
  * Configuração da Evolution, lida A CADA chamada em vez de uma vez no
@@ -265,49 +276,114 @@ interface HandoffAlert {
   lastMessage: string;
 }
 
-export async function sendTelegramAlert(alert: HandoffAlert): Promise<void> {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-    logger.warn("Telegram not configured — skipping alert");
+/**
+ * O telefone como LINK do WhatsApp, para o alerta virar um toque em vez de
+ * "copiar o número na mão e procurar a conversa". É o ponto do alerta: o lead
+ * mais quente que existe é o que pediu para falar com uma pessoa, e cada
+ * segundo de atrito aí custa caro.
+ *
+ * `wa.me` exige só dígitos. O telefone já vem do `remoteJid` com DDI, mas a
+ * limpeza é barata e protege contra número gravado com máscara na importação.
+ */
+export function linkDoWhatsApp(phone: string): string {
+  return `https://wa.me/${phone.replace(/\D/g, "")}`;
+}
+
+/**
+ * Alerta de que um humano assumiu uma conversa pelo celular.
+ *
+ * Existe para o Dr. Sarinho ter registro de quando pegou cada conversa. Dispara
+ * só na VIRADA (conversa solta -> pausada), nunca na renovação: como cada
+ * mensagem dele empurra o prazo, avisar a cada uma transformaria o Telegram num
+ * eco do que ele acabou de digitar.
+ */
+interface PausaAlert {
+  type: "pausa";
+  lead: Lead;
+  ate: Date;
+}
+
+/** Manda o texto para o Telegram. Nunca lança: alerta é aviso, não fluxo. */
+async function enviarAoTelegram(text: string, contexto: string): Promise<void> {
+  const { token, chatId } = configTelegram();
+  if (!token || !chatId) {
+    // Este warn é a única pista de que um lead quente passou batido. Diz o que
+    // falta e o que se perdeu, porque quem for ler o log depois do prejuízo
+    // precisa entender na primeira linha.
+    logger.warn(
+      { contexto },
+      "Telegram não configurado (falta TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID) — alerta NÃO enviado",
+    );
     return;
   }
 
   try {
-    const { lead, lastMessage } = alert;
-
-    const text = [
-      `🚨 *HANDOFF SOLICITADO — Lead precisa de atenção humana*`,
-      ``,
-      `👤 *Nome:* ${lead.name ?? "Não informado"}`,
-      `📱 *Telefone:* ${lead.phone}`,
-      `📍 *Estágio:* ${lead.funnelStage}`,
-      `🔥 *Status:* ${lead.status}`,
-      `💼 *Plano de interesse:* ${lead.planInterest ?? "Não definido"}`,
-      `😟 *Dor principal:* ${lead.painPoints ?? "Não identificada"}`,
-      `🚧 *Objeção:* ${lead.mainObjection ?? "Nenhuma registrada"}`,
-      ``,
-      `💬 *Última mensagem do lead:*`,
-      `_${lastMessage}_`,
-      ``,
-      `_Júlia está mantendo o lead aquecido enquanto aguarda._`,
-    ].join("\n");
-
-    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
+        chat_id: chatId,
         text,
         parse_mode: "Markdown",
+        // O alerta traz um link wa.me e o preview do WhatsApp só ocupa espaço.
+        disable_web_page_preview: true,
       }),
       signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
     });
 
     if (!response.ok) {
       const body = await response.text();
-      logger.error({ status: response.status, body }, "Telegram API error");
+      logger.error({ status: response.status, body, contexto }, "Telegram API error");
     }
   } catch (err) {
-    logger.error({ err }, "Failed to send Telegram alert");
+    logger.error({ err, contexto }, "Failed to send Telegram alert");
   }
+}
+
+export async function sendTelegramAlert(alert: HandoffAlert): Promise<void> {
+  const { lead, lastMessage } = alert;
+
+  const text = [
+    `🚨 *HANDOFF SOLICITADO — Lead precisa de atenção humana*`,
+    ``,
+    `👤 *Nome:* ${lead.name ?? "Não informado"}`,
+    // Link em vez de número solto: um toque abre a conversa. Sem isso o alerta
+    // obriga a copiar o número e procurar o contato na mão.
+    `📱 *WhatsApp:* [${lead.phone}](${linkDoWhatsApp(lead.phone)})`,
+    `📍 *Estágio:* ${lead.funnelStage}`,
+    `🔥 *Status:* ${lead.status}`,
+    `💼 *Plano de interesse:* ${lead.planInterest ?? "Não definido"}`,
+    `😟 *Dor principal:* ${lead.painPoints ?? "Não identificada"}`,
+    `🚧 *Objeção:* ${lead.mainObjection ?? "Nenhuma registrada"}`,
+    ``,
+    `💬 *Última mensagem do lead:*`,
+    `_${lastMessage}_`,
+    ``,
+    `_Júlia está mantendo o lead aquecido enquanto aguarda._`,
+  ].join("\n");
+
+  await enviarAoTelegram(text, "handoff");
+}
+
+/** Avisa que a Júlia se calou porque alguém assumiu a conversa pelo celular. */
+export async function sendTelegramPausa(alert: PausaAlert): Promise<void> {
+  const { lead, ate } = alert;
+  const hora = ate.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
+
+  const text = [
+    `🤫 *Você assumiu uma conversa — a Júlia se calou*`,
+    ``,
+    `👤 *Nome:* ${lead.name ?? "Não informado"}`,
+    `📱 *WhatsApp:* [${lead.phone}](${linkDoWhatsApp(lead.phone)})`,
+    ``,
+    `Ela volta a responder às *${hora}*, e cada mensagem sua adia mais 5 minutos.`,
+    `_Se quiser devolver a conversa antes disso, use "Devolver para a Júlia" no painel._`,
+  ].join("\n");
+
+  await enviarAoTelegram(text, "pausa");
 }

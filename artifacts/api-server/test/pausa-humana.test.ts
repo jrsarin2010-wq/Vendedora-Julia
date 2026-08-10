@@ -71,6 +71,10 @@ ok("logou que o humano assumiu", temLog("Humano assumiu"));
   );
 }
 
+secao("o Telegram avisa que ele assumiu — UMA vez, não a cada mensagem");
+ok("avisou na virada", wa.pausas.length === 1, JSON.stringify(wa.pausas));
+ok("o aviso aponta o lead certo", wa.pausas[0]?.lead?.phone === NUMERO);
+
 secao("cada mensagem do humano RENOVA o prazo");
 {
   const primeira = new Date(pausaDoLead()).getTime();
@@ -78,6 +82,9 @@ secao("cada mensagem do humano RENOVA o prazo");
   await chamar(eventoFromMe("já te respondo certinho", NUMERO, "DIGITADA-NO-CELULAR-2"));
   const segunda = new Date(pausaDoLead()).getTime();
   ok("o prazo foi empurrado para frente", segunda > primeira, `${primeira} -> ${segunda}`);
+  // Renovar não avisa de novo: senão o Telegram viraria eco de tudo que ele
+  // digita no celular.
+  ok("a renovação NÃO gera novo aviso", wa.pausas.length === 1, JSON.stringify(wa.pausas));
 }
 
 secao("durante a pausa: a mensagem é GRAVADA, a resposta não sai");

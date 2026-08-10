@@ -14,6 +14,8 @@ export const wa = {
   enviadas: [],
   /** Alertas de handoff disparados. */
   alertas: [],
+  /** Avisos de "humano assumiu a conversa" disparados. */
+  pausas: [],
   /**
    * Limpa só o que foi REGISTRADO. Os flags de comportamento (entrega, media)
    * são configurados pelo teste e não devem ser zerados entre chamadas.
@@ -21,6 +23,7 @@ export const wa = {
   reset() {
     this.enviadas = [];
     this.alertas = [];
+    this.pausas = [];
   },
 };
 
@@ -37,4 +40,10 @@ export async function fetchWhatsAppMediaBase64() {
 }
 export async function sendTelegramAlert(alert) {
   wa.alertas.push(alert);
+}
+export async function sendTelegramPausa(alert) {
+  wa.pausas.push(alert);
+}
+export function linkDoWhatsApp(phone) {
+  return `https://wa.me/${String(phone).replace(/\D/g, "")}`;
 }
