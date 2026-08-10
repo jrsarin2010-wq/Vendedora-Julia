@@ -21,6 +21,7 @@ import {
   fetchWhatsAppMediaBase64,
   sendWhatsAppAudio,
 } from "../lib/integrations";
+import { pareceCelularReal, padraoDeServico } from "../lib/filtro-spam";
 
 const router: IRouter = Router();
 
@@ -149,6 +150,16 @@ router.post("/webhook/whatsapp", async (req, res) => {
       return;
     }
 
+    // ANTI-SPAM 1 — o remetente é um celular de pessoa?
+    // Banco e operadora mandam de número curto (0800, 4004, 32004545) ou de
+    // remetente alfanumérico. Isso nunca é dentista, então corta aqui, antes
+    // de sequer procurar o lead: não gasta consulta, não gasta IA, não polui
+    // o painel com lead que não existe.
+    if (!pareceCelularReal(phone)) {
+      req.log.info({ phone }, "Remetente não parece celular (serviço/robô) — ignorado");
+      return;
+    }
+
     // Get or decode message text
     let text = "";
     const msg = msgData?.message ?? msgData;
@@ -191,6 +202,33 @@ router.post("/webhook/whatsapp", async (req, res) => {
     let lead = (
       await db.select().from(leadsTable).where(eq(leadsTable.phone, phone)).limit(1)
     )[0];
+
+    // ANTI-SPAM 2 — conteúdo de banco, crédito, cobrança ou verificação.
+    //
+    // A trava está no `!lead`: conversa JÁ INICIADA nunca é descartada por
+    // conteúdo. Um dentista que já fala com a Júlia pode perfeitamente dizer
+    // "tô pagando empréstimo, tá apertado" — silenciar isso seria muito pior
+    // do que deixar passar um spam. E o robô de banco nunca ganha essa
+    // imunidade: como a primeira mensagem dele é barrada, o lead não chega a
+    // ser criado, e a segunda cai no mesmo filtro.
+    //
+    // Por isso o filtro fica AQUI, entre a busca do lead e a criação dele: a
+    // consulta acima é só leitura, então descartar neste ponto não deixa lead
+    // fantasma no painel.
+    if (!lead) {
+      const padrao = padraoDeServico(text);
+      if (padrao) {
+        // `warn`, e com o padrão que bateu: se um dentista de verdade for
+        // barrado por engano, o log aponta qual regra precisa mudar. O texto
+        // barrado NÃO é logado de propósito — costuma ser código de
+        // verificação do próprio Dr. Sarinho.
+        req.log.warn(
+          { phone, padrao: String(padrao) },
+          "Mensagem de banco/crédito/verificação — ignorada",
+        );
+        return;
+      }
+    }
 
     if (!lead) {
       const inserted = await db
