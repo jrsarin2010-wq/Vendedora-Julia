@@ -95,9 +95,22 @@ PROIBIDO ABSOLUTO: inventar número, porcentagem, depoimento, nome de clínica o
 ## COMO VOCÊ CONDUZ A VENDA
 
 FASE 1 — ABERTURA (primeira mensagem)
-Curta, humana, sem vender nada ainda. Se apresente, diga de onde veio o contato, e faça UMA pergunta leve.
-Exemplo de tom: "Oi! Aqui é a Júlia, do CaptaClin 😊 Vi que você deu uma olhada na gente. Antes de mais nada, como posso te chamar?"
-NUNCA abra com preço, plano ou explicação do produto.
+Curta, humana, sem vender nada. Se apresente e faça UMA pergunta leve.
+NUNCA abra com preço, plano, link ou explicação do produto.
+
+REGRA DE OURO DA ABERTURA: você só afirma o que SABE.
+- Se o dentista chegou sozinho (ele mandou mensagem primeiro), você NÃO sabe de onde ele veio, nem se ele viu o site, o Instagram ou um anúncio. NÃO invente isso. Nada de "vi que você deu uma olhada na gente", "vi seu interesse", "recebi seu contato" — se você não tem essa informação na ficha, é chute, e chute quebra a confiança logo na primeira frase.
+- Se a ficha do dentista disser de onde ele veio, aí sim você pode citar — porque é verdade.
+
+Se ele chegou sozinho, o padrão é simples: cumprimente, diga quem você é, e pergunte o nome. Só isso.
+
+VARIE. Não repita a mesma abertura para todo mundo — dois dentistas que se conhecem podem comparar as mensagens. Escreva do seu jeito a cada vez.
+Estes são exemplos de TOM, não frases para copiar:
+- "Oi! Aqui é a Júlia, do CaptaClin 😊 Como posso te chamar?"
+- "Olá! Júlia falando, do CaptaClin. Com quem eu tenho o prazer?"
+- "Oi, tudo bem? Sou a Júlia, do CaptaClin. Antes de mais nada, qual seu nome?"
+
+Se ele já disse o nome na primeira mensagem, não pergunte de novo — agradeça pelo contato e vá direto para a descoberta.
 
 FASE 2 — DESCOBERTA (a parte mais importante — não pule)
 Antes de falar do produto, entenda a clínica. Uma pergunta por mensagem, com jeito de conversa:
@@ -270,6 +283,7 @@ export function buildLeadBriefing(params: {
   daysSinceLastMessage: number | null;
   isReturning: boolean;
   totalMessages: number;
+  origin: string | null;
 }): string {
   const linhas: string[] = [];
 
@@ -295,6 +309,23 @@ export function buildLeadBriefing(params: {
   } else {
     linhas.push(`- Nome: ainda não sei (pergunte com naturalidade)`);
   }
+
+  // De onde veio o lead. Existe por causa da REGRA DE OURO DA ABERTURA: sem
+  // esta linha, a Júlia abria com "vi que você deu uma olhada na gente" para
+  // quem nunca tinha olhado nada.
+  //
+  // Cuidado com "whatsapp": não é uma origem, é o valor que o webhook grava
+  // quando o dentista manda mensagem do nada (schema de leads). É justamente o
+  // caso em que ela não sabe de nada — tratá-lo como origem citável seria
+  // repetir o erro com outro texto.
+  const chegouSozinho =
+    !params.origin || params.origin === "whatsapp" || params.origin === "inbound";
+  linhas.push(
+    chegouSozinho
+      ? `- De onde veio: ele chegou sozinho pelo WhatsApp — você NÃO sabe como ele te achou. Não invente origem.`
+      : `- De onde veio: ${params.origin} (pode citar, é verdade)`,
+  );
+
   linhas.push(`- Etapa da negociação: ${params.funnelStage}`);
   if (params.painPoints) linhas.push(`- Dor que ele já me contou: ${params.painPoints}`);
   if (params.mainObjection) linhas.push(`- Objeção que ele levantou: ${params.mainObjection}`);

@@ -3,10 +3,10 @@
  * determinísticas e, portanto, testáveis sem chamar o modelo.
  */
 import { ok, secao, fim } from "./assert";
-import { FOLLOW_UP_TEMPLATES, buildLeadBriefing } from "../src/julia-persona";
+import { FOLLOW_UP_TEMPLATES, JULIA_SYSTEM_PROMPT, buildLeadBriefing } from "../src/julia-persona";
 import { detectarTratamento, saudacao } from "../src/lib/tratamento";
 
-const ficha = (name: string | null) =>
+const ficha = (name: string | null, origin: string | null = null) =>
   buildLeadBriefing({
     name,
     funnelStage: "qualified",
@@ -16,6 +16,7 @@ const ficha = (name: string | null) =>
     daysSinceLastMessage: 2,
     isReturning: true,
     totalMessages: 8,
+    origin,
   });
 
 secao("Dr./Dra. determinístico na ficha do lead");
@@ -27,6 +28,39 @@ ok('"Yuri" → ambíguo', ficha("Yuri").includes("nome ambíguo"));
 ok('"raquel silva" → só o primeiro nome, capitalizado', ficha("raquel silva").includes("trate como: Dra. Raquel"));
 ok("sem nome → manda perguntar", ficha(null).includes("ainda não sei"));
 ok('nunca escreve "Dr(a)."', !ficha("Alex").includes("Dr(a)"));
+
+secao("origem do lead na ficha — a Júlia não inventa de onde ele veio");
+// O bug real: ela abria com "vi que você deu uma olhada na gente" para quem
+// tinha mandado só um "oi". Sem origem conhecida, a ficha tem que dizer isso.
+ok("sem origem → manda não inventar", ficha("Carlos", null).includes("Não invente origem"));
+ok(
+  '"whatsapp" NÃO é origem: é o lead que chegou sozinho',
+  ficha("Carlos", "whatsapp").includes("Não invente origem"),
+);
+ok('"inbound" também conta como chegou sozinho', ficha("Carlos", "inbound").includes("Não invente origem"));
+ok(
+  "chegou sozinho → a ficha nunca autoriza citar",
+  !ficha("Carlos", "whatsapp").includes("pode citar"),
+);
+ok('"instagram" → autoriza citar', ficha("Carlos", "instagram").includes("instagram (pode citar, é verdade)"));
+ok('"maps" → autoriza citar', ficha("Carlos", "maps").includes("maps (pode citar, é verdade)"));
+ok(
+  "origem conhecida não traz o aviso de não inventar",
+  !ficha("Carlos", "instagram").includes("Não invente origem"),
+);
+
+secao("prompt da Júlia — a abertura não afirma o que ela não sabe");
+ok("a regra de ouro está no prompt", JULIA_SYSTEM_PROMPT.includes("REGRA DE OURO DA ABERTURA"));
+ok(
+  "o exemplo que virou script saiu do prompt",
+  !JULIA_SYSTEM_PROMPT.includes("Vi que você deu uma olhada na gente. Antes de mais nada"),
+);
+ok("a abertura manda variar", JULIA_SYSTEM_PROMPT.includes("VARIE."));
+ok(
+  "o prompt oferece mais de um exemplo de tom",
+  JULIA_SYSTEM_PROMPT.includes("Como posso te chamar?") &&
+    JULIA_SYSTEM_PROMPT.includes("Com quem eu tenho o prazer?"),
+);
 
 secao("tratamento.ts — unidade");
 ok("Michele é feminino apesar de não terminar em -a", detectarTratamento("Michele") === "dra");

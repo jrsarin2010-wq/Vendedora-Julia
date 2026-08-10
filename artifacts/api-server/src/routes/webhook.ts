@@ -347,6 +347,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
       daysSinceLastMessage,
       isReturning,
       totalMessages: history.length,
+      origin: lead.origin,
     });
 
     const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
