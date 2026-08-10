@@ -50,7 +50,7 @@ ok(
 );
 
 secao("prompt da Júlia — a abertura não afirma o que ela não sabe");
-ok("a regra de ouro está no prompt", JULIA_SYSTEM_PROMPT.includes("REGRA DE OURO DA ABERTURA"));
+ok("a regra de ouro está no prompt", JULIA_SYSTEM_PROMPT.includes("REGRA DE OURO, vale nos dois"));
 ok(
   "o exemplo que virou script saiu do prompt",
   !JULIA_SYSTEM_PROMPT.includes("Vi que você deu uma olhada na gente. Antes de mais nada"),
@@ -60,6 +60,87 @@ ok(
   "o prompt oferece mais de um exemplo de tom",
   JULIA_SYSTEM_PROMPT.includes("Como posso te chamar?") &&
     JULIA_SYSTEM_PROMPT.includes("Com quem eu tenho o prazer?"),
+);
+
+secao("Rodada 28 — dois modos de abertura");
+ok("existe MODO A (ele chamou)", JULIA_SYSTEM_PROMPT.includes("MODO A — ELE CHAMOU VOCÊ"));
+ok("existe MODO B (ela chamou)", JULIA_SYSTEM_PROMPT.includes("MODO B — VOCÊ CHAMOU ELE"));
+ok(
+  "o MODO A casa com o texto que a ficha escreve para quem chegou sozinho",
+  JULIA_SYSTEM_PROMPT.includes('ficha diz "chegou sozinho pelo WhatsApp"') &&
+    ficha("Carlos", null).includes("ele chegou sozinho pelo WhatsApp"),
+);
+ok(
+  "o MODO B cita as origens que a ficha realmente grava",
+  JULIA_SYSTEM_PROMPT.includes("ficha diz import, maps ou instagram"),
+);
+ok(
+  "no MODO A ela responde a pergunta dele antes de fazer as dela",
+  JULIA_SYSTEM_PROMPT.includes("RESPONDA primeiro"),
+);
+ok("no MODO B ela pede licença", JULIA_SYSTEM_PROMPT.includes("PEÇA LICENÇA de verdade"));
+ok(
+  "no MODO B ela não vende na primeira mensagem",
+  JULIA_SYSTEM_PROMPT.includes("Não venda nada na primeira mensagem"),
+);
+ok(
+  "não pergunta o nome duas vezes",
+  JULIA_SYSTEM_PROMPT.includes("se ele já disse o nome, não pergunte de novo"),
+);
+
+secao("Rodada 28 — conhecimento completo dos planos");
+ok(
+  "define o que é uma conversa (é a dúvida nº1 de quem chega pela landing)",
+  JULIA_SYSTEM_PROMPT.includes("1 conversa = TODAS as mensagens trocadas com 1 paciente em até 24h"),
+);
+for (const [plano, conversas] of [
+  ["BÁSICO", "200 conversas por mês"],
+  ["ESSENCIAL", "300 conversas por mês"],
+  ["PRO", "500 conversas por mês"],
+] as const) {
+  ok(`${plano} tem a cota de conversas`, JULIA_SYSTEM_PROMPT.includes(conversas));
+}
+ok("recarga de 200 por R$97", JULIA_SYSTEM_PROMPT.includes("200 extras por R$97"));
+ok("recarga de 400 por R$177", JULIA_SYSTEM_PROMPT.includes("400 extras por R$177"));
+ok(
+  "profissional adicional soma conversas",
+  JULIA_SYSTEM_PROMPT.includes("Profissional adicional: R$97/mês (some +100 conversas/mês)"),
+);
+ok(
+  "o Pro já vem com um profissional extra",
+  JULIA_SYSTEM_PROMPT.includes("1 profissional extra JÁ INCLUSO"),
+);
+ok(
+  "ligação por IA continua sendo 'em breve', sem data",
+  JULIA_SYSTEM_PROMPT.includes("EM BREVE, ainda não existe. Nunca prometa data"),
+);
+ok(
+  "cada plano diz o que NÃO tem (admitir falha cria confiança)",
+  (JULIA_SYSTEM_PROMPT.match(/NÃO tem:/g) ?? []).length >= 2,
+);
+ok(
+  "o link do site sobreviveu à troca da seção",
+  JULIA_SYSTEM_PROMPT.includes("https://www.captaclin.com.br (mande o link no fechamento"),
+);
+
+secao("Rodada 28 — tráfego pago é o gancho do diferencial");
+ok(
+  "a seção existe",
+  JULIA_SYSTEM_PROMPT.includes("SEU MAIOR DIFERENCIAL: PACIENTE DE TRÁFEGO PAGO"),
+);
+ok("ela pergunta cedo se ele anuncia", JULIA_SYSTEM_PROMPT.includes('"Você anuncia? Instagram, Google?"'));
+ok(
+  "quem anuncia recebe Essencial ou Pro",
+  JULIA_SYSTEM_PROMPT.includes("Recomende ESSENCIAL ou PRO"),
+);
+ok(
+  "quem NÃO anuncia não leva plano empurrado",
+  JULIA_SYSTEM_PROMPT.includes("Se ele NÃO anuncia, não force"),
+);
+ok(
+  "o gancho vem antes da tabela de planos (ele justifica a recomendação)",
+  JULIA_SYSTEM_PROMPT.indexOf("PACIENTE DE TRÁFEGO PAGO") <
+    JULIA_SYSTEM_PROMPT.indexOf("## PLANOS E PREÇOS"),
 );
 
 secao("tratamento.ts — unidade");
