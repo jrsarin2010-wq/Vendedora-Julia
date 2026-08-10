@@ -123,6 +123,60 @@ ok(
   JULIA_SYSTEM_PROMPT.includes("https://www.captaclin.com.br (mande o link no fechamento"),
 );
 
+secao("Rodada 29 — trial e garantia são coisas DIFERENTES");
+ok(
+  "o trial diz o limite (2 conversas, 15 mensagens)",
+  JULIA_SYSTEM_PROMPT.includes("2 conversas, com até 15 mensagens"),
+);
+ok("o trial não pede cartão", JULIA_SYSTEM_PROMPT.includes("7 dias, SEM cartão"));
+ok(
+  "a garantia é apresentada como direito de arrependimento",
+  JULIA_SYSTEM_PROMPT.includes("direito de\narrependimento, previsto em lei"),
+);
+ok(
+  "a sequência que usa os dois juntos existe",
+  JULIA_SYSTEM_PROMPT.includes("COMO USAR OS DOIS JUNTOS"),
+);
+ok(
+  "ela é mandada ser honesta sobre o limite",
+  JULIA_SYSTEM_PROMPT.includes("SEJA HONESTA SOBRE O LIMITE"),
+);
+// O erro que esta rodada corrige: vender o trial como se fosse o produto
+// liberado por 7 dias. O dentista entra, esbarra em 2 conversas e se sente
+// enganado — que é o oposto exato da arma dela.
+ok(
+  'a promessa falsa "7 dias grátis, sem cartão" como prova na clínica sumiu',
+  !JULIA_SYSTEM_PROMPT.includes("são 7 dias de teste grátis, sem cartão"),
+);
+ok(
+  "ninguém mais promete ver as conversas reais da clínica antes de pagar",
+  !JULIA_SYSTEM_PROMPT.includes("você vê as conversas reais acontecendo na sua clínica antes de pagar"),
+);
+ok(
+  "há um aviso explícito contra prometer testar 7 dias na clínica sem pagar",
+  JULIA_SYSTEM_PROMPT.includes('NUNCA diga que ele pode "testar 7 dias na clínica sem pagar"'),
+);
+{
+  // Rede de proteção ampla: nenhuma frase pode juntar "7 dias" com "grátis"
+  // fora do bloco do trial, porque é essa colagem que cria a expectativa errada.
+  const linhasRuins = JULIA_SYSTEM_PROMPT.split("\n").filter(
+    (l) => /7 dias/.test(l) && /grátis/i.test(l) && !/TRIAL/i.test(l),
+  );
+  ok(
+    '"7 dias" + "grátis" só aparecem juntos no bloco do trial',
+    linhasRuins.length === 0,
+    linhasRuins.join(" | "),
+  );
+}
+ok(
+  "o follow-up 3 não vende mais 7 dias grátis",
+  !FOLLOW_UP_TEMPLATES[3]("Marina", null).includes("7 dias grátis"),
+);
+ok(
+  "o follow-up 3 fala da garantia",
+  FOLLOW_UP_TEMPLATES[3]("Marina", null).includes("pedir o dinheiro de volta"),
+);
+
 secao("Rodada 28 — tráfego pago é o gancho do diferencial");
 ok(
   "a seção existe",
