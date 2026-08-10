@@ -11,11 +11,15 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
+// O `testId` é fixo e em inglês DE PROPÓSITO: ele identifica o elemento para
+// quem automatiza a tela, e não pode mudar junto com o texto exibido. Antes
+// ele era derivado do label, então traduzir o menu teria renomeado
+// "nav-dashboard" para "nav-painel" sem ninguém perceber.
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/leads", label: "Leads", icon: Users },
-  { href: "/leads/import", label: "Importar", icon: Upload },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/", label: "Painel", testId: "dashboard", icon: LayoutDashboard },
+  { href: "/leads", label: "Dentistas", testId: "leads", icon: Users },
+  { href: "/leads/import", label: "Importar", testId: "import", icon: Upload },
+  { href: "/settings", label: "Configurações", testId: "settings", icon: Settings },
 ];
 
 /**
@@ -56,7 +60,7 @@ export function Layout({ children }: LayoutProps) {
           </div>
           <div>
             <h2 className="font-mono font-bold tracking-tight text-sidebar-foreground">JÚLIA</h2>
-            <p className="text-xs text-sidebar-foreground/60 uppercase tracking-wider font-semibold">Command Center</p>
+            <p className="text-xs text-sidebar-foreground/60 uppercase tracking-wider font-semibold">Central de comando</p>
           </div>
         </div>
 
@@ -64,7 +68,7 @@ export function Layout({ children }: LayoutProps) {
           {navItems.map((item) => {
             const isActive = ativo === item.href;
             return (
-              <Link key={item.href} href={item.href} data-testid={`nav-${item.label.toLowerCase()}`}>
+              <Link key={item.href} href={item.href} data-testid={`nav-${item.testId}`}>
                 <div
                   className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
                     isActive
@@ -106,14 +110,14 @@ export function Layout({ children }: LayoutProps) {
                   </div>
                   <div>
                     <h2 className="font-mono font-bold tracking-tight">JÚLIA</h2>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Command Center</p>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Central de comando</p>
                   </div>
                 </div>
                 <nav className="px-4 space-y-1">
                   {navItems.map((item) => {
                     const isActive = ativo === item.href;
                     return (
-                      <Link key={item.href} href={item.href} data-testid={`mobile-nav-${item.label.toLowerCase()}`}>
+                      <Link key={item.href} href={item.href} data-testid={`mobile-nav-${item.testId}`}>
                         <div
                           className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
                             isActive
@@ -135,7 +139,7 @@ export function Layout({ children }: LayoutProps) {
               <Search size={16} className="text-muted-foreground mr-2 shrink-0" />
               <input 
                 type="text" 
-                placeholder="Search leads, phones..." 
+                placeholder="Buscar dentista ou telefone..." 
                 className="bg-transparent border-none outline-none text-sm w-full h-full placeholder:text-muted-foreground"
                 data-testid="input-global-search"
               />
@@ -152,7 +156,7 @@ export function Layout({ children }: LayoutProps) {
                 <AvatarFallback className="text-xs rounded-md bg-primary/10 text-primary font-mono">OP</AvatarFallback>
               </Avatar>
               <div className="hidden lg:block text-sm">
-                <p className="font-medium leading-none">Operator</p>
+                <p className="font-medium leading-none">Dr. Sarinho</p>
               </div>
             </div>
           </div>

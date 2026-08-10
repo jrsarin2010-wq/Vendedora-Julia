@@ -155,6 +155,25 @@ export function lerTextoDeImportacao(texto: string): {
   return { leads, problemas };
 }
 
+/** Apaga um lead e tudo que depende dele. */
+export async function apagarLead(leadId: number): Promise<void> {
+  const res = await fetch(`/api/leads/${leadId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`Não consegui apagar (HTTP ${res.status})`);
+}
+
+/** Faxina: apaga os importados que ainda não receberam mensagem. */
+export async function apagarImportadosPendentes(): Promise<{ apagados: number }> {
+  const res = await fetch("/api/leads/import-pending", {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`Não consegui apagar (HTTP ${res.status})`);
+  return (await res.json()) as { apagados: number };
+}
+
 export interface PreviaDeAbordagem {
   enviado: false;
   lead: {

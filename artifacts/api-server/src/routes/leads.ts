@@ -108,6 +108,105 @@ router.patch("/leads/:id", async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/leads/import-pending
+ *
+ * Faxina em lote dos leads de teste: apaga os que vieram por IMPORTAÇÃO e que
+ * ainda NÃO receberam a primeira mensagem.
+ *
+ * Escolhi este recorte, e não uma seleção por caixinhas na lista, por ser o
+ * mais simples que resolve o problema real (limpar a planilha de teste antes
+ * de ligar o disparo) sem poder machucar: quem já conversou com a Júlia, quem
+ * chegou sozinho pelo WhatsApp e quem já foi abordado ficam todos de fora, por
+ * construção. Não há como errar o clique e apagar uma conversa de verdade.
+ *
+ * Precisa vir ANTES de "/leads/:id" para o ":id" não capturar "import-pending".
+ */
+router.delete("/leads/import-pending", async (req, res) => {
+  try {
+    const alvos = await db
+      .select({ id: leadsTable.id })
+      .from(leadsTable)
+      .where(
+        and(
+          eq(leadsTable.origin, "import"),
+          eq(leadsTable.outreachStatus, "pending"),
+        ),
+      );
+
+    let apagados = 0;
+    for (const alvo of alvos) {
+      await apagarLeadEDependentes(alvo.id);
+      apagados++;
+    }
+
+    req.log.info({ apagados }, "Faxina de leads importados pendentes");
+    res.json({ apagados });
+  } catch (err) {
+    req.log.error({ err }, "Failed to bulk delete pending imported leads");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * Apaga o lead e tudo que depende dele.
+ *
+ * As mensagens e os follow-ups são apagados EXPLICITAMENTE, antes do lead,
+ * mesmo com as chaves estrangeiras já tendo `onDelete: "cascade"`. Duas
+ * razões: a ordem fica óbvia para quem lê, e a garantia deixa de depender de
+ * uma configuração de schema que ninguém revisa. Custa duas consultas.
+ */
+async function apagarLeadEDependentes(
+  id: number,
+): Promise<{ mensagens: number; followUps: number }> {
+  const mensagens = await db
+    .delete(leadMessagesTable)
+    .where(eq(leadMessagesTable.leadId, id))
+    .returning();
+
+  const followUps = await db
+    .delete(followUpsTable)
+    .where(eq(followUpsTable.leadId, id))
+    .returning();
+
+  await db.delete(leadsTable).where(eq(leadsTable.id, id));
+
+  return { mensagens: mensagens.length, followUps: followUps.length };
+}
+
+// DELETE /api/leads/:id
+router.delete("/leads/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return void res.status(400).json({ error: "Invalid id" });
+
+    const existente = await db
+      .select({ id: leadsTable.id, phone: leadsTable.phone })
+      .from(leadsTable)
+      .where(eq(leadsTable.id, id))
+      .limit(1);
+
+    if (!existente[0]) return void res.status(404).json({ error: "Lead not found" });
+
+    const apagados = await apagarLeadEDependentes(id);
+
+    req.log.info(
+      { leadId: id, phone: existente[0].phone, ...apagados },
+      "Lead apagado",
+    );
+
+    res.json({
+      apagado: true,
+      id,
+      mensagensApagadas: apagados.mensagens,
+      followUpsApagados: apagados.followUps,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete lead");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET /api/leads/:id/messages
 router.get("/leads/:id/messages", async (req, res) => {
   try {

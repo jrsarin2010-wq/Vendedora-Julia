@@ -20,6 +20,11 @@ import { Badge } from "@/components/ui/badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { PreviaAbordagem } from "@/components/previa-abordagem";
+import { ConfirmarExclusao } from "@/components/confirmar-exclusao";
+import { apagarLead } from "@/lib/import-api";
+import { rotuloEtapa, rotuloFollowUp } from "@/lib/rotulos";
+import { Trash2 } from "lucide-react";
+import { useLocation } from "wouter";
 
 const STAGES = ['new', 'contacted', 'qualified', 'interested', 'objection', 'closing', 'closed', 'lost'];
 
@@ -89,6 +94,28 @@ export default function LeadDetail() {
     updateLeadMutation.mutate({ id, data: { handoffRequested: false } });
   };
 
+  const [apagando, setApagando] = useState(false);
+  const [, navegar] = useLocation();
+
+  async function handleApagar() {
+    setApagando(true);
+    try {
+      await apagarLead(id);
+      toast({
+        title: "Dentista apagado",
+        description: "Ele saiu da lista, junto com as mensagens e os follow-ups.",
+      });
+      navegar("/leads");
+    } catch (e) {
+      setApagando(false);
+      toast({
+        title: "Não deu para apagar",
+        description: e instanceof Error ? e.message : "Tente de novo.",
+        variant: "destructive",
+      });
+    }
+  }
+
   if (leadLoading) {
     return (
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -104,9 +131,9 @@ export default function LeadDetail() {
   if (!lead) {
     return (
       <div className="p-6 text-center max-w-7xl mx-auto flex flex-col items-center justify-center h-full min-h-[50vh]">
-        <h2 className="text-2xl font-bold mb-4 font-mono">Lead not found</h2>
+        <h2 className="text-2xl font-bold mb-4 font-mono">Dentista não encontrado</h2>
         <Link href="/leads">
-          <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Leads</Button>
+          <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar para a lista</Button>
         </Link>
       </div>
     );
@@ -127,12 +154,12 @@ export default function LeadDetail() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight text-foreground font-mono flex items-center gap-2">
-                {lead.name || "Unknown"}
+                {lead.name || "Dentista sem nome"}
               </h1>
               <StatusBadge status={lead.status} />
               {lead.handoffRequested && (
                 <Badge variant="destructive" className="animate-pulse flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider">
-                  <AlertTriangle className="h-3 w-3" /> Handoff Req
+                  <AlertTriangle className="h-3 w-3" /> Quer falar com você
                 </Badge>
               )}
             </div>
@@ -145,7 +172,7 @@ export default function LeadDetail() {
         <div className="flex items-center gap-2">
           {lead.handoffRequested && (
             <Button variant="outline" size="sm" onClick={handleResolveHandoff} disabled={updateLeadMutation.isPending} data-testid="btn-resolve-handoff">
-              Resolve Handoff
+              Já falei com ele
             </Button>
           )}
           <Select value={lead.status} onValueChange={handleStatusChange} disabled={updateLeadMutation.isPending}>
@@ -153,13 +180,30 @@ export default function LeadDetail() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="hot">HOT</SelectItem>
-              <SelectItem value="warm">WARM</SelectItem>
-              <SelectItem value="cold">COLD</SelectItem>
-              <SelectItem value="closed">CLOSED</SelectItem>
-              <SelectItem value="lost">LOST</SelectItem>
+              <SelectItem value="hot">Quente</SelectItem>
+              <SelectItem value="warm">Morno</SelectItem>
+              <SelectItem value="cold">Frio</SelectItem>
+              <SelectItem value="closed">Cliente</SelectItem>
+              <SelectItem value="lost">Perdido</SelectItem>
             </SelectContent>
           </Select>
+
+          <ConfirmarExclusao
+            titulo={`Apagar ${lead.name || lead.phone}?`}
+            descricao="Apaga o dentista, todas as mensagens trocadas com ele e os follow-ups agendados. Não dá para desfazer."
+            aoConfirmar={handleApagar}
+          >
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 text-muted-foreground hover:text-destructive"
+              disabled={apagando}
+              data-testid="btn-apagar-lead"
+              title="Apagar este dentista"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </ConfirmarExclusao>
         </div>
       </div>
 
@@ -183,10 +227,10 @@ export default function LeadDetail() {
                   {isPast && <div className="w-2 h-2 bg-background rounded-full" />}
                 </div>
                 <span className={`text-[10px] font-mono uppercase tracking-wider transition-colors ${
-                  isActive ? "text-primary font-bold" : 
+                  isActive ? "text-primary font-bold" :
                   isPast ? "text-foreground font-medium" : "text-muted-foreground"
                 }`}>
-                  {stage}
+                  {rotuloEtapa(stage)}
                 </span>
               </div>
             );
@@ -200,49 +244,49 @@ export default function LeadDetail() {
           
           <div className="bg-card border border-border rounded-lg shadow-sm p-5 space-y-4">
             <h3 className="font-mono text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-4 border-b border-border/50 pb-2">
-              <User className="h-4 w-4" /> Profile Data
+              <User className="h-4 w-4" /> Ficha do dentista
             </h3>
             
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pain Points</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Dor identificada</label>
                 <Textarea 
                   value={painPoints}
                   onChange={(e) => setPainPoints(e.target.value)}
-                  placeholder="E.g., Low patient flow, high no-show rate..."
+                  placeholder="Ex.: perde paciente que chama fora do horário..."
                   className="min-h-[80px] text-sm resize-none bg-muted/20"
                   data-testid="input-pain-points"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Main Objection</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Objeção</label>
                 <Input 
                   value={mainObjection}
                   onChange={(e) => setMainObjection(e.target.value)}
-                  placeholder="E.g., Price, too complex..."
+                  placeholder="Ex.: achou caro, quer falar com o sócio..."
                   className="text-sm bg-muted/20"
                   data-testid="input-objection"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Internal Notes</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Anotações internas</label>
                 <Textarea 
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add notes about this lead..."
+                  placeholder="Anote aqui o que for útil sobre este dentista..."
                   className="min-h-[120px] text-sm resize-none bg-muted/20"
                   data-testid="input-notes"
                 />
               </div>
               <Button onClick={handleSaveNotes} disabled={updateLeadMutation.isPending} className="w-full font-mono text-xs" data-testid="btn-save-notes">
-                <Save className="h-4 w-4 mr-2" /> Save Profile Details
+                <Save className="h-4 w-4 mr-2" /> Salvar ficha
               </Button>
             </div>
           </div>
 
           <div className="bg-card border border-border rounded-lg shadow-sm p-5 flex flex-col h-[300px]">
             <h3 className="font-mono text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-4 border-b border-border/50 pb-2 shrink-0">
-              <Calendar className="h-4 w-4" /> Follow-up Schedule
+              <Calendar className="h-4 w-4" /> Follow-ups agendados
             </h3>
             
             <div className="flex-1 overflow-y-auto space-y-3 pr-2">
@@ -255,19 +299,19 @@ export default function LeadDetail() {
                 followups.map(f => (
                   <div key={f.id} className="flex flex-col gap-1 p-3 border border-border/50 rounded-md bg-muted/10 text-sm" data-testid={`followup-${f.id}`}>
                     <div className="flex justify-between items-center">
-                      <span className="font-mono font-medium text-xs uppercase tracking-wider">Touch #{f.touchNumber}</span>
+                      <span className="font-mono font-medium text-xs uppercase tracking-wider">{f.touchNumber}º toque</span>
                       <Badge variant="outline" className={`text-[9px] uppercase font-mono ${f.status === 'sent' ? 'bg-green-100 text-green-700 dark:bg-green-900/30' : f.status === 'cancelled' ? 'bg-slate-100 text-slate-500' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30'}`}>
-                        {f.status}
+                        {rotuloFollowUp(f.status)}
                       </Badge>
                     </div>
                     <div className="text-muted-foreground text-xs mt-1">
-                      Scheduled: {new Date(f.scheduledAt).toLocaleString()}
+                      Para: {new Date(f.scheduledAt).toLocaleString('pt-BR')}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className="text-center text-muted-foreground text-sm py-6 border border-dashed rounded-md h-full flex items-center justify-center">
-                  No scheduled follow-ups
+                  Nenhum follow-up agendado
                 </div>
               )}
             </div>
@@ -281,7 +325,7 @@ export default function LeadDetail() {
         <div className="col-span-2 bg-card border border-border rounded-lg shadow-sm flex flex-col overflow-hidden relative">
           <div className="p-4 border-b border-border/80 bg-muted/30 flex items-center gap-2 shrink-0 z-10">
             <MessageCircle className="h-4 w-4 text-primary" />
-            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider">Conversation History</h3>
+            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider">Histórico da conversa</h3>
           </div>
           
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f8f9fa] dark:bg-[#0f1219]">
@@ -329,15 +373,15 @@ export default function LeadDetail() {
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-70">
                 <Bot className="h-12 w-12 mb-4 opacity-20" />
-                <p>No messages yet.</p>
-                <p className="text-xs">Júlia will initiate contact soon.</p>
+                <p>Nenhuma mensagem ainda.</p>
+                <p className="text-xs">Quando houver conversa, ela aparece aqui.</p>
               </div>
             )}
           </div>
           
           {/* Read-only indicator */}
           <div className="p-3 border-t border-border bg-muted/20 text-center text-xs font-mono text-muted-foreground shrink-0">
-            Conversation managed by Júlia AI Agent
+            Conversa conduzida pela Júlia
           </div>
         </div>
       </div>

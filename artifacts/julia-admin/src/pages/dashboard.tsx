@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Users, UserCheck, UserX, Target, AlertTriangle, Clock, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
+import { rotuloEtapa } from "@/lib/rotulos";
 
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats({
@@ -23,45 +24,45 @@ export default function Dashboard() {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto pb-10">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground font-mono">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">Real-time overview of Júlia's operations.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground font-mono">Painel</h1>
+          <p className="text-sm text-muted-foreground mt-1">Como está o trabalho da Júlia agora.</p>
         </div>
       </div>
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
-          title="Total Leads" 
+          title="Total de dentistas" 
           value={stats?.totalLeads} 
           isLoading={statsLoading} 
           icon={Users} 
-          description="All time" 
+          description="Desde o começo" 
           testId="stat-total-leads"
         />
         <StatCard 
-          title="Hot Leads" 
+          title="Dentistas quentes" 
           value={stats?.hotLeads} 
           isLoading={statsLoading} 
           icon={Target} 
-          description="High intent" 
+          description="Perto de fechar" 
           highlight="text-orange-500"
           testId="stat-hot-leads"
         />
         <StatCard 
-          title="Conversion Rate" 
+          title="Taxa de conversão" 
           value={stats ? `${stats.conversionRate.toFixed(1)}%` : undefined} 
           isLoading={statsLoading} 
           icon={UserCheck} 
-          description="Closed / Total" 
+          description="Clientes sobre o total" 
           highlight="text-green-500"
           testId="stat-conversion"
         />
         <StatCard 
-          title="Handoffs Pending" 
+          title="Esperando você" 
           value={stats?.handoffsPending} 
           isLoading={statsLoading} 
           icon={AlertTriangle} 
-          description="Requires human action" 
+          description="Pediram falar com uma pessoa" 
           highlight={stats?.handoffsPending ? "text-red-500" : "text-muted-foreground"}
           testId="stat-handoffs"
         />
@@ -73,7 +74,7 @@ export default function Dashboard() {
           <CardHeader className="border-b border-border/50 pb-4">
             <CardTitle className="text-base font-semibold font-mono flex items-center gap-2">
               <ArrowRight size={16} className="text-primary" />
-              Funnel Breakdown
+              Etapas do funil
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
@@ -89,9 +90,9 @@ export default function Dashboard() {
                   const maxCount = Math.max(...funnel.map(f => f.count), 1);
                   const percentage = Math.max((stage.count / maxCount) * 100, 2);
                   return (
-                    <div key={stage.stage} className="flex items-center gap-4" data-testid={`funnel-stage-${stage.stage}`}>
-                      <div className="w-24 text-sm font-medium text-muted-foreground capitalize shrink-0 text-right">
-                        {stage.stage}
+                    <div key={rotuloEtapa(stage.stage)} className="flex items-center gap-4" data-testid={`funnel-stage-${rotuloEtapa(stage.stage)}`}>
+                      <div className="w-24 text-sm font-medium text-muted-foreground shrink-0 text-right">
+                        {rotuloEtapa(stage.stage)}
                       </div>
                       <div className="flex-1 h-8 bg-muted rounded-sm overflow-hidden relative group">
                         <div 
@@ -108,7 +109,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="py-10 text-center text-muted-foreground text-sm border border-dashed rounded-md">
-                No funnel data available
+                Ainda não há dados do funil
               </div>
             )}
           </CardContent>
@@ -119,7 +120,7 @@ export default function Dashboard() {
           <CardHeader className="border-b border-border/50 pb-4">
             <CardTitle className="text-base font-semibold font-mono flex items-center gap-2">
               <Clock size={16} className="text-primary" />
-              Recent Activity
+              Atividade recente
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -152,11 +153,14 @@ export default function Dashboard() {
                         <p className="text-sm font-medium leading-tight">
                           {item.leadName || item.phone}
                         </p>
+                        {/* O `event` da API é "Estágio: qualified" — metade em
+                            inglês e redundante com a etapa ao lado. Mostramos
+                            só a etapa traduzida. */}
                         <p className="text-xs text-muted-foreground">
-                          {item.event} &middot; <span className="capitalize">{item.funnelStage}</span>
+                          Etapa: {rotuloEtapa(item.funnelStage)}
                         </p>
                         <p className="text-[10px] text-muted-foreground/70 font-mono">
-                          {new Date(item.timestamp).toLocaleString()}
+                          {new Date(item.timestamp).toLocaleString('pt-BR')}
                         </p>
                       </div>
                     </div>
@@ -165,12 +169,12 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="p-10 text-center text-muted-foreground text-sm">
-                No recent activity
+                Nenhuma atividade recente
               </div>
             )}
             <div className="p-3 border-t border-border/50 text-center">
               <Link href="/leads" className="text-xs text-primary hover:underline font-medium uppercase tracking-wider" data-testid="link-view-all-leads">
-                View All Leads
+                Ver todos os dentistas
               </Link>
             </div>
           </CardContent>
