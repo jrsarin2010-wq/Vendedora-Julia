@@ -3,6 +3,7 @@ import { followUpsTable, leadsTable, leadMessagesTable } from "@workspace/db";
 import { eq, lte, and } from "drizzle-orm";
 import { sendWhatsAppMessage } from "./integrations";
 import { logger } from "./logger";
+import { saudacao } from "./tratamento";
 
 export function startFollowUpScheduler(): void {
   // Run every 5 minutes
@@ -39,11 +40,12 @@ export function startFollowUpScheduler(): void {
         }
 
         // Rede de segurança: só cai aqui se o follow-up foi criado sem template.
-        // Tom igual ao dos templates: curto, trata por Dr(a). quando há nome e
-        // não promete nada — só abre a porta e deixa o link.
+        // Tom igual ao dos templates: curto, usa o mesmo saudacao() dos demais
+        // (Dr./Dra. conforme o nome, ou só o nome quando ambíguo) e não promete
+        // nada — só abre a porta e deixa o link.
         const message =
           followUp.messageTemplate ??
-          `${lead.name ? `Dr(a). ${lead.name}, ` : ""}aqui é a Júlia do CaptaClin 😊 Passando pra saber se o WhatsApp da sua clínica ainda te incomoda. Se quiser dar uma olhada por conta: https://www.captaclin.com.br`;
+          `${saudacao(lead.name)}aqui é a Júlia do CaptaClin 😊 Passando pra saber se o WhatsApp da sua clínica ainda te incomoda. Se quiser dar uma olhada por conta: https://www.captaclin.com.br`;
 
         await sendWhatsAppMessage(lead.phone, message);
 
