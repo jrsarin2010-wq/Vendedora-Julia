@@ -386,23 +386,67 @@ router.post("/webhook/whatsapp", async (req, res) => {
       lead.status = "lost"; // impede que a leva de follow-up abaixo seja armada
     }
 
-    // Check if handoff needed (não dispara em caso de opt-out)
+    // HANDOFF — o lead quer falar com gente de verdade.
+    //
+    // A versão anterior casava palavras soltas ("dono", "responsável",
+    // "atendente", "gerente") e disparava em resposta normal de descoberta:
+    // a própria Júlia pergunta "quem responde o WhatsApp da clínica?" e o
+    // dentista responde "minha atendente" — handoff falso. Pior: "responsável
+    // técnico" é termo obrigatório do CRO, todo dono de clínica é um.
+    //
+    // Agora tudo é ancorado em PEDIDO ("falar com...", "me liga"), não em
+    // substantivo solto. Acentos são removidos dos dois lados, então a lista
+    // não precisa duplicar "alguem"/"alguém".
+    const semAcento = (s: string) =>
+      s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const textoNorm = semAcento(text);
+    const respostaNorm = semAcento(reply);
+
     const handoffKeywords = [
-      "falar com humano",
+      // pedido explícito de falar com uma pessoa
+      "falar com uma pessoa",
       "falar com pessoa",
-      "falar com alguém",
-      "atendente",
-      "responsável",
-      "dono",
-      "gerente",
+      "falar com alguem",
+      "falar com um humano",
+      "falar com humano",
+      "falar com voce",
+      "falar com o responsavel",
+      "falar com a responsavel",
+      "falar com o dono",
+      "falar com o vendedor",
+      "falar com um atendente",
+      "falar com a equipe",
+      "falar com o sarinho",
+      "falar com o dr sarinho",
+      "falar com dr sarinho",
+      "conversar com uma pessoa",
+      "conversar com alguem",
+      // pedido de contato direto
+      "me liga",
+      "me ligar",
+      "pode me ligar",
+      "me chama no telefone",
+      "qual o telefone",
+      "qual seu telefone",
+      "qual o seu numero",
+      "qual seu numero",
+      // quer confirmar que não é robô
+      "atendimento humano",
+      "pessoa de verdade",
+      "gente de verdade",
+      "tem alguem ai",
     ];
+
     const handoffRequested =
       !optedOut &&
-      (handoffKeywords.some((k) => lowerText.includes(k)) ||
-        lowerReply.includes("vou passar para") ||
-        lowerReply.includes("nosso time"));
+      (handoffKeywords.some((k) => textoNorm.includes(k)) ||
+        respostaNorm.includes("vou passar para") ||
+        respostaNorm.includes("vou te passar"));
 
-    if (handoffRequested && !lead.handoffRequested) {
+    // Alerta SEMPRE que o lead pedir — não uma única vez na vida dele.
+    // Antes, um falso positivo queimava a flag e o pedido real semanas depois
+    // passava batido. O update é idempotente; o alerta é que repete.
+    if (handoffRequested) {
       await db
         .update(leadsTable)
         .set({ handoffRequested: true, status: "hot", updatedAt: new Date() })
