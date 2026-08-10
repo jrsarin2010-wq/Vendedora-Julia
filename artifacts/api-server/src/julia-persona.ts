@@ -221,16 +221,16 @@ export const FOLLOW_UP_TEMPLATES = {
       pain
         ? `Fiquei pensando no que você me contou sobre ${pain.toLowerCase()}.`
         : `Posso te fazer só uma pergunta rápida sobre o WhatsApp da sua clínica?`
-    } Tem 2 minutinhos?`,
+    } Tem 2 minutinhos? Se preferir olhar por conta antes, tá tudo aqui: https://www.captaclin.com.br`,
 
   2: (leadName: string | null, _pain: string | null) =>
-    `${leadName ? `Dr(a). ${leadName}, ` : ""}uma pergunta que costuma incomodar: dos pacientes que chamam a clínica fora do horário, quantos você acha que não voltam depois? É quase sempre mais do que a gente imagina.`,
+    `${leadName ? `Dr(a). ${leadName}, ` : ""}uma pergunta que costuma incomodar: dos pacientes que chamam a clínica fora do horário, quantos você acha que não voltam depois? É quase sempre mais do que a gente imagina. É pra esse buraco que o CaptaClin existe 👉 https://www.captaclin.com.br`,
 
   3: (leadName: string | null, _pain: string | null) =>
     `${leadName ? `Dr(a). ${leadName}, ` : ""}vou ser honesta: o CaptaClin tá começando agora, então não vou te mostrar resultado de outra clínica. Prefiro que você veja na sua — são 7 dias grátis, sem cartão. Se não servir, você sai sem ter gastado nada 👉 https://www.captaclin.com.br`,
 
   4: (leadName: string | null, _pain: string | null) =>
-    `${leadName ? `Dr(a). ${leadName}, ` : ""}essa é minha última mensagem, prometo 🙏 Se um dia o WhatsApp da clínica virar um problema, é só me chamar aqui que eu te ajudo. Sucesso com a clínica!`,
+    `${leadName ? `Dr(a). ${leadName}, ` : ""}essa é minha última mensagem, prometo 🙏 Se um dia o WhatsApp da clínica virar um problema, é só me chamar aqui que eu te ajudo — ou dar uma olhada em https://www.captaclin.com.br. Sucesso com a clínica!`,
 };
 
 export const FOLLOW_UP_DELAYS_HOURS = [1, 24, 72, 168]; // 1h, 1d, 3d, 7d

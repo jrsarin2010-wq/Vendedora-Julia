@@ -1,6 +1,6 @@
 # Júlia Vendedora
 
-An AI WhatsApp sales agent that sells OdontoFlow SaaS to dentists, plus an admin panel to monitor and manage leads.
+An AI WhatsApp sales agent that sells CaptaClin SaaS to dentists, plus an admin panel to monitor and manage leads.
 
 ## Run & Operate
 

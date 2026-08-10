@@ -38,7 +38,12 @@ export function startFollowUpScheduler(): void {
           continue;
         }
 
-        const message = followUp.messageTemplate ?? `Oi! Sou a Júlia do OdontoFlow. Você ainda tem interesse em conhecer nossa secretária IA? Posso te ajudar! 😊`;
+        // Rede de segurança: só cai aqui se o follow-up foi criado sem template.
+        // Tom igual ao dos templates: curto, trata por Dr(a). quando há nome e
+        // não promete nada — só abre a porta e deixa o link.
+        const message =
+          followUp.messageTemplate ??
+          `${lead.name ? `Dr(a). ${lead.name}, ` : ""}aqui é a Júlia do CaptaClin 😊 Passando pra saber se o WhatsApp da sua clínica ainda te incomoda. Se quiser dar uma olhada por conta: https://www.captaclin.com.br`;
 
         await sendWhatsAppMessage(lead.phone, message);
 
