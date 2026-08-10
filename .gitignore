@@ -5,6 +5,8 @@ dist
 tmp
 out-tsc
 *.tsbuildinfo
+# bundles temporários gerados por `pnpm test`
+artifacts/api-server/test/.build/
 .expo
 .expo-shared
 
@@ -47,3 +49,14 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Segredos de sessão — NUNCA versionar.
+# O token do GitHub é colado na raiz do projeto a cada sessão de trabalho e
+# apagado depois. Estas regras existem para que um `git add -A` distraído não
+# mande a credencial para o GitHub junto com o código.
+gh-token.txt
+*.token
+*token.txt
+.env
+.env.*
+!.env.example
