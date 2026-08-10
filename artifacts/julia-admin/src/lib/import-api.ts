@@ -155,6 +155,52 @@ export function lerTextoDeImportacao(texto: string): {
   return { leads, problemas };
 }
 
+export interface PreviaDeAbordagem {
+  enviado: false;
+  lead: {
+    id: number;
+    name: string | null;
+    phone: string;
+    clinicName: string | null;
+    city: string | null;
+    instagram: string | null;
+    status: string;
+    outreachStatus: string;
+  };
+  mensagem: string | null;
+  erroAoGerar: string | null;
+  elegivel: boolean;
+  motivoInelegivel: string | null;
+  ritmo: { pode: boolean; motivo: string | null };
+  agoraEmSaoPaulo: string;
+  contadores: { naUltimaHora: number; hoje: number };
+  config: {
+    habilitado: boolean;
+    porHora: number;
+    porDia: number;
+    horaInicio: number;
+    horaFim: number;
+    soDiasUteis: boolean;
+    intervaloMinimoSegundos: number;
+  };
+}
+
+/**
+ * Modo de conferência: pede ao servidor a mensagem que SERIA enviada para
+ * este lead. Não envia nada — é uma rota de leitura.
+ */
+export async function verPreviaDeAbordagem(
+  leadId: number,
+): Promise<PreviaDeAbordagem> {
+  const res = await fetch(`/api/leads/${leadId}/outreach-preview`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error(`Não consegui gerar a prévia (HTTP ${res.status})`);
+  }
+  return (await res.json()) as PreviaDeAbordagem;
+}
+
 /** Manda os leads para a API. Lança com a mensagem do servidor se falhar. */
 export async function importarLeads(
   leads: LeadParaImportar[],

@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startFollowUpScheduler } from "./lib/follow-up-scheduler";
+import { startOutreachScheduler } from "./lib/outreach-scheduler";
 
 const rawPort = process.env["PORT"];
 
@@ -24,4 +25,6 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
   startFollowUpScheduler();
+  // Começa desligado: só dispara com OUTREACH_ENABLED=true no ambiente.
+  startOutreachScheduler();
 });

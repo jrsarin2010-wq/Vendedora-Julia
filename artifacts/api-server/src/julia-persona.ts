@@ -379,6 +379,96 @@ export const FOLLOW_UP_TEMPLATES = {
 export const FOLLOW_UP_DELAYS_HOURS = [1, 24, 72, 168]; // 1h, 1d, 3d, 7d
 
 /**
+ * PROSPECÇÃO ATIVA — a PRIMEIRA mensagem, para um dentista que nunca falou
+ * com a Júlia. Prompt separado do de conversa de propósito: aqui o risco é
+ * outro. Ele não pediu esse contato, e uma mensagem com cara de spam faz ele
+ * bloquear o número — o que levaria junto todo o histórico de conversa.
+ */
+export const JULIA_OUTREACH_PROMPT = `Você é a Júlia, do CaptaClin. Você vai mandar a PRIMEIRA mensagem para um dentista que nunca falou com você.
+
+Isso exige cuidado dobrado: ele não pediu esse contato. Uma mensagem que pareça spam faz ele bloquear — e queima a reputação do CaptaClin com a classe.
+
+REGRAS DA PRIMEIRA MENSAGEM:
+- CURTA. Duas ou três linhas, no máximo.
+- Diga de onde você viu a clínica, logo no começo. Isso tira o estranhamento.
+- Use o nome da clínica e o tratamento certo (Dr./Dra.) quando houver.
+- NÃO venda nada nesta mensagem. Não fale preço, plano, teste grátis nem link.
+- Termine com UMA pergunta leve e fácil de responder.
+- Nada de "temos uma solução inovadora", "tudo bem?", "espero que esteja bem".
+- Um emoji no máximo. Zero markdown.
+- Cada mensagem deve soar diferente da anterior. Não repita fórmula.
+
+O objetivo desta mensagem é UM: conseguir uma resposta. Nada além disso.
+
+Exemplo do espírito (não copie literal):
+"Oi, Dra. Marina! Vi a Odonto Vida aqui no Instagram 😊 Posso te fazer uma pergunta rápida sobre o WhatsApp da clínica?"
+
+Responda SOMENTE com o texto da mensagem, sem aspas e sem nenhum comentário.`;
+
+/**
+ * A ficha do dentista para a PRIMEIRA mensagem. Diferente do briefing de
+ * conversa: aqui não existe histórico nenhum, só o que veio na importação.
+ *
+ * O tratamento (Dr./Dra.) vem resolvido pela regra determinística, e não por
+ * chute do modelo — mesma decisão da Rodada 21, e aqui pesa ainda mais: errar
+ * o gênero de alguém logo na primeira palavra é o fim da conversa.
+ */
+export function buildOutreachBriefing(params: {
+  name: string | null;
+  clinicName: string | null;
+  city: string | null;
+  instagram: string | null;
+  origin: string | null;
+}): string {
+  const linhas: string[] = [];
+
+  if (params.name) {
+    const primeiro = params.name.trim().split(/\s+/)[0];
+    const capitalizado = primeiro.charAt(0).toUpperCase() + primeiro.slice(1);
+    let comoTratar: string;
+    switch (detectarTratamento(params.name)) {
+      case "dr":
+        comoTratar = `Dr. ${capitalizado}`;
+        break;
+      case "dra":
+        comoTratar = `Dra. ${capitalizado}`;
+        break;
+      default:
+        comoTratar = `${capitalizado} — nome ambíguo, use só o primeiro nome, sem Dr./Dra.`;
+    }
+    linhas.push(`- Nome: ${params.name}  (trate como: ${comoTratar})`);
+  } else {
+    linhas.push(
+      `- Nome: não sei. Fale com a clínica, sem inventar nome e sem "Dr(a)."`,
+    );
+  }
+
+  linhas.push(
+    params.clinicName
+      ? `- Clínica: ${params.clinicName}`
+      : `- Clínica: não sei o nome`,
+  );
+  if (params.city) linhas.push(`- Cidade: ${params.city}`);
+  if (params.instagram) linhas.push(`- Instagram: ${params.instagram}`);
+
+  // De onde veio o contato. É a primeira coisa que a mensagem tem que dizer,
+  // então precisa ser verdade — nunca invente uma origem que não está aqui.
+  const ondeVi =
+    params.instagram
+      ? "no Instagram da clínica"
+      : params.origin === "maps"
+        ? "no Google, procurando clínica na região"
+        : "procurando clínica de odontologia na região";
+  linhas.push(`- Onde você viu a clínica: ${ondeVi} (diga isso, é verdade)`);
+
+  return `## FICHA DESTE DENTISTA (uso interno — NUNCA leia isto em voz alta)
+
+${linhas.join("\n")}
+
+Escreva agora a primeira mensagem para ele, seguindo as regras.`;
+}
+
+/**
  * Prompt do "analista de bastidor": lê a conversa e extrai o que importa do
  * ponto de vista do dentista. Alimenta a ficha do lead (memória da Júlia).
  */

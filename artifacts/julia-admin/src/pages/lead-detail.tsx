@@ -19,6 +19,7 @@ import { StatusBadge } from "./leads";
 import { Badge } from "@/components/ui/badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { PreviaAbordagem } from "@/components/previa-abordagem";
 
 const STAGES = ['new', 'contacted', 'qualified', 'interested', 'objection', 'closing', 'closed', 'lost'];
 
@@ -271,6 +272,9 @@ export default function LeadDetail() {
               )}
             </div>
           </div>
+
+          {/* Conferência da primeira mensagem — não envia nada */}
+          <PreviaAbordagem leadId={id} />
         </div>
 
         {/* Right Column: Messages */}

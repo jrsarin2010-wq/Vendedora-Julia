@@ -10,3 +10,6 @@ export const inArray = (a, b) => ({ inArray: [a, b] });
 export const ilike = (a, b) => ({ ilike: [a, b] });
 export const or = (...xs) => ({ or: xs });
 export const sql = () => ({ sql: true });
+export const isNotNull = (a) => ({ isNotNull: a });
+export const gte = (a, b) => ({ gte: [a, b] });
+export const asc = (a) => ({ asc: a });

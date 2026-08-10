@@ -3,6 +3,7 @@ import authRouter from "./auth";
 import healthRouter from "./health";
 import leadsRouter from "./leads";
 import leadsImportRouter from "./leads-import";
+import outreachRouter from "./outreach";
 import statsRouter from "./stats";
 import webhookRouter from "./webhook";
 import { requireAuth } from "../lib/auth";
@@ -19,6 +20,9 @@ router.use(webhookRouter); // recebe mensagens — protegido por WEBHOOK_SECRET
 // "/leads/import" — o GET pegaria "import" como id. São métodos diferentes
 // (POST vs GET), então hoje não colidiria; a ordem é para não depender disso.
 router.use(requireAuth, leadsImportRouter);
+// Também antes de leadsRouter: "/leads/:id/outreach-preview" é mais
+// específico que "/leads/:id", e os dois são GET.
+router.use(requireAuth, outreachRouter);
 router.use(requireAuth, leadsRouter);
 router.use(requireAuth, statsRouter);
 

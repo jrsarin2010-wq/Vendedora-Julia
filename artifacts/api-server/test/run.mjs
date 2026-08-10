@@ -33,8 +33,18 @@ const plugin = {
       [/^@workspace\/integrations-openai-ai-server$/, "openai.mjs"],
       [/^drizzle-orm$/, "drizzle.mjs"],
       // Só o módulo de integrações externas (WhatsApp/Telegram). Os outros
-      // arquivos de src/lib (tratamento, filtro-spam) são testados de verdade.
-      [/(^|\/)lib\/integrations$/, "integrations.mjs"],
+      // arquivos de src/lib (tratamento, filtro-spam, outreach) são testados
+      // de verdade.
+      //
+      // O padrão precisa cobrir "../lib/integrations" (visto de routes/) E
+      // "./integrations" (visto de dentro de lib/). Com o filtro amarrado em
+      // "lib/", os agendadores escapavam do stub e tentavam falar com a
+      // Evolution de verdade — o teste falhava com "não entregue" enquanto o
+      // stub ficava zerado, que é um sintoma bem difícil de ler.
+      [/(^|\/)integrations$/, "integrations.mjs"],
+      // O pino de verdade carrega workers e usa `__dirname`, que não existe
+      // no bundle ESM do teste.
+      [/(^|\/)logger$/, "logger.mjs"],
     ];
     for (const [filter, arquivo] of trocas) {
       build.onResolve({ filter }, () => ({ path: path.join(stubDir, arquivo) }));
