@@ -67,6 +67,23 @@ function secretMatches(provided: string): boolean {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+// IDs de mensagem já processados, pra não responder duas vezes se o Evolution
+// reenviar o mesmo webhook (retry/timeout). Em memória: some no restart, o que
+// é aceitável — retry acontece em segundos.
+const processados = new Map<string, number>();
+const PROCESSADO_TTL_MS = 10 * 60 * 1000;
+
+function jaProcessado(id: string | undefined): boolean {
+  if (!id) return false;
+  const agora = Date.now();
+  for (const [k, t] of processados) {
+    if (agora - t > PROCESSADO_TTL_MS) processados.delete(k);
+  }
+  if (processados.has(id)) return true;
+  processados.set(id, agora);
+  return false;
+}
+
 // POST /api/webhook/whatsapp
 router.post("/webhook/whatsapp", async (req, res) => {
   // Tranca: confere a senha secreta (cabeçalho x-webhook-secret ou ?secret=).
@@ -98,6 +115,12 @@ router.post("/webhook/whatsapp", async (req, res) => {
     const key = msgData?.key ?? msgData?.message?.key;
     const fromMe = key?.fromMe ?? false;
     if (fromMe) return; // Ignore messages sent by us
+
+    // Antes de QUALQUER processamento: se este webhook já foi tratado, sai.
+    if (jaProcessado(key?.id)) {
+      req.log.info({ messageId: key?.id }, "Webhook repetido — ignorado");
+      return;
+    }
 
     const phoneRaw: string =
       key?.remoteJid ?? msgData?.remoteJid ?? "";
@@ -158,9 +181,13 @@ router.post("/webhook/whatsapp", async (req, res) => {
       }
     }
 
-    if (!text.trim()) return;
-
-    // Upsert lead
+    // Upsert lead.
+    //
+    // Isto vem ANTES do corte por "sem texto" de propósito: mídia sem texto
+    // também merece resposta (bloco logo abaixo), e pra responder a Júlia
+    // precisa do lead existindo. O cancelamento de follow-ups e a gravação da
+    // mensagem recebida continuam DEPOIS do corte — uma foto solta não deve
+    // cancelar a leva de follow-up nem gravar uma mensagem de conteúdo vazio.
     let lead = (
       await db.select().from(leadsTable).where(eq(leadsTable.phone, phone)).limit(1)
     )[0];
@@ -182,6 +209,52 @@ router.post("/webhook/whatsapp", async (req, res) => {
         .update(leadsTable)
         .set({ lastMessageAt: new Date(), updatedAt: new Date() })
         .where(eq(leadsTable.id, lead.id));
+    }
+
+    if (!text.trim()) {
+      // Chegou algo que não é texto (imagem, vídeo, documento, figurinha,
+      // localização, contato) ou um áudio que não deu pra transcrever. Antes
+      // isso caía num `return` mudo: o dentista mandava um print da agenda e
+      // recebia silêncio absoluto, sem saber que tinha sido ignorado. Agora a
+      // Júlia avisa e pede em texto.
+      const m = msg ?? {};
+      const temTipo = (tipo: string): boolean =>
+        Boolean(m[tipo] ?? m.message?.[tipo]);
+
+      const ehFigurinha = temTipo("stickerMessage");
+      const ehAudio = temTipo("audioMessage");
+      const temMidia =
+        ehFigurinha ||
+        ehAudio ||
+        temTipo("imageMessage") ||
+        temTipo("videoMessage") ||
+        temTipo("documentMessage") ||
+        temTipo("locationMessage") ||
+        temTipo("contactMessage");
+
+      if (temMidia) {
+        const aviso = ehFigurinha
+          ? "haha 😄 Me conta em texto o que você precisa que eu te ajudo!"
+          : ehAudio
+            ? "Não consegui ouvir seu áudio direito 😅 Pode me mandar por texto?"
+            : "Recebi seu arquivo, mas aqui eu consigo ler melhor por texto 😊 Pode me contar em poucas palavras?";
+
+        const entregue = await sendWhatsAppMessage(phone, aviso);
+        if (entregue) {
+          await db.insert(leadMessagesTable).values({
+            leadId: lead.id,
+            direction: "outbound",
+            content: aviso,
+            messageType: "text",
+          });
+          req.log.info({ leadId: lead.id }, "Mídia recebida sem texto — aviso enviado");
+        } else {
+          req.log.error({ leadId: lead.id, phone }, "Aviso de mídia NÃO entregue");
+        }
+      } else {
+        req.log.warn({ phone }, "Mensagem sem texto e sem mídia reconhecida — ignorada");
+      }
+      return;
     }
 
     // Cancela só os follow-ups PENDENTES (o lead respondeu, então a leva
@@ -258,20 +331,21 @@ router.post("/webhook/whatsapp", async (req, res) => {
     );
 
     const reply = completion.choices[0]?.message?.content?.trim();
-    if (!reply) return;
-
-    // Save outbound message
-    await db.insert(leadMessagesTable).values({
-      leadId: lead.id,
-      direction: "outbound",
-      content: reply,
-      messageType: "text",
-    });
+    if (!reply) {
+      // Não inventamos resposta (melhor calar do que falar bobagem), mas o
+      // lead fica sem resposta — isso precisa aparecer no log, não sumir.
+      req.log.error(
+        { leadId: lead.id, model: REPLY_MODEL },
+        "Modelo devolveu resposta vazia — lead ficou sem resposta",
+      );
+      return;
+    }
 
     // Entrega da resposta: se o dentista mandou áudio, a Júlia responde por
     // ÁUDIO (mesmo formato, mais natural). Se a voz falhar por qualquer
     // motivo, cai pra texto — o lead nunca fica sem resposta.
     let delivered = false;
+    let entregueComoAudio = false;
     if (inboundWasAudio) {
       try {
         const audioBuffer = await Promise.race([
@@ -282,13 +356,32 @@ router.post("/webhook/whatsapp", async (req, res) => {
         ]);
         if (audioBuffer.length > 0) {
           delivered = await sendWhatsAppAudio(phone, audioBuffer.toString("base64"));
+          entregueComoAudio = delivered;
         }
       } catch (err) {
         req.log.warn({ err, phone }, "Falha ao gerar/enviar áudio — caindo pra texto");
       }
     }
     if (!delivered) {
-      await sendWhatsAppMessage(phone, reply);
+      delivered = await sendWhatsAppMessage(phone, reply);
+    }
+
+    // A resposta só entra no histórico se REALMENTE chegou. Gravar antes de
+    // entregar fazia o painel mostrar conversa que o dentista nunca recebeu —
+    // e, pior, na mensagem seguinte a Júlia lia o histórico e achava que já
+    // tinha respondido. Não gravando, ela tenta de novo.
+    if (delivered) {
+      await db.insert(leadMessagesTable).values({
+        leadId: lead.id,
+        direction: "outbound",
+        content: reply,
+        messageType: entregueComoAudio ? "audio" : "text",
+      });
+    } else {
+      req.log.error(
+        { leadId: lead.id, phone },
+        "Resposta NÃO entregue — não gravada no histórico",
+      );
     }
 
     // Analista de bastidor: lê a conversa e anota a dor e a objeção do lead,

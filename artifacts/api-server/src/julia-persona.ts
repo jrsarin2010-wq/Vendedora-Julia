@@ -1,4 +1,4 @@
-import { saudacao } from "./lib/tratamento";
+import { detectarTratamento, saudacao } from "./lib/tratamento";
 
 /**
  * JÚLIA — SISTEMA DE VENDAS CaptaClin
@@ -273,11 +273,28 @@ export function buildLeadBriefing(params: {
 }): string {
   const linhas: string[] = [];
 
-  linhas.push(
-    params.name
-      ? `- Nome: ${params.name}`
-      : `- Nome: ainda não sei (pergunte com naturalidade)`,
-  );
+  if (params.name) {
+    // O tratamento é decidido AQUI, pela regra determinística de tratamento.ts
+    // (a mesma dos follow-ups), e entregue pronto na ficha. Antes, quem
+    // escolhia "Dr." ou "Dra." na conversa ao vivo era o modelo, por instrução
+    // de texto — justamente onde errar o gênero do dentista dói mais.
+    const primeiro = params.name.trim().split(/\s+/)[0];
+    const capitalizado = primeiro.charAt(0).toUpperCase() + primeiro.slice(1);
+    let comoTratar: string;
+    switch (detectarTratamento(params.name)) {
+      case "dr":
+        comoTratar = `Dr. ${capitalizado}`;
+        break;
+      case "dra":
+        comoTratar = `Dra. ${capitalizado}`;
+        break;
+      default:
+        comoTratar = `${capitalizado} — nome ambíguo, use só o primeiro nome, sem Dr./Dra.`;
+    }
+    linhas.push(`- Nome: ${params.name}  (trate como: ${comoTratar})`);
+  } else {
+    linhas.push(`- Nome: ainda não sei (pergunte com naturalidade)`);
+  }
   linhas.push(`- Etapa da negociação: ${params.funnelStage}`);
   if (params.painPoints) linhas.push(`- Dor que ele já me contou: ${params.painPoints}`);
   if (params.mainObjection) linhas.push(`- Objeção que ele levantou: ${params.mainObjection}`);
@@ -313,22 +330,50 @@ ${linhas.join("\n")}
 ${comoUsar}`;
 }
 
+/**
+ * Prepara a dor pra ser costurada no meio de uma frase: minúscula e sem a
+ * pontuação final que o extrator às vezes deixa (senão sai "fora do horário..").
+ * Devolve null quando não há dor utilizável.
+ */
+function dor(pain: string | null): string | null {
+  if (!pain) return null;
+  const limpa = pain.trim().replace(/[.!?;,\s]+$/, "").toLowerCase();
+  return limpa.length > 0 ? limpa : null;
+}
+
+/**
+ * Os quatro toques do follow-up. Todos usam a dor que o dentista contou quando
+ * ela existe, e caem num texto genérico quando não existe. Nos toques 3 e 4 a
+ * dor entra como APOSTO (depois de ":" ou entre travessões), nunca encaixada no
+ * meio da oração: ela vem do extrator como frase com verbo ("perde paciente que
+ * chama fora do horário"), e embutir isso numa regência quebraria a gramática.
+ */
 export const FOLLOW_UP_TEMPLATES = {
   1: (leadName: string | null, pain: string | null) =>
     `${saudacao(leadName)}aqui é a Júlia do CaptaClin 😊 A gente começou a conversar e acabou ficando pela metade. ${
-      pain
-        ? `Fiquei pensando no que você me contou sobre ${pain.toLowerCase()}.`
+      dor(pain)
+        ? `Fiquei pensando no que você me contou sobre ${dor(pain)}.`
         : `Posso te fazer só uma pergunta rápida sobre o WhatsApp da sua clínica?`
     } Tem 2 minutinhos? Se preferir olhar por conta antes, tá tudo aqui: https://www.captaclin.com.br`,
 
-  2: (leadName: string | null, _pain: string | null) =>
-    `${saudacao(leadName)}uma pergunta que costuma incomodar: dos pacientes que chamam a clínica fora do horário, quantos você acha que não voltam depois? É quase sempre mais do que a gente imagina. É pra esse buraco que o CaptaClin existe 👉 https://www.captaclin.com.br`,
+  2: (leadName: string | null, pain: string | null) =>
+    `${saudacao(leadName)}${
+      dor(pain)
+        ? `fiquei pensando naquilo que você falou — ${dor(pain)}. Dos pacientes que chamam a clínica fora do horário, quantos você acha que não voltam depois?`
+        : `uma pergunta que costuma incomodar: dos pacientes que chamam a clínica fora do horário, quantos você acha que não voltam depois?`
+    } É quase sempre mais do que a gente imagina 👉 https://www.captaclin.com.br`,
 
-  3: (leadName: string | null, _pain: string | null) =>
-    `${saudacao(leadName)}vou ser honesta: o CaptaClin tá começando agora, então não vou te mostrar resultado de outra clínica. Prefiro que você veja na sua — são 7 dias grátis, sem cartão. Se não servir, você sai sem ter gastado nada 👉 https://www.captaclin.com.br`,
+  3: (leadName: string | null, pain: string | null) =>
+    `${saudacao(leadName)}vou ser honesta: o CaptaClin tá começando agora, então não vou te mostrar resultado de outra clínica. Prefiro que você veja na sua${
+      dor(pain) ? `, em cima do que você mesmo me contou: ${dor(pain)}` : ""
+    }. São 7 dias grátis, sem cartão. Se não servir, você sai sem ter gastado nada 👉 https://www.captaclin.com.br`,
 
-  4: (leadName: string | null, _pain: string | null) =>
-    `${saudacao(leadName)}essa é minha última mensagem, prometo 🙏 Se um dia o WhatsApp da clínica virar um problema, é só me chamar aqui que eu te ajudo — ou dar uma olhada em https://www.captaclin.com.br. Sucesso com a clínica!`,
+  4: (leadName: string | null, pain: string | null) =>
+    `${saudacao(leadName)}essa é minha última mensagem, prometo 🙏 ${
+      dor(pain)
+        ? `Se aquele problema que você me contou — ${dor(pain)} — voltar a te incomodar`
+        : `Se um dia o WhatsApp da clínica virar um problema`
+    }, é só me chamar aqui que eu te ajudo — ou dar uma olhada em https://www.captaclin.com.br. Sucesso com a clínica!`,
 };
 
 export const FOLLOW_UP_DELAYS_HOURS = [1, 24, 72, 168]; // 1h, 1d, 3d, 7d

@@ -12,13 +12,18 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID ?? "";
 // Se estourar, a chamada é abortada em vez de deixar a Júlia travada esperando.
 const EXTERNAL_TIMEOUT_MS = 10_000;
 
+/**
+ * Envia uma mensagem de TEXTO pelo WhatsApp via Evolution.
+ * Retorna true se entregou, false caso contrário — quem chama precisa saber,
+ * porque gravar no histórico uma resposta que não chegou faz o painel mentir.
+ */
 export async function sendWhatsAppMessage(
   phone: string,
   message: string
-): Promise<void> {
+): Promise<boolean> {
   if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
     logger.warn({ phone }, "Evolution API not configured — skipping WhatsApp send");
-    return;
+    return false;
   }
 
   try {
@@ -39,9 +44,12 @@ export async function sendWhatsAppMessage(
     if (!response.ok) {
       const body = await response.text();
       logger.error({ phone, status: response.status, body }, "Evolution API error");
+      return false;
     }
+    return true;
   } catch (err) {
     logger.error({ err, phone }, "Failed to send WhatsApp message");
+    return false;
   }
 }
 

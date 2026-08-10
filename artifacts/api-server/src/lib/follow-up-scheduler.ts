@@ -47,7 +47,18 @@ export function startFollowUpScheduler(): void {
           followUp.messageTemplate ??
           `${saudacao(lead.name)}aqui é a Júlia do CaptaClin 😊 Passando pra saber se o WhatsApp da sua clínica ainda te incomoda. Se quiser dar uma olhada por conta: https://www.captaclin.com.br`;
 
-        await sendWhatsAppMessage(lead.phone, message);
+        const delivered = await sendWhatsAppMessage(lead.phone, message);
+
+        // Se não entregou, NÃO grava no histórico e NÃO marca como enviado: o
+        // follow-up fica "pending" e a próxima rodada (5 min) tenta de novo.
+        // Sem isso, o painel mostraria um toque que o dentista nunca recebeu.
+        if (!delivered) {
+          logger.error(
+            { leadId: lead.id, touchNumber: followUp.touchNumber },
+            "Follow-up NÃO entregue — segue pendente para nova tentativa",
+          );
+          continue;
+        }
 
         // Save outbound follow-up message
         await db.insert(leadMessagesTable).values({
