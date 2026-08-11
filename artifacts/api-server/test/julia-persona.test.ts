@@ -278,8 +278,11 @@ ok(
 
 secao("Rodada 30 — profissional adicional nunca sai sem preço");
 ok(
+  // O título "profissional adicional CUSTA" foi generalizado na Rodada 32 (o
+  // mesmo erro já apareceu com áudio), mas a instrução específica do R$97
+  // continua obrigatória — é ela que a conversa real mostrou faltando.
   "a regra de nunca omitir o R$97 está no prompt",
-  JULIA_SYSTEM_PROMPT.includes("profissional adicional CUSTA") &&
+  JULIA_SYSTEM_PROMPT.includes("O caso mais comum é o profissional adicional") &&
     JULIA_SYSTEM_PROMPT.includes("sem dizer que cada um custa R$97/mês"),
 );
 ok("traz a conta fechada dos dois profissionais", JULIA_SYSTEM_PROMPT.includes("R$297 + R$97 = R$394"));
@@ -442,6 +445,109 @@ ok(
     return !/Básico|Essencial|Pro\b|R\$ ?97|nem pagando/i.test(janela);
   });
   ok("nenhuma linha oferece adicional sem dizer em que plano ele existe", soltas.length === 0, soltas.join(" | "));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 32 — a recarga de áudio existe e ela não sabia.
+// O prompt prometia "30 min inclusos" e não tinha resposta para o "e se
+// acabar?". Terceiro caso da MESMA classe (R$97 omitido, Básico sem adicional,
+// áudio sem recarga), e por isso a regra da Rodada 30 deixou de ser sobre
+// profissional adicional e passou a ser sobre qualquer limite.
+//
+// Preços conferidos na fonte real (bundle de produção): os pacotes são
+// 27.000 / 54.000 / 108.000 caracteres por R$25 / R$40 / R$70. Os três preços
+// batem com a especificação. Os MINUTOS não: a 1.350 caracteres por minuto —
+// taxa que o próprio app usa para exibir saldo e cota — dão 20 / 40 / 80 min,
+// não 30 / 60 / 120. Por isso o prompt diz "até", que é a palavra do próprio
+// site, e proíbe número exato.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 32 — recarga de áudio: os três pacotes");
+for (const pacote of ["R$25 → até 30 minutos", "R$40 → até 1 hora", "R$70 → até 2 horas"]) {
+  ok(`o pacote está no prompt: ${pacote}`, JULIA_SYSTEM_PROMPT.includes(pacote));
+}
+ok("a seção da recarga de áudio existe", JULIA_SYSTEM_PROMPT.includes("RECARGA DE ÁUDIO — quando os minutos acabam"));
+ok(
+  "a recarga de áudio não existe no Básico",
+  JULIA_SYSTEM_PROMPT.includes("o Básico não tem áudio, então não recarrega"),
+);
+ok(
+  "a recarga é avulsa e não mexe na mensalidade",
+  JULIA_SYSTEM_PROMPT.includes("É avulsa, não mexe na mensalidade"),
+);
+// Achados da fonte que não estavam no prompt: a cota mensal renova (não
+// acumula) e o saldo comprado é uma bolsa separada que soma com o que sobrou.
+ok(
+  "diz que os minutos do plano renovam e não acumulam",
+  JULIA_SYSTEM_PROMPT.includes("RENOVAM no começo de cada mês — não acumulam"),
+);
+ok(
+  "diz que o saldo de recarga é uma bolsa separada",
+  JULIA_SYSTEM_PROMPT.includes("saldo de recarga é uma bolsa separada"),
+);
+// A trava que nasceu da divergência entre o rótulo do site e a conversão real.
+ok(
+  'proíbe prometer número exato de minutos (o "até" é obrigatório)',
+  JULIA_SYSTEM_PROMPT.includes('Diga "até", nunca um número exato'),
+);
+{
+  // Nenhum pacote pode ser anunciado como quantidade aproximada ou fechada: a
+  // 1.350 caracteres/minuto o de R$25 rende 20 min, não 30. "até" é o teto que
+  // o próprio site publica; "cerca de" viraria promessa de 50% a mais.
+  const aproximacoes = ["cerca de 30 minutos", "cerca de 1 hora", "cerca de 2 horas", "aproximadamente"];
+  const encontradas = aproximacoes.filter((a) => JULIA_SYSTEM_PROMPT.includes(a));
+  ok("nenhum pacote de áudio é anunciado como quantidade aproximada", encontradas.length === 0, encontradas.join(" | "));
+}
+
+secao("Rodada 32 — ela emenda a recarga sem esperar a pergunta");
+ok("existe a instrução de como falar disso", JULIA_SYSTEM_PROMPT.includes("COMO FALAR DISSO"));
+ok(
+  'nomeia a pergunta que vem depois ("e se acabar?")',
+  JULIA_SYSTEM_PROMPT.includes('a pergunta seguinte\ndele quase sempre é "e se acabar?"'),
+);
+ok(
+  "traz a frase pronta que emenda a recarga no minuto incluso",
+  JULIA_SYSTEM_PROMPT.includes("Se acabar, dá pra recarregar") &&
+    JULIA_SYSTEM_PROMPT.includes("a partir de R$25, e isso não mexe na mensalidade"),
+);
+
+secao("Rodada 32 — a regra de custo virou geral, não só do profissional");
+ok(
+  "o título não fala mais só de profissional adicional",
+  JULIA_SYSTEM_PROMPT.includes("⚠️ REGRA QUE VOCÊ NUNCA QUEBRA — nenhum custo aparece depois") &&
+    !JULIA_SYSTEM_PROMPT.includes("REGRA QUE VOCÊ NUNCA QUEBRA — profissional adicional CUSTA"),
+);
+ok(
+  "a regra lista os três tipos de limite",
+  JULIA_SYSTEM_PROMPT.includes("algo que tem limite (conversas, minutos de áudio,\nprofissionais)"),
+);
+ok(
+  "manda dizer o que acontece quando o limite acaba e quanto custa passar dele",
+  JULIA_SYSTEM_PROMPT.includes("o que acontece quando o limite acaba e\nquanto custa passar dele"),
+);
+ok(
+  "na dúvida, fala o custo agora",
+  JULIA_SYSTEM_PROMPT.includes("Na dúvida entre falar de um custo agora ou deixar pra depois: fale agora"),
+);
+
+{
+  // Rede de proteção no espírito da Rodada 31: toda linha que AFIRMA uma
+  // quantidade de minutos de áudio tem que ter a recarga na vizinhança. É o
+  // "e se acabar?" ficar sem resposta que criou esta rodada. Exige um número
+  // junto — "citar os minutos inclusos" é instrução, não promessa de cota.
+  const linhas = JULIA_SYSTEM_PROMPT.split("\n");
+  const semSaida = linhas.filter((l, i) => {
+    if (!/\d+\s*min(?:utos)?\s+inclusos|\d+\s*minutos? de áudio/i.test(l)) return false;
+    const janela = [linhas[i - 1] ?? "", l, linhas[i + 1] ?? ""].join("\n");
+    // "recarga" e "recarrega" não têm prefixo comum ("recarg" vs "recarr") —
+    // testar só um dos dois deixa a rede cega para metade das linhas.
+    return !/recarga|recarreg/i.test(janela);
+  });
+  ok(
+    "nenhuma linha promete minutos de áudio sem a recarga por perto",
+    semSaida.length === 0,
+    semSaida.join(" | "),
+  );
 }
 
 fim();
