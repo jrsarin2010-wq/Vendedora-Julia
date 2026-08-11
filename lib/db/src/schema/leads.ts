@@ -50,8 +50,17 @@ export const leadsTable = pgTable("leads", {
   id: serial("id").primaryKey(),
   name: text("name"),
   phone: text("phone").notNull().unique(),
-  // "whatsapp" (chegou sozinho), "import", "maps", "instagram"
+  // "whatsapp" (chegou sozinho), "site" (clicou no botão da landing),
+  // "import", "maps", "instagram"
   origin: text("origin"),
+  // O assunto da PRIMEIRA dúvida de quem veio da landing ("recarga de
+  // conversas", "contrato e fidelidade"). Gravado uma única vez, porque é a
+  // dúvida que fez ele clicar — as seguintes já nasceram da conversa.
+  //
+  // Não serve para vender: serve para consertar a página. Cada assunto que se
+  // repete é um buraco na landing, com número em vez de palpite. Ver
+  // api-server/src/lib/duvidas-do-site.ts.
+  duvidaDoSite: text("duvida_do_site"),
   // Dados da clínica, preenchidos na importação para a Júlia ter o que dizer
   // na primeira mensagem ("vi a Odonto Vida no Instagram").
   clinicName: text("clinic_name"),

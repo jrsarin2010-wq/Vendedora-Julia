@@ -17,6 +17,8 @@ import { ok, secao, fim } from "./assert";
 import {
   tempoDeDigitacao,
   MAXIMO_DIGITACAO_MS,
+  MINIMO_DIGITACAO_MS,
+  PRIMEIRA_RESPOSTA_MAXIMO_MS,
   sendWhatsAppMessage,
   sendWhatsAppAudio,
 } from "../src/lib/integrations?real";
@@ -63,6 +65,51 @@ secao("dois textos idênticos dão atrasos diferentes (tempo exato é robô)");
   const distintos = new Set(Array.from({ length: 40 }, () => tempoDeDigitacao(medio)));
   ok("a variação existe", distintos.size > 1, `${distintos.size} valores distintos em 40`);
 }
+
+// ── Rodada 35: a primeira resposta é mais rápida ───────────────────────────
+
+secao("Rodada 35 — a PRIMEIRA resposta não pode demorar 12s");
+ok("o teto da primeira resposta é 3s", PRIMEIRA_RESPOSTA_MAXIMO_MS === 3_000, String(PRIMEIRA_RESPOSTA_MAXIMO_MS));
+ok("o mínimo continua sendo 2s", MINIMO_DIGITACAO_MS === MINIMO_MS, String(MINIMO_DIGITACAO_MS));
+ok(
+  "e é bem menor que o teto normal (senão a correção não teria efeito)",
+  PRIMEIRA_RESPOSTA_MAXIMO_MS < MAXIMO_DIGITACAO_MS,
+);
+{
+  // O caso que dói: um textão na primeira resposta. Sem a correção ele saturava
+  // em 12s — doze segundos de tela parada para quem acabou de clicar no botão.
+  const textao = "a".repeat(5_000);
+  ok(
+    "textão na primeira resposta ≤ 3s",
+    tempoDeDigitacao(textao, true) <= PRIMEIRA_RESPOSTA_MAXIMO_MS,
+    String(tempoDeDigitacao(textao, true)),
+  );
+  ok(
+    "o mesmo textão da segunda em diante mantém o teto de 12s",
+    tempoDeDigitacao(textao, false) === MAXIMO_DIGITACAO_MS,
+    String(tempoDeDigitacao(textao, false)),
+  );
+  ok(
+    "sem o sinalizador, o comportamento é o de sempre (padrão = não é a primeira)",
+    tempoDeDigitacao(textao) === MAXIMO_DIGITACAO_MS,
+    String(tempoDeDigitacao(textao)),
+  );
+}
+{
+  // Nem instantâneo: resposta em zero segundo também denuncia robô. A faixa da
+  // primeira resposta é [2s, 3s], e vale para QUALQUER tamanho de texto.
+  let foraDaFaixa = 0;
+  for (let n = 0; n <= 600; n += 7) {
+    const t = tempoDeDigitacao("x".repeat(n), true);
+    if (t < MINIMO_MS || t > PRIMEIRA_RESPOSTA_MAXIMO_MS) foraDaFaixa++;
+  }
+  ok("nenhum tamanho escapa de [2s, 3s]", foraDaFaixa === 0, `${foraDaFaixa} fora`);
+}
+ok(
+  "texto curto na primeira resposta ainda espera o mínimo",
+  tempoDeDigitacao("Oi!", true) >= MINIMO_MS,
+  String(tempoDeDigitacao("Oi!", true)),
+);
 
 // ── Parte 2: o que realmente sai na requisição ─────────────────────────────
 
@@ -142,6 +189,42 @@ secao("o pior caso — textão no limite dos 12s — continua cabendo no timeout
   );
   ok("o delay saturou em 12s", corpo.delay === MAXIMO_DIGITACAO_MS, String(corpo.delay));
   ok("e o timeout acompanhou (22s)", timeoutMs === 22_000, String(timeoutMs));
+}
+
+secao("Rodada 35 — o que sai na requisição da PRIMEIRA resposta");
+{
+  // 150 caracteres: 150 × 45ms = 6750ms de base, folgadamente acima dos dois
+  // tetos, então a diferença entre eles aparece sem depender do sorteio de ±15%.
+  const texto = "m".repeat(150);
+  const primeira = await espiar(() => sendWhatsAppMessage("5511999999999", texto, true));
+  const depois = await espiar(() => sendWhatsAppMessage("5511999999999", texto, false));
+
+  ok("entregou", primeira.resultado === true);
+  ok(
+    "o delay pedido à Evolution respeita o teto de 3s",
+    primeira.corpo.delay <= PRIMEIRA_RESPOSTA_MAXIMO_MS,
+    String(primeira.corpo.delay),
+  );
+  ok(
+    "e nunca é instantâneo",
+    primeira.corpo.delay >= MINIMO_MS,
+    String(primeira.corpo.delay),
+  );
+  ok(
+    'continua mostrando "digitando..." (o que muda é o tempo, não o gesto)',
+    primeira.corpo.presence === "composing",
+    primeira.corpo.presence,
+  );
+  ok(
+    "o timeout acompanha o atraso menor",
+    primeira.timeoutMs === primeira.corpo.delay + 10_000,
+    `timeout=${primeira.timeoutMs} delay=${primeira.corpo.delay}`,
+  );
+  ok(
+    "este mesmo texto, da segunda em diante, pode passar de 3s",
+    depois.corpo.delay > PRIMEIRA_RESPOSTA_MAXIMO_MS,
+    `primeira=${primeira.corpo.delay} depois=${depois.corpo.delay}`,
+  );
 }
 
 secao("áudio de demonstração NÃO leva atraso de digitação");

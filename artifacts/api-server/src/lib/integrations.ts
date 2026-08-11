@@ -83,23 +83,40 @@ export function urlDaEvolution(caminho: string): string {
 // Se estourar, a chamada é abortada em vez de deixar a Júlia travada esperando.
 const EXTERNAL_TIMEOUT_MS = 10_000;
 
+/** O teto normal de `tempoDeDigitacao`. Serve para o orçamento de timeout abaixo. */
+export const MAXIMO_DIGITACAO_MS = 12_000;
+
+/**
+ * A PRIMEIRA resposta da conversa é diferente: o dentista acabou de clicar no
+ * botão do site e está olhando a tela. 12 segundos de "digitando..." fazem ele
+ * achar que não tem ninguém e voltar. Da segunda mensagem em diante o ritmo
+ * humano ajuda — ele já está engajado e tem motivo para esperar; na primeira,
+ * atrapalha, porque ele ainda não tem nenhum.
+ *
+ * É a única troca da conversa inteira em que rapidez vale mais que
+ * naturalidade.
+ */
+export const PRIMEIRA_RESPOSTA_MAXIMO_MS = 3_000;
+
+/** Piso comum às duas faixas: resposta instantânea também denuncia robô. */
+export const MINIMO_DIGITACAO_MS = 2_000;
+
 /**
  * Tempo que uma pessoa levaria digitando este texto, para a Júlia não
  * responder instantaneamente. Velocidade de celular, não de teclado.
  *
+ * `primeiraResposta` aperta só o TETO (3s em vez de 12s) — o mínimo de 2s vale
+ * nas duas, então a faixa da primeira fica entre 2 e 3 segundos.
+ *
  * Exportada porque é a única parte testável desta borda: o resto é rede.
  */
-export function tempoDeDigitacao(texto: string): number {
+export function tempoDeDigitacao(texto: string, primeiraResposta = false): number {
   const MS_POR_CARACTERE = 45; // ~26 caracteres por segundo é rápido demais; 45ms ≈ digitação de celular
-  const MINIMO_MS = 2_000; // nunca instantâneo
-  const MAXIMO_MS = 12_000; // acima disso o dentista acha que sumiu
+  const maximo = primeiraResposta ? PRIMEIRA_RESPOSTA_MAXIMO_MS : MAXIMO_DIGITACAO_MS;
   const base = texto.length * MS_POR_CARACTERE;
   const variacao = 0.85 + Math.random() * 0.3; // ±15%, porque tempo exato é robô
-  return Math.min(MAXIMO_MS, Math.max(MINIMO_MS, Math.round(base * variacao)));
+  return Math.min(maximo, Math.max(MINIMO_DIGITACAO_MS, Math.round(base * variacao)));
 }
-
-/** O teto de `tempoDeDigitacao`. Serve para o orçamento de timeout abaixo. */
-export const MAXIMO_DIGITACAO_MS = 12_000;
 
 /**
  * Envia uma mensagem de TEXTO pelo WhatsApp via Evolution.
@@ -124,10 +141,15 @@ export const MAXIMO_DIGITACAO_MS = 12_000;
  * Não há risco para o webhook: a rota já responde `{ ok: true }` antes de
  * processar (routes/webhook.ts), então a Evolution nunca fica esperando por
  * nós — o atraso vive apenas neste fetch.
+ *
+ * `primeiraResposta` (Rodada 35) encurta o teto do atraso para 3s. Quem chama
+ * é o webhook, que é o único que sabe o tamanho do histórico — ver
+ * `PRIMEIRA_RESPOSTA_MAXIMO_MS`.
  */
 export async function sendWhatsAppMessage(
   phone: string,
-  message: string
+  message: string,
+  primeiraResposta = false,
 ): Promise<boolean> {
   const { base, chave } = configEvolution();
   if (!base || !chave) {
@@ -135,7 +157,7 @@ export async function sendWhatsAppMessage(
     return false;
   }
 
-  const atraso = tempoDeDigitacao(message);
+  const atraso = tempoDeDigitacao(message, primeiraResposta);
 
   try {
     const url = urlDaEvolution("message/sendText");

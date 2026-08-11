@@ -1,13 +1,14 @@
 import { useGetDashboardStats, getGetDashboardStatsQueryKey, useGetFunnelStats, getGetFunnelStatsQueryKey, useGetRecentActivity, getGetRecentActivityQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, UserCheck, UserX, Target, AlertTriangle, Clock, ArrowRight, MessageCircle, Check } from "lucide-react";
+import { Users, UserCheck, UserX, Target, AlertTriangle, Clock, ArrowRight, MessageCircle, Check, HelpCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { rotuloEtapa } from "@/lib/rotulos";
 import { listarAtencao, resolverAtencao, type ItemDeAtencao } from "@/lib/atencao-api";
+import { listarDuvidasDoSite } from "@/lib/duvidas-api";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
@@ -186,7 +187,86 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <LandingNaoResponde />
     </div>
+  );
+}
+
+/**
+ * O QUE A LANDING NÃO RESPONDE (Rodada 35).
+ *
+ * Cada linha é um dentista que leu a página inteira e mesmo assim precisou
+ * perguntar. Não é métrica de venda: é a lista de consertos da landing, em
+ * ordem de quanto cada buraco custa.
+ *
+ * Fica no fim do painel de propósito — é leitura de planejamento, não coisa
+ * para agir hoje (isso é a central de vigia, lá em cima).
+ */
+function LandingNaoResponde() {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["duvidas-do-site"],
+    queryFn: listarDuvidasDoSite,
+  });
+
+  if (isLoading) return <Skeleton className="h-40 w-full rounded-md" />;
+
+  // Erro aqui não vira alarme vermelho: é uma leitura de apoio, e a tela toda
+  // continua útil sem ela.
+  if (isError) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Não consegui carregar as dúvidas de quem veio da landing.
+      </p>
+    );
+  }
+
+  const assuntos = data?.assuntos ?? [];
+  const maior = Math.max(...assuntos.map((a) => a.total), 1);
+
+  return (
+    <Card className="shadow-sm border-border" data-testid="duvidas-do-site">
+      <CardHeader className="border-b border-border/50 pb-4">
+        <CardTitle className="text-base font-semibold font-mono flex items-center gap-2">
+          <HelpCircle size={16} className="text-primary" />
+          O que a landing não responde
+        </CardTitle>
+        <p className="text-xs text-muted-foreground pt-1">
+          O que fez o dentista clicar no botão do site. Cada linha é uma melhoria
+          concreta na página.
+        </p>
+      </CardHeader>
+      <CardContent className="p-6">
+        {assuntos.length === 0 ? (
+          <div className="py-8 text-center text-muted-foreground text-sm border border-dashed rounded-md">
+            Ninguém veio da landing com dúvida ainda.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {assuntos.map((item) => (
+              <div
+                key={item.assunto}
+                className="flex items-center gap-4"
+                data-testid={`duvida-${item.assunto}`}
+              >
+                <div className="w-48 text-sm text-muted-foreground shrink-0 truncate text-right first-letter:uppercase">
+                  {item.assunto}
+                </div>
+                <div className="flex-1 h-6 bg-muted rounded-sm overflow-hidden">
+                  <div
+                    className="h-full bg-primary/70 transition-all duration-1000 ease-out"
+                    style={{ width: `${Math.max((item.total / maior) * 100, 2)}%` }}
+                  />
+                </div>
+                <div className="w-10 text-sm font-bold font-mono text-right shrink-0">
+                  {item.total}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -1,4 +1,5 @@
 import { detectarTratamento, saudacao } from "./lib/tratamento";
+import { ORIGEM_SITE } from "./lib/origem-site";
 
 /**
  * JÚLIA — SISTEMA DE VENDAS CaptaClin
@@ -301,7 +302,7 @@ REGRA DE OURO, vale nos dois: você só afirma o que SABE. Nunca invente de onde
 ele veio, nunca diga "vi que você deu uma olhada na gente" se isso não está na
 ficha.
 
-━━━ MODO A — ELE CHAMOU VOCÊ (ficha diz "chegou sozinho pelo WhatsApp")
+━━━ MODO A — ELE CHAMOU VOCÊ (ficha diz "chegou sozinho pelo WhatsApp", ou que ele veio do site)
 
 Quem chama já tem interesse. Ele achou o CaptaClin em algum lugar e veio tirar
 dúvida — normalmente sobre como funciona, o que cada plano tem, quantas
@@ -330,6 +331,29 @@ mesma mensagem ou na seguinte, com naturalidade:
 NUNCA escreva "Dr." sozinho, sem nome. "Pra você, Dr." soa esquisito e
 impessoal. Se ainda não sabe o nome, não use tratamento nenhum — fale direto com
 ele. É melhor do que um Dr. no vácuo.
+
+QUEM VEM DO SITE JÁ LEU A PÁGINA
+A ficha dirá quando ele veio do site. Nesse caso, parta do princípio de que ele
+JÁ VIU os três planos, os preços e as listas de recursos. Ele não veio descobrir
+o que o CaptaClin faz — veio porque alguma coisa na página não respondeu.
+
+NÃO repita a página. Recitar a lista de recursos que ele acabou de ler não
+avança nada e faz a conversa parecer atendimento automático.
+
+O que a página não faz, e só você faz: dizer qual plano serve para a CLÍNICA
+DELE. É esse o seu valor aqui.
+
+Quando ele perguntar sobre planos, não liste tudo de novo. Faça o caminho
+inverso — descubra a situação dele e devolva a recomendação:
+"Deixa eu te fazer duas perguntas rápidas que aí eu te digo qual faz sentido:
+ vocês são quantos profissionais aí, e você anuncia?"
+
+Depois disso, recomende UM plano, com o preço e o porquê ligado ao que ele
+contou. Os outros só se ele perguntar.
+
+Se ele fizer uma pergunta específica (recarga, contrato, LGPD, como funciona a
+confirmação), RESPONDA direto e com segurança — é exatamente para isso que ele
+clicou. Depois de responder, puxe a descoberta.
 
 ━━━ MODO B — VOCÊ CHAMOU ELE (ficha diz import, maps ou instagram)
 
@@ -644,13 +668,24 @@ export function buildLeadBriefing(params: {
   // quando o dentista manda mensagem do nada (schema de leads). É justamente o
   // caso em que ela não sabe de nada — tratá-lo como origem citável seria
   // repetir o erro com outro texto.
+  //
+  // "site" é o oposto: é a única origem em que ela sabe EXATAMENTE o que ele já
+  // viu, porque ele clicou no botão de dentro da página. Ganha linha própria em
+  // vez de cair no "pode citar" genérico, porque o que importa aqui não é poder
+  // citar a origem — é não recitar de volta a página que ele acabou de ler.
   const chegouSozinho =
     !params.origin || params.origin === "whatsapp" || params.origin === "inbound";
-  linhas.push(
-    chegouSozinho
-      ? `- De onde veio: ele chegou sozinho pelo WhatsApp — você NÃO sabe como ele te achou. Não invente origem.`
-      : `- De onde veio: ${params.origin} (pode citar, é verdade)`,
-  );
+  if (params.origin === ORIGEM_SITE) {
+    linhas.push(
+      `- De onde veio: ele clicou no botão do WhatsApp DENTRO da página do CaptaClin. Ou seja, ele JÁ LEU a página: viu os três planos, os preços e as listas de recursos. NÃO repita isso para ele — o seu valor é dizer qual plano serve para a clínica DELE.`,
+    );
+  } else {
+    linhas.push(
+      chegouSozinho
+        ? `- De onde veio: ele chegou sozinho pelo WhatsApp — você NÃO sabe como ele te achou. Não invente origem.`
+        : `- De onde veio: ${params.origin} (pode citar, é verdade)`,
+    );
+  }
 
   linhas.push(`- Etapa da negociação: ${params.funnelStage}`);
   if (params.painPoints) linhas.push(`- Dor que ele já me contou: ${params.painPoints}`);
@@ -949,9 +984,11 @@ Extraia, do ponto de vista do dentista:
 6. Se ele JÁ VIROU CLIENTE (assinou, contratou, pagou ou já começou a usar/testar o CaptaClin).
 7. Se ele PEDIU PARA PARAR de receber mensagens.
 8. Se ele está IRRITADO, frustrado ou perdendo a paciência.
+9. Se o dentista veio do site e fez uma pergunta que a PÁGINA deveria ter
+   respondido, qual foi o assunto.
 
 Responda SOMENTE com um JSON, sem nada antes ou depois, neste formato exato:
-{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>, "irritado": <true ou false>}
+{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>, "irritado": <true ou false>, "duvidaDoSite": "<assunto em 2 a 4 palavras, ou null>"}
 
 Etapas possíveis, em ordem:
 - new: mal começou, ainda não se sabe nada da clínica dele.
@@ -993,5 +1030,15 @@ Regras de "irritado" (seja CONSERVADOR — na dúvida, false):
 - false para pressa: "to sem tempo agora", "depois eu vejo".
 - Errar aqui para o lado do true faz o dono da clínica receber alerta em toda
   negociação normal — e aí ele para de olhar os alertas, inclusive os de verdade.
+
+Regras de "duvidaDoSite":
+- Preencha SOMENTE quando o dentista veio do site e a primeira coisa que ele
+  trouxe foi uma dúvida. Quem veio do site se identifica sozinho: a PRIMEIRA
+  mensagem dele diz que veio pelo site do CaptaClin.
+- Use o assunto, não a frase dele. Exemplos: "recarga de conversas",
+  "profissional adicional", "contrato e fidelidade", "integração com sistema",
+  "como funciona o trial", "prazo de implantação".
+- null quando ele não veio do site, ou quando a conversa começou sem dúvida.
+- Registre só a PRIMEIRA dúvida da conversa — é a que fez ele clicar.
 
 Escreva em português do Brasil.`;

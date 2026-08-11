@@ -5,8 +5,9 @@ import {
   leadMessagesTable,
   followUpsTable,
 } from "@workspace/db";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, sql, desc, isNotNull } from "drizzle-orm";
 import { GetRecentActivityQueryParams } from "@workspace/api-zod";
+import { contarAssuntos } from "../lib/duvidas-do-site";
 
 const router: IRouter = Router();
 
@@ -83,6 +84,38 @@ router.get("/stats/funnel", async (req, res) => {
     res.json(funnel);
   } catch (err) {
     req.log.error({ err }, "Failed to get funnel stats");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/stats/duvidas-do-site — "O que a landing não responde" (Rodada 35).
+ *
+ * Cada linha é um buraco na página, com número em vez de palpite: se cinco
+ * dentistas clicaram no botão por causa de recarga, a página tem um problema
+ * na recarga.
+ *
+ * Fora do contrato OpenAPI, no mesmo esquema da central de vigia: é uma tela de
+ * operação do painel, não modelo de dados, então não obriga a regerar o cliente.
+ *
+ * A contagem é feita em memória, e não com GROUP BY, de propósito: os assuntos
+ * precisam ser normalizados antes de agrupar (senão "Recarga" e "recarga" viram
+ * duas linhas de 1 em vez de uma de 2), e a normalização mora em
+ * `contarAssuntos`. O volume é o de leads que vieram do site — cabe.
+ */
+router.get("/stats/duvidas-do-site", async (req, res) => {
+  try {
+    const comDuvida = await db
+      .select()
+      .from(leadsTable)
+      .where(isNotNull(leadsTable.duvidaDoSite));
+
+    const assuntos = contarAssuntos(comDuvida.map((l) => l.duvidaDoSite));
+    const total = assuntos.reduce((soma, a) => soma + a.total, 0);
+
+    res.json({ assuntos, total });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get landing questions");
     res.status(500).json({ error: "Internal server error" });
   }
 });

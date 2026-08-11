@@ -32,6 +32,8 @@ import {
   pastaDemos,
 } from "../lib/demos";
 import { pareceCelularReal, padraoDeServico } from "../lib/filtro-spam";
+import { ORIGEM_SITE, veioDaLanding } from "../lib/origem-site";
+import { limparAssunto } from "../lib/duvidas-do-site";
 import { enviadaPorNos } from "../lib/enviadas-por-nos";
 import {
   MOTIVO_PT,
@@ -348,17 +350,29 @@ router.post("/webhook/whatsapp", async (req, res) => {
     }
 
     if (!lead) {
+      // A origem sai da PRIMEIRA mensagem e só dela: a landing pré-preenche
+      // "Oi! Vim pelo site do CaptaClin e tenho uma dúvida", e essa frase é o
+      // único fio entre os dois projetos (ver lib/origem-site.ts).
+      //
+      // Gravada só na criação, de propósito. Se um lead que já existe mandar a
+      // frase depois, a origem NÃO muda: para quem veio de importação ou do
+      // Instagram, a origem é o que autoriza a Júlia a dizer onde viu a clínica,
+      // e sobrescrever isso apagaria uma verdade para gravar outra.
+      const daLanding = veioDaLanding(text);
       const inserted = await db
         .insert(leadsTable)
         .values({
           phone,
-          origin: "whatsapp",
+          origin: daLanding ? ORIGEM_SITE : "whatsapp",
           status: "warm",
           funnelStage: "new",
           lastMessageAt: new Date(),
         })
         .returning();
       lead = inserted[0];
+      if (daLanding) {
+        req.log.info({ leadId: lead.id }, "Lead veio da landing (botão do site)");
+      }
     } else {
       await db
         .update(leadsTable)
@@ -555,9 +569,18 @@ router.post("/webhook/whatsapp", async (req, res) => {
     // sai do texto aqui — o dentista nunca pode ver isso.
     const { texto: textoLimpo, demo: demoPedida } = extrairDemo(reply);
 
+    // É a PRIMEIRA resposta desta conversa? O histórico foi lido depois de
+    // gravar a mensagem que ele acabou de mandar e antes de gravar a resposta,
+    // então numa conversa nova ele tem exatamente uma linha: a dele.
+    //
+    // Quem clicou no botão do site está com a tela aberta, olhando. Os 12
+    // segundos de "digitando..." da Rodada 28 fazem ele achar que não tem
+    // ninguém — aqui o teto cai para 3s (ver PRIMEIRA_RESPOSTA_MAXIMO_MS).
+    const primeiraResposta = history.length <= 1;
+
     let delivered = false;
     if (textoLimpo) {
-      delivered = await sendWhatsAppMessage(phone, textoLimpo);
+      delivered = await sendWhatsAppMessage(phone, textoLimpo, primeiraResposta);
     } else {
       // Resposta que era só o marcador. Áudio solto, sem uma frase
       // apresentando, confunde — então não mandamos nada e isso aparece no log.
@@ -702,6 +725,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         isCustomer?: boolean;
         wantsToStop?: boolean;
         irritado?: boolean;
+        duvidaDoSite?: string | null;
       };
 
       const update: {
@@ -710,6 +734,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         name?: string;
         planInterest?: "basic" | "essencial" | "pro";
         funnelStage?: FunnelStage;
+        duvidaDoSite?: string;
         updatedAt?: Date;
       } = {};
       if (parsed.painPoints && parsed.painPoints.trim()) {
@@ -741,6 +766,20 @@ router.post("/webhook/whatsapp", async (req, res) => {
         update.funnelStage = stageSugerida;
       }
 
+      // O QUE A LANDING NÃO RESPONDE (Rodada 35).
+      //
+      // Duas travas, e as duas do NOSSO lado, não do modelo: só para quem a
+      // origem diz que veio do site, e só enquanto o campo estiver vazio. A
+      // primeira é o que fez ele clicar — da segunda em diante a dúvida já
+      // nasceu da conversa com a Júlia, e a conversa não é a página.
+      //
+      // Gravar isso aqui é de graça: o extrator já leu a conversa inteira para
+      // achar dor e objeção.
+      if (lead.origin === ORIGEM_SITE && !lead.duvidaDoSite) {
+        const assunto = limparAssunto(parsed.duvidaDoSite);
+        if (assunto) update.duvidaDoSite = assunto;
+      }
+
       if (Object.keys(update).length > 0) {
         update.updatedAt = new Date();
         await db
@@ -752,6 +791,9 @@ router.post("/webhook/whatsapp", async (req, res) => {
         if (update.mainObjection) lead.mainObjection = update.mainObjection;
         if (update.name) lead.name = update.name;
         if (update.funnelStage) lead.funnelStage = update.funnelStage;
+        // Reflete em memória para a guarda do "só uma vez" continuar valendo se
+        // este mesmo lead voltar a passar por aqui na mesma execução.
+        if (update.duvidaDoSite) lead.duvidaDoSite = update.duvidaDoSite;
       }
 
       // Virou cliente? Para de vender pra quem já comprou.

@@ -13,6 +13,7 @@ export const leadsTable = {
   phone: "phone",
   status: "status",
   origin: "origin",
+  duvidaDoSite: "duvidaDoSite",
   outreachStatus: "outreachStatus",
   outreachSentAt: "outreachSentAt",
   funnelStage: "funnelStage",
