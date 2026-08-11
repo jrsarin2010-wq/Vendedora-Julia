@@ -332,4 +332,116 @@ ok(
   JULIA_SYSTEM_PROMPT.includes("Use o nome técnico só se o próprio dentista usar primeiro"),
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 31 — o Básico não aceita profissional adicional NENHUM, nem pagando.
+// Conferido na fonte real (bundle de produção do CaptaClin): a cota de extras
+// por plano é trial 0, basic 0, essencial 4, pro 3, e o gate de "profissional
+// adicional" libera só essencial e pro. O Tutor IA do próprio produto diz, com
+// estas palavras: "No plano Básico, somente o profissional titular é
+// permitido."
+//
+// A armadilha é a mesma da Rodada 30, e pior: lá o dentista pagava mais do que
+// esperava; aqui ele assina o Básico para uma clínica de dois e não consegue
+// cadastrar a sócia. O prompt ajudava a errar — listava "Profissional
+// adicional: R$97/mês" debaixo de um cabeçalho que dizia "(valem para todos)".
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 31 — o Básico é uma agenda só, e não tem adicional");
+ok(
+  "o Básico diz que não aceita adicional nem pagando",
+  JULIA_SYSTEM_PROMPT.includes("O Básico NÃO aceita profissional\n  adicional — nem pagando"),
+);
+ok(
+  "o 'NÃO tem' do Básico lista o profissional adicional",
+  JULIA_SYSTEM_PROMPT.includes("NÃO tem: profissional adicional (nem pagando)"),
+);
+ok(
+  'o cabeçalho mentiroso "(valem para todos)" saiu dos EXTRAS',
+  !JULIA_SYSTEM_PROMPT.includes("EXTRAS (valem para todos)"),
+);
+ok(
+  "o extra de profissional declara o alcance real (Essencial e Pro)",
+  JULIA_SYSTEM_PROMPT.includes("existe SÓ no\n  Essencial (até 4) e no Pro (até 3, além do que já vem incluso)"),
+);
+ok("e diz explicitamente que no Básico não existe", JULIA_SYSTEM_PROMPT.includes("NO BÁSICO NÃO EXISTE"));
+ok(
+  "a recarga de conversas continua valendo em qualquer plano pago",
+  JULIA_SYSTEM_PROMPT.includes("vale em qualquer plano pago, inclusive no Básico"),
+);
+// O preço e o bônus de conversas do adicional não podem ter se perdido no
+// meio da correção — é a asserção da Rodada 30 vista por outro ângulo.
+ok(
+  "o R$97 e o +100 conversas sobreviveram à reescrita dos EXTRAS",
+  JULIA_SYSTEM_PROMPT.includes("Profissional adicional: R$97/mês (some +100 conversas/mês)"),
+);
+
+secao("Rodada 31 — ela pergunta quantos profissionais antes de recomendar");
+ok(
+  "a regra tem o mesmo peso da do R$97 (mesmo cabeçalho de regra inquebrável)",
+  JULIA_SYSTEM_PROMPT.includes("⚠️ REGRA QUE VOCÊ NUNCA QUEBRA — PERGUNTE QUANTOS PROFISSIONAIS"),
+);
+ok(
+  "a pergunta está escrita, pronta para usar",
+  JULIA_SYSTEM_PROMPT.includes('"Quantos profissionais atendem hoje na clínica, além de você?"'),
+);
+ok(
+  "a pergunta também entra na fase de descoberta, onde a conversa realmente passa",
+  JULIA_SYSTEM_PROMPT.includes("é ela que decide se o Básico pode ou não entrar na conversa"),
+);
+ok(
+  "2 ou mais profissionais tira o Básico da mesa",
+  JULIA_SYSTEM_PROMPT.includes("Se forem 2 OU MAIS, o BÁSICO ESTÁ FORA"),
+);
+ok(
+  "fecha a porta do 'começa no Básico e adiciona depois'",
+  JULIA_SYSTEM_PROMPT.includes("NÃO deixe ele imaginar que dá pra começar no Básico") &&
+    JULIA_SYSTEM_PROMPT.includes("NÃO DÁ."),
+);
+{
+  // A regra tem que vir ANTES da tabela de planos ser usada para recomendar —
+  // ela é pré-condição da recomendação, não uma ressalva no rodapé.
+  const regra = JULIA_SYSTEM_PROMPT.indexOf("PERGUNTE QUANTOS PROFISSIONAIS");
+  const precoSeFala = JULIA_SYSTEM_PROMPT.indexOf("PREÇO SE FALA");
+  ok("a regra está dentro da seção de planos, antes do 'preço se fala'", regra > 0 && regra < precoSeFala);
+}
+
+secao("Rodada 31 — a comparação de 2 profissionais está fechada");
+ok(
+  "Essencial + adicional promocional = R$394",
+  JULIA_SYSTEM_PROMPT.includes("R$297 + R$97 = R$394/mês nos 3 primeiros meses"),
+);
+ok(
+  "Essencial + adicional depois da promoção = R$494",
+  JULIA_SYSTEM_PROMPT.includes("R$397 + R$97 = R$494/mês"),
+);
+ok(
+  "Pro = R$497 com o segundo já incluso",
+  JULIA_SYSTEM_PROMPT.includes("R$497/mês, com o segundo profissional JÁ INCLUSO"),
+);
+ok(
+  "marca como ERRADO recomendar Básico para uma clínica de dois",
+  JULIA_SYSTEM_PROMPT.includes('ERRADO: "O Básico já resolve pra vocês"'),
+);
+ok(
+  "o exemplo de 'recomende um plano' ganhou a ressalva do atende sozinho",
+  JULIA_SYSTEM_PROMPT.includes("Só recomende o Básico depois de confirmar que ele atende sozinho"),
+);
+{
+  // Rede de proteção: o prompt não pode ter sobrado nenhuma linha que ofereça
+  // adicional sem excluir o Básico. Toda linha que fala de "profissional
+  // adicional"/"profissionais extras" precisa nomear onde ele existe ou onde
+  // não existe — senão volta a ambiguidade que criou o problema.
+  // A janela é de três linhas (anterior, atual, seguinte) porque o prompt quebra
+  // frase no meio: em "o Básico não serve: ele cobre uma agenda só e não / aceita
+  // profissional adicional", quem nomeia o plano é a linha de cima.
+  const linhas = JULIA_SYSTEM_PROMPT.split("\n");
+  const soltas = linhas.filter((l, i) => {
+    if (!/profissional adicional|profissionais extras/i.test(l)) return false;
+    if (l.trimStart().startsWith("⚠️")) return false; // cabeçalho de regra, não oferta
+    const janela = [linhas[i - 1] ?? "", l, linhas[i + 1] ?? ""].join("\n");
+    return !/Básico|Essencial|Pro\b|R\$ ?97|nem pagando/i.test(janela);
+  });
+  ok("nenhuma linha oferece adicional sem dizer em que plano ele existe", soltas.length === 0, soltas.join(" | "));
+}
+
 fim();
