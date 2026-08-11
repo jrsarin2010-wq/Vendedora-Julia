@@ -10,7 +10,7 @@
  * ficar em silêncio, o que é exatamente o padrão que denuncia robô.
  */
 import { db } from "@workspace/db";
-import { leadsTable, leadMessagesTable } from "@workspace/db";
+import { leadsTable, leadMessagesTable, followUpsTable } from "@workspace/db";
 import { eq, and, isNotNull, gte, asc } from "drizzle-orm";
 import { sendWhatsAppMessage } from "./integrations";
 import { logger } from "./logger";
@@ -24,6 +24,7 @@ import {
   EXPLICACAO_INELEGIVEL,
 } from "./outreach";
 import { gerarMensagemDeAbordagem } from "./outreach-message";
+import { ABORDAGEM_TOQUES, ABORDAGEM_DELAYS_HOURS } from "../julia-persona";
 
 /** De quanto em quanto tempo o ciclo roda. */
 const INTERVALO_DO_CICLO_MS = 60 * 1000;
@@ -188,6 +189,25 @@ export async function rodarCicloDeAbordagem(
       updatedAt: new Date(),
     })
     .where(eq(leadsTable.id, lead.id));
+
+  // A cadência de quem NÃO responder. Dois toques e acabou.
+  //
+  // Fica armada já, e não quando o silêncio se confirmar, porque não existe
+  // evento de "ele não respondeu" — só a ausência de um. E some sozinha na
+  // primeira resposta dele: o webhook cancela TODOS os follow-ups pendentes
+  // antes de armar a leva de conversa, então quem responde troca de cadência
+  // sem que ninguém precise saber que a de abordagem existia.
+  await db.insert(followUpsTable).values(
+    ABORDAGEM_DELAYS_HOURS.map((horas, i) => ({
+      leadId: lead.id,
+      scheduledAt: new Date(agora.getTime() + horas * 60 * 60 * 1000),
+      touchNumber: i + 1,
+      kind: "abordagem" as const,
+      messageTemplate:
+        ABORDAGEM_TOQUES[(i + 1) as keyof typeof ABORDAGEM_TOQUES](lead.name),
+      status: "pending" as const,
+    })),
+  );
 
   logger.info(
     { leadId: lead.id, naUltimaHora: naUltimaHora + 1, hoje: hoje + 1 },

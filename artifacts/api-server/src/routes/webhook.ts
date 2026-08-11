@@ -974,6 +974,10 @@ router.post("/webhook/whatsapp", async (req, res) => {
         leadId: lead.id,
         scheduledAt: new Date(Date.now() + hours * 60 * 60 * 1000),
         touchNumber: idx + 1,
+        // Explícito, apesar do padrão do schema já ser "conversa": é aqui que
+        // se decide que estes toques PODEM citar a conversa e a dor, porque
+        // chegar neste ponto significa que ele respondeu alguma coisa.
+        kind: "conversa" as const,
         messageTemplate: FOLLOW_UP_TEMPLATES[((idx + 1) as keyof typeof FOLLOW_UP_TEMPLATES)](
           lead.name,
           lead.painPoints,

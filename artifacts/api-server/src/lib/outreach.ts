@@ -179,12 +179,15 @@ export type MotivoInelegivel =
   | "opt_out"
   | "ja_cliente"
   | "ja_abordado"
+  | "cadencia_esgotada"
   | "nao_e_de_prospeccao";
 
 export const EXPLICACAO_INELEGIVEL: Record<MotivoInelegivel, string> = {
   opt_out: 'Lead com status "lost": pediu para não receber mensagens.',
   ja_cliente: 'Lead com status "closed": já é cliente, não se vende de novo.',
   ja_abordado: "Este lead já recebeu a primeira mensagem.",
+  cadencia_esgotada:
+    "Recebeu a abordagem e os dois toques, e não respondeu nenhum. Não se procura mais.",
   nao_e_de_prospeccao: "Lead não está na fila de prospecção (outreachStatus ≠ pending).",
 };
 
@@ -204,6 +207,13 @@ export interface Elegibilidade {
 export function leadElegivel(lead: LeadParaAbordar): Elegibilidade {
   if (lead.status === "lost") return { elegivel: false, motivo: "opt_out" };
   if (lead.status === "closed") return { elegivel: false, motivo: "ja_cliente" };
+  // Antes do "sent" porque o motivo é mais específico e conta uma história
+  // diferente: aqui não é "ainda vai responder", é "a cadência inteira saiu e
+  // ele ficou calado". Sem esta linha ele cairia no genérico do final, e o
+  // painel diria só "não está na fila".
+  if (lead.outreachStatus === "nao_respondeu") {
+    return { elegivel: false, motivo: "cadencia_esgotada" };
+  }
   if (lead.outreachStatus === "sent") return { elegivel: false, motivo: "ja_abordado" };
   if (lead.outreachStatus !== "pending") {
     return { elegivel: false, motivo: "nao_e_de_prospeccao" };

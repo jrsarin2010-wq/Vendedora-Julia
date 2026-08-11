@@ -3,7 +3,13 @@
  * determinísticas e, portanto, testáveis sem chamar o modelo.
  */
 import { ok, secao, fim } from "./assert";
-import { FOLLOW_UP_TEMPLATES, JULIA_SYSTEM_PROMPT, buildLeadBriefing } from "../src/julia-persona";
+import {
+  FOLLOW_UP_TEMPLATES,
+  JULIA_SYSTEM_PROMPT,
+  JULIA_OUTREACH_PROMPT,
+  buildLeadBriefing,
+  buildOutreachBriefing,
+} from "../src/julia-persona";
 import { detectarTratamento, saudacao } from "../src/lib/tratamento";
 
 const ficha = (name: string | null, origin: string | null = null) =>
@@ -549,5 +555,154 @@ ok(
     semSaida.join(" | "),
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 34 — a PRIMEIRA mensagem, revisada.
+//
+// É a mensagem mais delicada do sistema: chega em quem não pediu nada, e cada
+// uma é um tiro na reputação do número. O objetivo dela é UM — conseguir uma
+// resposta —, e quase tudo que parece "vender melhor" (preço, urgência, "você
+// está perdendo paciente") reduz a chance disso acontecer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 34 — o objetivo da primeira mensagem é resposta, não venda");
+ok(
+  "o objetivo único está declarado",
+  JULIA_OUTREACH_PROMPT.includes("SEU ÚNICO OBJETIVO NESTA MENSAGEM: conseguir uma resposta"),
+);
+ok(
+  "e o que ele NÃO é vem junto (senão o modelo vende assim mesmo)",
+  JULIA_OUTREACH_PROMPT.includes("Não é vender. Não é explicar o produto. Não é despertar desejo"),
+);
+
+secao("Rodada 34 — o que não entra na abordagem fria");
+ok(
+  "preço, plano, trial, garantia e link estão proibidos juntos",
+  JULIA_OUTREACH_PROMPT.includes("Preço, plano, trial, garantia, link"),
+);
+ok(
+  "a perda de paciente/dinheiro é proibida COM o motivo (é presunçoso vindo de estranho)",
+  JULIA_OUTREACH_PROMPT.includes("perdendo paciente/dinheiro") &&
+    JULIA_OUTREACH_PROMPT.includes("presunçoso e ofensivo"),
+);
+ok("urgência e escassez estão proibidas", JULIA_OUTREACH_PROMPT.includes("Urgência, escassez, promoção"));
+ok(
+  "prova social está proibida porque não existe — e inventar já era proibido",
+  JULIA_OUTREACH_PROMPT.includes("não existe prova social ainda, e inventar está proibido"),
+);
+ok("mais de uma pergunta está proibido", JULIA_OUTREACH_PROMPT.includes("Mais de UMA pergunta"));
+
+secao("Rodada 34 — o que entra, e a licença");
+ok(
+  "manda pedir licença de verdade, com as frases prontas",
+  JULIA_OUTREACH_PROMPT.includes("Um pedido de licença de verdade") &&
+    JULIA_OUTREACH_PROMPT.includes("posso te roubar um minuto?"),
+);
+ok(
+  "manda dizer de onde viu a clínica, usando a ficha",
+  JULIA_OUTREACH_PROMPT.includes("DE ONDE você viu a clínica — está na ficha do lead"),
+);
+ok(
+  "e proíbe inventar quando a ficha não permitir citar",
+  JULIA_OUTREACH_PROMPT.includes("Se a\n   ficha disser que a origem NÃO é citável, não invente"),
+);
+ok(
+  "pede UMA pergunta fácil de responder",
+  JULIA_OUTREACH_PROMPT.includes("UMA pergunta fácil de responder"),
+);
+ok(
+  "o elogio só vale se ela tiver visto do que fala",
+  JULIA_OUTREACH_PROMPT.includes("ELOGIO: só se for verdade") &&
+    JULIA_OUTREACH_PROMPT.includes("bajulação vazia"),
+);
+ok(
+  "e ela sai na primeira negativa, sem insistir",
+  JULIA_OUTREACH_PROMPT.includes("AGRADEÇA E SAIA") &&
+    JULIA_OUTREACH_PROMPT.includes("SE ELE PEDIR PARA PARAR: pare na hora"),
+);
+
+secao("Rodada 34 — três exemplos de tom, com ordem de preferência e ordem de variar");
+{
+  const exemplos = JULIA_OUTREACH_PROMPT.split("\n").filter((l) => l.startsWith('- "Oi'));
+  ok("são três exemplos", exemplos.length === 3, exemplos.join(" | "));
+  ok(
+    "e nenhum deles vende (preço, plano ou link)",
+    !exemplos.some((e) => /R\$|plano|captaclin\.com\.br/i.test(e)),
+    exemplos.join(" | "),
+  );
+  ok(
+    "todos pedem licença ou fazem uma pergunta",
+    exemplos.every((e) => e.includes("?")),
+  );
+}
+ok(
+  "manda VARIAR SEMPRE, e diz por quê (eles comparam print)",
+  JULIA_OUTREACH_PROMPT.includes("VARIE SEMPRE") &&
+    JULIA_OUTREACH_PROMPT.includes("comparam print em grupo de WhatsApp"),
+);
+ok(
+  "os exemplos são declarados como TOM, não como modelo para copiar",
+  JULIA_OUTREACH_PROMPT.includes("são de TOM, não\nmodelos para copiar"),
+);
+ok(
+  "o mais curto e seguro é o ponto de partida",
+  JULIA_OUTREACH_PROMPT.includes("o PRIMEIRO é o formato preferido") &&
+    JULIA_OUTREACH_PROMPT.includes("comece por ele"),
+);
+ok(
+  "o que elogia só vale com Instagram na ficha",
+  JULIA_OUTREACH_PROMPT.includes("só quando\na ficha trouxer Instagram de verdade"),
+);
+ok(
+  "e o terceiro é para quando não dá para dizer de onde viu",
+  JULIA_OUTREACH_PROMPT.includes("quando a ficha NÃO permitir\ndizer de onde você viu a clínica"),
+);
+{
+  // Rede no espírito das Rodadas 31 e 32: nenhuma linha do prompt pode oferecer
+  // preço, link ou promoção como coisa a dizer. As únicas ocorrências toleradas
+  // são as das próprias proibições.
+  const linhas = JULIA_OUTREACH_PROMPT.split("\n");
+  const ofertas = linhas.filter((l) => {
+    if (!/R\$|captaclin\.com\.br|desconto|promoç/i.test(l)) return false;
+    return !/NÃO ENTRA|Preço, plano, trial|Urgência, escassez/.test(l);
+  });
+  ok("nenhuma linha oferece preço, link ou promoção", ofertas.length === 0, ofertas.join(" | "));
+}
+
+secao("Rodada 34 — a ficha da abordagem não inventa de onde a Júlia viu a clínica");
+const fichaFria = (over: Partial<Parameters<typeof buildOutreachBriefing>[0]> = {}) =>
+  buildOutreachBriefing({
+    name: "Marina",
+    clinicName: "Odonto Vida",
+    city: null,
+    instagram: null,
+    origin: "import",
+    ...over,
+  });
+ok(
+  "lead de planilha: NÃO SABEMOS de onde veio",
+  fichaFria().includes("NÃO SABEMOS") && fichaFria().includes("não invente origem"),
+  fichaFria(),
+);
+ok(
+  "e a saída oferecida é a credencial verdadeira (quem criou é dentista)",
+  fichaFria().includes("quem criou o CaptaClin é dentista"),
+);
+ok(
+  'a invenção antiga ("procurando clínica na região") sumiu do caso sem origem',
+  !fichaFria().includes("procurando clínica de odontologia na região"),
+);
+ok(
+  "com Instagram na ficha, pode dizer que viu no Instagram",
+  fichaFria({ instagram: "@odontovida" }).includes("no Instagram da clínica (diga isso, é verdade)"),
+);
+ok(
+  'origin "maps" continua citável',
+  fichaFria({ origin: "maps" }).includes("no Google, procurando clínica na região (diga isso, é verdade)"),
+);
+ok(
+  "e quando é citável não vem o aviso de não inventar",
+  !fichaFria({ instagram: "@odontovida" }).includes("NÃO SABEMOS"),
+);
 
 fim();

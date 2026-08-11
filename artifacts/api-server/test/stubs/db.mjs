@@ -45,6 +45,9 @@ export const followUpsTable = {
   leadId: "leadId",
   status: "status",
   scheduledAt: "scheduledAt",
+  touchNumber: "touchNumber",
+  kind: "kind",
+  messageTemplate: "messageTemplate",
 };
 
 export const state = {

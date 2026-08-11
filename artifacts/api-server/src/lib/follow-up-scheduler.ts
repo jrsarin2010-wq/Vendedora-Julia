@@ -5,15 +5,67 @@ import { sendWhatsAppMessage } from "./integrations";
 import { logger } from "./logger";
 import { saudacao } from "./tratamento";
 import { verificarSemResposta } from "./atencao";
+import { lerConfig, podeDispararAgora, EXPLICACAO_BLOQUEIO } from "./outreach";
+import { ABORDAGEM_TOQUES, ABORDAGEM_DELAYS_HOURS } from "../julia-persona";
+
+/**
+ * Um toque de ABORDAGEM pode sair NESTE instante?
+ *
+ * Ele não é follow-up de conversa: quem recebe nunca respondeu nada, então é
+ * mensagem fria e vale a MESMA janela da prospecção — inclusive a trava mestra.
+ * Se o Dr. Sarinho desligar OUTREACH_ENABLED porque as entregas começaram a
+ * falhar, os toques já agendados precisam parar junto; senão a trava de
+ * emergência protege metade do problema e ele descobre isso do pior jeito.
+ *
+ * Sem isto, um toque agendado para 3 dias depois de uma quinta-feira cairia num
+ * domingo: "passei por aqui de novo" no domingo é exatamente o que faz um
+ * dentista denunciar o número.
+ *
+ * Os contadores de volume vão zerados de propósito — ver `TOQUES_FRIOS_POR_CICLO`
+ * logo abaixo para o que isso significa e o que fica de fora.
+ */
+function toqueFrioPodeSair(agora: Date): { pode: boolean; motivo?: string } {
+  const decisao = podeDispararAgora({
+    config: lerConfig(),
+    agora,
+    enviadosNaUltimaHora: 0,
+    enviadosHoje: 0,
+    ultimoEnvio: null,
+    intervaloExigidoSegundos: 0,
+  });
+  return { pode: decisao.pode, motivo: decisao.motivo };
+}
+
+/**
+ * Quantos toques frios saem por rodada. UM.
+ *
+ * O agendador roda a cada 5 minutos e pega até 20 vencidos de uma vez. Numa
+ * campanha de 40 leads, todos os toques do dia 3 vencem em bloco — e vinte
+ * mensagens de texto IDÊNTICO saindo no mesmo segundo para vinte números é a
+ * assinatura de robô mais óbvia que existe. Um por rodada espalha os envios
+ * pela janela do dia, do mesmo jeito que o agendador de abordagem faz.
+ *
+ * LIMITAÇÃO CONHECIDA, registrada de propósito: os toques NÃO consomem a cota
+ * diária de OUTREACH_PER_DAY, que conta só primeiras mensagens. Num dia cheio,
+ * o número pode mandar até `porDia` abordagens MAIS os toques que vencerem
+ * naquele dia. Quem for calibrar o volume precisa dimensionar OUTREACH_PER_DAY
+ * contando com isso.
+ */
+const TOQUES_FRIOS_POR_CICLO = 1;
 
 /**
  * Uma passada do agendador: pega os follow-ups vencidos e manda os que devem
  * sair. Exportada (como `rodarCicloDeAbordagem`, do outreach) para o teste
  * conseguir exercitar a decisão sem depender de `setInterval`.
+ *
+ * `agora` também vem de fora pelo mesmo motivo que lá: desde que os toques de
+ * abordagem respeitam a janela da prospecção, "domingo à noite não sai" é uma
+ * decisão testável — e testá-la esperando domingo não é opção.
  */
-export async function rodarCicloDeFollowUp(): Promise<void> {
+export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<void> {
   try {
-    const now = new Date();
+    const now = agora;
+    let toquesFriosNesteCiclo = 0;
 
     // Find pending follow-ups that are due
     const due = await db
@@ -64,13 +116,43 @@ export async function rodarCicloDeFollowUp(): Promise<void> {
         continue;
       }
 
+      // Toque de ABORDAGEM: mensagem fria, para quem nunca respondeu. Só sai na
+      // janela da prospecção e com a trava mestra ligada; fora disso continua
+      // "pending" e sai na primeira rodada dentro da janela — mesmo tratamento
+      // da pausa humana logo acima, e pelo mesmo motivo (perder o toque é pior
+      // que atrasá-lo).
+      const ehAbordagem = followUp.kind === "abordagem";
+      if (ehAbordagem) {
+        if (toquesFriosNesteCiclo >= TOQUES_FRIOS_POR_CICLO) continue;
+
+        const janela = toqueFrioPodeSair(now);
+        if (!janela.pode) {
+          logger.debug(
+            { leadId: lead.id, touchNumber: followUp.touchNumber, motivo: janela.motivo },
+            `Toque de abordagem adiado: ${
+              EXPLICACAO_BLOQUEIO[janela.motivo as keyof typeof EXPLICACAO_BLOQUEIO] ??
+              janela.motivo
+            }`,
+          );
+          continue;
+        }
+      }
+
       // Rede de segurança: só cai aqui se o follow-up foi criado sem template.
       // Tom igual ao dos templates: curto, usa o mesmo saudacao() dos demais
       // (Dr./Dra. conforme o nome, ou só o nome quando ambíguo) e não promete
       // nada — só abre a porta e deixa o link.
+      //
+      // O padrão MUDA conforme a cadência, e não é detalhe: o texto de conversa
+      // diz "ainda te incomoda", que pressupõe que ele contou que incomoda.
+      // Para quem nunca respondeu isso é falso, e é justamente o erro que a
+      // cadência de abordagem existe para corrigir — a rede de segurança não
+      // pode ser a porta dos fundos por onde ele volta.
       const message =
         followUp.messageTemplate ??
-        `${saudacao(lead.name)}aqui é a Júlia do CaptaClin 😊 Passando pra saber se o WhatsApp da sua clínica ainda te incomoda. Se quiser dar uma olhada por conta: https://www.captaclin.com.br`;
+        (ehAbordagem
+          ? ABORDAGEM_TOQUES[followUp.touchNumber >= 2 ? 2 : 1](lead.name)
+          : `${saudacao(lead.name)}aqui é a Júlia do CaptaClin 😊 Passando pra saber se o WhatsApp da sua clínica ainda te incomoda. Se quiser dar uma olhada por conta: https://www.captaclin.com.br`);
 
       const delivered = await sendWhatsAppMessage(lead.phone, message);
 
@@ -99,8 +181,27 @@ export async function rodarCicloDeFollowUp(): Promise<void> {
         .set({ status: "sent" })
         .where(eq(followUpsTable.id, followUp.id));
 
+      if (ehAbordagem) {
+        toquesFriosNesteCiclo++;
+
+        // Último toque da cadência: acabou, e para sempre. Marcar o lead aqui,
+        // em vez de deduzir depois "não tem follow-up pendente", é o que dá ao
+        // painel a diferença entre "abordado, ainda pode responder" e "os dois
+        // toques saíram, ele nunca respondeu, não procure mais".
+        if (followUp.touchNumber >= ABORDAGEM_DELAYS_HOURS.length) {
+          await db
+            .update(leadsTable)
+            .set({ outreachStatus: "nao_respondeu", updatedAt: new Date() })
+            .where(eq(leadsTable.id, lead.id));
+          logger.info(
+            { leadId: lead.id },
+            "Cadência de abordagem esgotada sem resposta — silêncio permanente",
+          );
+        }
+      }
+
       logger.info(
-        { leadId: lead.id, touchNumber: followUp.touchNumber },
+        { leadId: lead.id, touchNumber: followUp.touchNumber, kind: followUp.kind },
         "Follow-up sent",
       );
     }

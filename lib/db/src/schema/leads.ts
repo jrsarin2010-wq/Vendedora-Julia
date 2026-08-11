@@ -37,6 +37,13 @@ export const outreachStatusEnum = pgEnum("outreach_status", [
   "pending", // importado, esperando a primeira mensagem
   "sent", // primeira mensagem enviada
   "skipped", // descartado (telefone inválido, duplicado, opt-out prévio)
+  // Recebeu a abordagem e os dois toques da cadência, e não respondeu nenhum.
+  // Daqui não sai mais nada: silêncio permanente.
+  //
+  // O nome é "nao_respondeu", e não "sem_resposta", para não colidir com o
+  // motivo de atenção `sem_resposta` (lib/atencao.ts), que significa quase o
+  // OPOSTO: lá é o dentista que falou e ficou sem resposta NOSSA.
+  "nao_respondeu",
 ]);
 
 export const leadsTable = pgTable("leads", {

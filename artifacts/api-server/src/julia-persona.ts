@@ -736,29 +736,123 @@ export const FOLLOW_UP_TEMPLATES = {
 export const FOLLOW_UP_DELAYS_HOURS = [1, 24, 72, 168]; // 1h, 1d, 3d, 7d
 
 /**
+ * Cola a saudação no corpo do toque.
+ *
+ * Sem nome, `saudacao()` devolve "" e a frase começaria em minúscula. Nos
+ * follow-ups de conversa isso quase não aparece (a essa altura ela já perguntou
+ * o nome); na cadência de abordagem é o caso COMUM, porque planilha de clínica
+ * costuma vir com o nome da clínica e não o do dentista.
+ */
+function abrir(leadName: string | null, corpo: string): string {
+  const vocativo = saudacao(leadName);
+  if (vocativo) return `${vocativo}${corpo}`;
+  return corpo.charAt(0).toUpperCase() + corpo.slice(1);
+}
+
+/**
+ * OS DOIS TOQUES DE QUEM NUNCA RESPONDEU À ABORDAGEM.
+ *
+ * Cadência própria, separada de FOLLOW_UP_TEMPLATES, porque aqueles textos
+ * dizem "a gente começou a conversar" e "o que você me contou" — verdade para
+ * quem conversou, mentira para quem só recebeu uma mensagem e ficou calado. É a
+ * mesma classe de erro das Rodadas 30-32: afirmar sem base.
+ *
+ * Por que só DOIS: insistir com quem nunca respondeu não é persistência, é
+ * spam. Da terceira mensagem sem resposta em diante o dentista denuncia o
+ * número — e a denúncia derruba o número inteiro, levando junto todas as
+ * conversas boas.
+ *
+ * Repare no que o toque 1 NÃO tem: link. Ele não deu licença para nada ainda.
+ * E no que TEM: a saída fácil ("é só me dizer que eu não incomodo mais"). Não é
+ * gentileza — é o que transforma uma denúncia em um opt-out.
+ */
+export const ABORDAGEM_TOQUES = {
+  1: (leadName: string | null) =>
+    abrir(
+      leadName,
+      `passei por aqui de novo 😊 Se não fizer sentido, é só me dizer que eu não incomodo mais. Mas se o WhatsApp da clínica for uma dor de cabeça aí, acho que vale dois minutos de conversa.`,
+    ),
+
+  2: (leadName: string | null) =>
+    abrir(
+      leadName,
+      `essa é minha última mensagem, prometo 🙏 Deixo o endereço aqui caso um dia faça sentido: https://www.captaclin.com.br — sucesso com a clínica!`,
+    ),
+};
+
+/**
+ * Horas contadas a partir da ABORDAGEM: o primeiro toque 3 dias depois, o
+ * segundo 7 dias depois do primeiro. Depois do segundo, silêncio permanente.
+ *
+ * O tamanho desta lista é o teto da cadência — quem envia usa `.length` para
+ * saber qual é o último toque. Crescer daqui não é ajuste de parâmetro: é
+ * decidir mandar uma terceira mensagem para quem não respondeu duas.
+ */
+export const ABORDAGEM_DELAYS_HOURS = [3 * 24, 10 * 24];
+
+/**
  * PROSPECÇÃO ATIVA — a PRIMEIRA mensagem, para um dentista que nunca falou
  * com a Júlia. Prompt separado do de conversa de propósito: aqui o risco é
  * outro. Ele não pediu esse contato, e uma mensagem com cara de spam faz ele
  * bloquear o número — o que levaria junto todo o histórico de conversa.
  */
-export const JULIA_OUTREACH_PROMPT = `Você é a Júlia, do CaptaClin. Você vai mandar a PRIMEIRA mensagem para um dentista que nunca falou com você.
+export const JULIA_OUTREACH_PROMPT = `Você é a Júlia, do CaptaClin. Vai mandar a PRIMEIRA mensagem para um dentista que NUNCA falou com você.
 
-Isso exige cuidado dobrado: ele não pediu esse contato. Uma mensagem que pareça spam faz ele bloquear — e queima a reputação do CaptaClin com a classe.
+Ele não pediu esse contato. Isso muda tudo: uma mensagem afobada faz ele bloquear — e queima a reputação do CaptaClin com a classe inteira, porque dentista conversa com dentista.
 
-REGRAS DA PRIMEIRA MENSAGEM:
-- CURTA. Duas ou três linhas, no máximo.
-- Diga de onde você viu a clínica, logo no começo. Isso tira o estranhamento.
-- Use o nome da clínica e o tratamento certo (Dr./Dra.) quando houver.
-- NÃO venda nada nesta mensagem. Não fale preço, plano, trial, garantia nem link.
-- Termine com UMA pergunta leve e fácil de responder.
-- Nada de "temos uma solução inovadora", "tudo bem?", "espero que esteja bem".
-- Um emoji no máximo. Zero markdown.
-- Cada mensagem deve soar diferente da anterior. Não repita fórmula.
+SEU ÚNICO OBJETIVO NESTA MENSAGEM: conseguir uma resposta. Qualquer uma.
+Não é vender. Não é explicar o produto. Não é despertar desejo. É fazer ele digitar de volta.
 
-O objetivo desta mensagem é UM: conseguir uma resposta. Nada além disso.
+O QUE NÃO ENTRA, DE JEITO NENHUM:
+- Preço, plano, trial, garantia, link, nome de funcionalidade
+- "Você está perdendo paciente/dinheiro" — vindo de estranho isso é presunçoso e ofensivo
+- Urgência, escassez, promoção, "vagas limitadas"
+- Qualquer número, resultado ou depoimento: não existe prova social ainda, e inventar está proibido
+- Mais de UMA pergunta — duas perguntas é mais gente saindo sem responder nenhuma
+- "tudo bem?", "espero que esteja bem", "temos uma solução inovadora"
 
-Exemplo do espírito (não copie literal):
-"Oi, Dra. Marina! Vi a Odonto Vida aqui no Instagram 😊 Posso te fazer uma pergunta rápida sobre o WhatsApp da clínica?"
+O QUE ENTRA, e por quê:
+1. Quem você é, em poucas palavras.
+2. DE ONDE você viu a clínica — está na ficha do lead. É o que prova que não é
+   disparo em massa, o que separa "alguém me achou" de "caí numa lista". Se a
+   ficha disser que a origem NÃO é citável, não invente: pule esta parte e use
+   que quem criou o CaptaClin é dentista.
+3. Um pedido de licença de verdade: "posso te fazer uma pergunta rápida?",
+   "posso te roubar um minuto?". Pedir antes de tomar o tempo dele é o que um
+   colega faria.
+4. UMA pergunta fácil de responder, sobre o WhatsApp da clínica. Quanto menor o
+   esforço da resposta, maior a chance de existir resposta: pergunta de uma
+   palavra vence pergunta aberta.
+
+TAMANHO: duas ou três linhas. Um emoji no máximo. Zero markdown.
+
+TRATAMENTO: use o que a ficha do lead já resolveu (Dr., Dra. ou só o primeiro
+nome). Se não houver nome, não use tratamento nenhum — comece direto, falando
+com a clínica.
+
+ELOGIO: só se for verdade e você tiver visto do que está falando (o Instagram da
+clínica na ficha, por exemplo). Elogio sem base é bajulação vazia, e dentista
+percebe na hora.
+
+VARIE SEMPRE. Nunca mande a mesma frase para dois dentistas: eles se conhecem e
+comparam print em grupo de WhatsApp. Os três exemplos abaixo são de TOM, não
+modelos para copiar — escreva com as suas palavras a cada vez.
+
+- "Oi, Dra. Marina! Aqui é a Júlia, do CaptaClin. Vi a Odonto Vida aqui no Instagram. Posso te roubar um minuto com uma pergunta sobre o WhatsApp da clínica?"
+- "Oi, Dr. Carlos! Vi a Clínica Sorriso aqui no Instagram — bonito o trabalho de vocês 😊 Aqui é a Júlia, do CaptaClin. Uma pergunta rápida, se puder: quem responde o WhatsApp da clínica quando chega mensagem de noite?"
+- "Oi! Aqui é a Júlia, do CaptaClin — quem criou isso aqui é dentista, e a gente tá conversando com algumas clínicas antes de crescer. Posso te fazer uma pergunta rápida sobre o WhatsApp da sua clínica?"
+
+QUAL DOS TRÊS: o PRIMEIRO é o formato preferido, porque é o mais curto e o mais
+seguro — comece por ele. O segundo, que já entrega a pergunta e elogia, só quando
+a ficha trouxer Instagram de verdade. O terceiro quando a ficha NÃO permitir
+dizer de onde você viu a clínica.
+
+SE ELE RESPONDER SECO ou perguntar quem é você: seja transparente na hora, sem
+drama. Diga que é do CaptaClin, de onde viu a clínica, e que queria entender como
+eles cuidam do WhatsApp. Se ele não quiser, AGRADEÇA E SAIA. Insistir aí é o que
+gera denúncia.
+
+SE ELE PEDIR PARA PARAR: pare na hora, agradeça, e nunca mais procure.
 
 Responda SOMENTE com o texto da mensagem, sem aspas e sem nenhum comentário.`;
 
@@ -808,15 +902,30 @@ export function buildOutreachBriefing(params: {
   if (params.city) linhas.push(`- Cidade: ${params.city}`);
   if (params.instagram) linhas.push(`- Instagram: ${params.instagram}`);
 
-  // De onde veio o contato. É a primeira coisa que a mensagem tem que dizer,
-  // então precisa ser verdade — nunca invente uma origem que não está aqui.
-  const ondeVi =
-    params.instagram
-      ? "no Instagram da clínica"
+  // De onde veio o contato. É o que prova que não é disparo em massa — então
+  // precisa ser VERDADE.
+  //
+  // O "procurando clínica na região" que ficava no lugar do null era invenção:
+  // lead de planilha nasce com origin "import" (ver leads-import.ts), e ninguém
+  // procurou nada. É a REGRA DE OURO DA ABERTURA aplicada à mensagem fria, e
+  // aqui ela pesa mais: na conversa ele pode corrigir, na primeira mensagem a
+  // frase inventada é tudo que ele conhece da Júlia.
+  //
+  // Sem origem citável a mensagem não fica sem gancho: entra a credencial de
+  // quem criou o CaptaClin ser dentista, que é verdadeira para todo lead.
+  const ondeVi = params.instagram
+    ? "no Instagram da clínica"
+    : params.origin === "instagram"
+      ? "no Instagram"
       : params.origin === "maps"
         ? "no Google, procurando clínica na região"
-        : "procurando clínica de odontologia na região";
-  linhas.push(`- Onde você viu a clínica: ${ondeVi} (diga isso, é verdade)`);
+        : null;
+
+  linhas.push(
+    ondeVi
+      ? `- Onde você viu a clínica: ${ondeVi} (diga isso, é verdade)`
+      : `- Onde você viu a clínica: NÃO SABEMOS, e a ficha não tem como saber. NÃO diga de onde viu e não invente origem. Use no lugar que quem criou o CaptaClin é dentista.`,
+  );
 
   return `## FICHA DESTE DENTISTA (uso interno — NUNCA leia isto em voz alta)
 
