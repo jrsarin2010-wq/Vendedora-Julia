@@ -19,6 +19,12 @@ export const leadsTable = {
   name: "name",
   lastMessageAt: "lastMessageAt",
   pausedUntil: "pausedUntil",
+  handoffRequested: "handoffRequested",
+  atencao: "atencao",
+  atencaoDesde: "atencaoDesde",
+  atencaoDetalhe: "atencaoDetalhe",
+  notes: "notes",
+  painPoints: "painPoints",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
 };
@@ -28,6 +34,8 @@ export const leadMessagesTable = {
   id: "id",
   leadId: "leadId",
   direction: "direction",
+  content: "content",
+  messageType: "messageType",
   createdAt: "createdAt",
 };
 

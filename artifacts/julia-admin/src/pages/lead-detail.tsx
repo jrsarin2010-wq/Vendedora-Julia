@@ -17,12 +17,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "./leads";
 import { Badge } from "@/components/ui/badge";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { PreviaAbordagem } from "@/components/previa-abordagem";
 import { ConfirmarExclusao } from "@/components/confirmar-exclusao";
 import { apagarLead } from "@/lib/import-api";
 import { rotuloEtapa, rotuloFollowUp } from "@/lib/rotulos";
+import { listarAtencao, resolverAtencao } from "@/lib/atencao-api";
 import { Trash2 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -105,6 +106,26 @@ export default function LeadDetail() {
     updateLeadMutation.mutate({ id, data: { pausedUntil: null } });
   };
 
+  // CENTRAL DE VIGIA: o aviso do topo. Reaproveita a mesma lista do Painel e
+  // pesca este lead — assim não existe uma segunda rota dizendo a mesma coisa.
+  const { data: atencao } = useQuery({
+    queryKey: ["atencao"],
+    queryFn: listarAtencao,
+    refetchInterval: 60_000,
+  });
+  const aviso = atencao?.itens.find((i) => i.id === id) ?? null;
+
+  const resolverMutation = useMutation({
+    mutationFn: () => resolverAtencao(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["atencao"] });
+      toast({ title: "Resolvido", description: "Saiu da lista de quem precisa de você." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    },
+  });
+
   const [apagando, setApagando] = useState(false);
   const [, navegar] = useLocation();
 
@@ -154,6 +175,49 @@ export default function LeadDetail() {
 
   return (
     <div className="animate-in fade-in duration-300 max-w-[1400px] mx-auto pb-10 flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
+      {/* CENTRAL DE VIGIA — por que esta conversa está esperando por você.
+          Fica no topo, antes de qualquer coisa: é a informação que decide se
+          você vai agir agora. O telefone abre o WhatsApp num toque, porque é
+          ali que você responde — não aqui dentro. */}
+      {aviso && (
+        <div
+          className="mx-2 mb-4 rounded-lg border border-red-500/40 bg-red-50 dark:bg-red-950/20 p-4 flex flex-col sm:flex-row sm:items-start gap-3 shrink-0"
+          data-testid="aviso-atencao"
+        >
+          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0 space-y-1">
+            <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+              {aviso.motivoTexto}
+            </p>
+            {aviso.detalhe && (
+              <p className="text-xs text-muted-foreground italic break-words">“{aviso.detalhe}”</p>
+            )}
+            {aviso.desde && (
+              <p className="text-[10px] text-muted-foreground/70 font-mono">
+                desde {new Date(aviso.desde).toLocaleString("pt-BR")}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button asChild size="sm">
+              <a href={aviso.whatsapp} target="_blank" rel="noreferrer">
+                <MessageCircle className="h-3.5 w-3.5 mr-1.5" />
+                Responder no WhatsApp
+              </a>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => resolverMutation.mutate()}
+              disabled={resolverMutation.isPending}
+              data-testid="btn-resolver-atencao"
+            >
+              Já cuidei disso
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 shrink-0 pt-2 px-2">
         <div className="flex items-center gap-4">

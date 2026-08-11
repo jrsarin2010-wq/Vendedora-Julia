@@ -4,6 +4,7 @@ import { eq, lte, and } from "drizzle-orm";
 import { sendWhatsAppMessage } from "./integrations";
 import { logger } from "./logger";
 import { saudacao } from "./tratamento";
+import { verificarSemResposta } from "./atencao";
 
 /**
  * Uma passada do agendador: pega os follow-ups vencidos e manda os que devem
@@ -108,12 +109,30 @@ export async function rodarCicloDeFollowUp(): Promise<void> {
   }
 }
 
+/**
+ * Uma passada do agendador: os follow-ups vencidos e, na sequência, a vigia de
+ * conversas sem resposta (gatilho 4 da central).
+ *
+ * Pega carona neste agendador em vez de criar outro `setInterval`: a cadência de
+ * 5 minutos é a mesma que o gatilho precisa, e um timer só é um lugar só para
+ * olhar quando algo não roda. A vigia vem DEPOIS dos follow-ups e num try
+ * próprio — se ela falhar, os follow-ups já saíram.
+ */
+async function rodarCiclo(): Promise<void> {
+  await rodarCicloDeFollowUp();
+  try {
+    await verificarSemResposta();
+  } catch (err) {
+    logger.error({ err }, "Vigia de sem-resposta falhou");
+  }
+}
+
 export function startFollowUpScheduler(): void {
   // Run every 5 minutes
   const INTERVAL_MS = 5 * 60 * 1000;
 
   // Run immediately then on interval
-  rodarCicloDeFollowUp();
-  setInterval(rodarCicloDeFollowUp, INTERVAL_MS);
+  rodarCiclo();
+  setInterval(rodarCiclo, INTERVAL_MS);
   logger.info("Follow-up scheduler started");
 }

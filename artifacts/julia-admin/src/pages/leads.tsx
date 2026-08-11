@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useListLeads, getListLeadsQueryKey, ListLeadsStatus, ListLeadsFunnelStage } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,8 +24,9 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Filter, AlertTriangle, Trash2, Loader2, Eraser } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apagarLead, apagarImportadosPendentes } from "@/lib/import-api";
-import { rotuloStatus, rotuloEtapa, rotuloPlano } from "@/lib/rotulos";
+import { rotuloStatus, rotuloEtapa, rotuloPlano, rotuloAtencao, rotuloAtencaoCurto } from "@/lib/rotulos";
 import { ConfirmarExclusao } from "@/components/confirmar-exclusao";
+import { listarAtencao } from "@/lib/atencao-api";
 
 // Simple debounce hook for local use
 function useDebounceLocal<T>(value: T, delay: number): T {
@@ -62,6 +63,7 @@ export default function Leads() {
   const debouncedSearch = useDebounceLocal(search, 300);
   const [statusFilter, setStatusFilter] = useState<ListLeadsStatus | "all">("all");
   const [stageFilter, setStageFilter] = useState<ListLeadsFunnelStage | "all">("all");
+  const [soAtencao, setSoAtencao] = useState(false);
   const [apagandoId, setApagandoId] = useState<number | null>(null);
   const [faxinando, setFaxinando] = useState(false);
   const queryClient = useQueryClient();
@@ -75,6 +77,23 @@ export default function Leads() {
   const { data, isLoading } = useListLeads(queryParams, {
     query: { queryKey: getListLeadsQueryKey(queryParams) }
   });
+
+  // CENTRAL DE VIGIA. O `Lead` do contrato OpenAPI não tem o campo `atencao`,
+  // então a marcação vem desta consulta — a mesma que alimenta a seção do
+  // Painel — e é cruzada por id. Menos acoplamento do que regerar o cliente só
+  // para carregar um selo.
+  const { data: atencao } = useQuery({
+    queryKey: ["atencao"],
+    queryFn: listarAtencao,
+    refetchInterval: 60_000,
+  });
+  const motivoPorLead = new Map(
+    (atencao?.itens ?? []).map((i) => [i.id, i.motivo] as const),
+  );
+
+  const leadsVisiveis = (data?.leads ?? []).filter(
+    (lead) => !soAtencao || motivoPorLead.has(lead.id),
+  );
 
   function recarregar() {
     queryClient.invalidateQueries({ queryKey: getListLeadsQueryKey(queryParams) });
@@ -185,6 +204,20 @@ export default function Leads() {
                 <SelectItem value="lost">Perdido</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Filtro da central de vigia. É um botão de liga/desliga porque a
+                pergunta que ele responde é sim/não: "quem precisa de mim?" */}
+            <Button
+              variant={soAtencao ? "default" : "outline"}
+              size="sm"
+              className="h-9 shrink-0"
+              onClick={() => setSoAtencao((v) => !v)}
+              data-testid="btn-filtro-atencao"
+            >
+              <AlertTriangle size={14} className="mr-1.5" />
+              Precisam de atenção
+              {atencao?.total ? ` (${atencao.total})` : ""}
+            </Button>
           </div>
         </div>
 
@@ -213,8 +246,8 @@ export default function Leads() {
                     <TableCell></TableCell>
                   </TableRow>
                 ))
-              ) : data?.leads && data.leads.length > 0 ? (
-                data.leads.map((lead) => (
+              ) : leadsVisiveis.length > 0 ? (
+                leadsVisiveis.map((lead) => (
                   <TableRow key={lead.id} className="group hover:bg-muted/30 cursor-pointer transition-colors" data-testid={`lead-row-${lead.id}`}>
                     <TableCell>
                       <Link href={`/leads/${lead.id}`} className="block">
@@ -222,10 +255,25 @@ export default function Leads() {
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-foreground">{lead.name || "Dentista sem nome"}</span>
-                              {lead.handoffRequested && (
-                                <span title="Pediu para falar com uma pessoa">
-                                  <AlertTriangle className="h-3 w-3 text-destructive" />
-                                </span>
+                              {/* Marcado pela central: o selo diz o motivo. Quando
+                                  não há marcação, o triângulo do handoff continua
+                                  valendo — ele é o registro histórico de que o
+                                  dentista já pediu uma pessoa algum dia. */}
+                              {motivoPorLead.has(lead.id) ? (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] border-red-500/50 text-red-600 dark:text-red-400"
+                                  title={rotuloAtencao(motivoPorLead.get(lead.id))}
+                                  data-testid={`selo-atencao-${lead.id}`}
+                                >
+                                  {rotuloAtencaoCurto(motivoPorLead.get(lead.id))}
+                                </Badge>
+                              ) : (
+                                lead.handoffRequested && (
+                                  <span title="Já pediu para falar com uma pessoa">
+                                    <AlertTriangle className="h-3 w-3 text-destructive" />
+                                  </span>
+                                )
                               )}
                             </div>
                             <span className="text-xs text-muted-foreground font-mono">{lead.phone}</span>
@@ -284,8 +332,14 @@ export default function Leads() {
                   <TableCell colSpan={6} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-muted-foreground">
                       <Filter className="h-10 w-10 mb-3 text-muted-foreground/30" />
-                      <p className="text-lg font-medium text-foreground">Nenhum dentista encontrado</p>
-                      <p className="text-sm">Tente mudar os filtros ou a busca.</p>
+                      <p className="text-lg font-medium text-foreground">
+                        {soAtencao ? "Ninguém precisa de você agora" : "Nenhum dentista encontrado"}
+                      </p>
+                      <p className="text-sm">
+                        {soAtencao
+                          ? "Desligue o filtro para ver a lista completa."
+                          : "Tente mudar os filtros ou a busca."}
+                      </p>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -296,7 +350,11 @@ export default function Leads() {
 
         {/* Simple Pagination Footer Placeholder */}
         <div className="p-3 border-t border-border bg-muted/20 flex items-center justify-between shrink-0 text-xs text-muted-foreground">
-          <div>Mostrando {data?.leads?.length || 0} de {data?.total || 0} dentistas</div>
+          <div>
+            {soAtencao
+              ? `Mostrando ${leadsVisiveis.length} que precisam de você`
+              : `Mostrando ${leadsVisiveis.length} de ${data?.total || 0} dentistas`}
+          </div>
         </div>
       </div>
     </div>

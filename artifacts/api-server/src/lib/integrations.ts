@@ -366,6 +366,37 @@ export async function sendTelegramAlert(alert: HandoffAlert): Promise<void> {
   await enviarAoTelegram(text, "handoff");
 }
 
+/**
+ * Alerta da CENTRAL DE VIGIA (Rodada 33).
+ *
+ * Curto de propósito: ele lê no celular e o que importa é decidir se entra
+ * agora. O handoff continua com o alerta detalhado próprio (`sendTelegramAlert`)
+ * — este aqui serve aos motivos que não têm um, hoje só a irritação. Os motivos
+ * `julia_estranha` e `sem_resposta` NÃO passam por aqui: vivem só no painel, e
+ * quem decide isso é `avisaNoTelegram()` em lib/atencao.ts.
+ */
+interface AtencaoAlert {
+  lead: Lead;
+  /** O motivo já em português, para este módulo não precisar conhecer os códigos. */
+  motivo: string;
+  detalhe: string | null;
+}
+
+export async function sendTelegramAtencao(alert: AtencaoAlert): Promise<void> {
+  const { lead, motivo, detalhe } = alert;
+  const quem = lead.name ? `Dr(a). ${lead.name}` : lead.phone;
+
+  const linhas = [
+    `🔴 *${quem} precisa de você*`,
+    `Motivo: ${motivo.toLowerCase()}`,
+  ];
+  if (detalhe) linhas.push(`_"${detalhe}"_`);
+  if (lead.painPoints) linhas.push(`Dor: ${lead.painPoints}`);
+  linhas.push(`👉 ${linkDoWhatsApp(lead.phone)}`);
+
+  await enviarAoTelegram(linhas.join("\n"), "atencao");
+}
+
 /** Avisa que a Júlia se calou porque alguém assumiu a conversa pelo celular. */
 export async function sendTelegramPausa(alert: PausaAlert): Promise<void> {
   const { lead, ate } = alert;

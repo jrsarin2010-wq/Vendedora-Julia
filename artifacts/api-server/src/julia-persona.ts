@@ -839,9 +839,10 @@ Extraia, do ponto de vista do dentista:
 5. A ETAPA em que a negociação está agora.
 6. Se ele JÁ VIROU CLIENTE (assinou, contratou, pagou ou já começou a usar/testar o CaptaClin).
 7. Se ele PEDIU PARA PARAR de receber mensagens.
+8. Se ele está IRRITADO, frustrado ou perdendo a paciência.
 
 Responda SOMENTE com um JSON, sem nada antes ou depois, neste formato exato:
-{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>}
+{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>, "irritado": <true ou false>}
 
 Etapas possíveis, em ordem:
 - new: mal começou, ainda não se sabe nada da clínica dele.
@@ -873,5 +874,15 @@ Regras de "wantsToStop" (seja CONSERVADOR — na dúvida, false):
 - false para adiamento ou recusa de compra que NÃO é pedido de parada:
   "vou pensar", "agora não", "depois eu vejo", "tá caro", "não posso agora", "me chama semana que vem".
 - Na dúvida entre adiar e parar, use false. Errar aqui silencia um lead vivo.
+
+Regras de "irritado" (seja CONSERVADOR — na dúvida, false):
+- true quando ele demonstra frustração com o ATENDIMENTO: reclama de não ser
+  entendido, repete que já disse algo, usa palavrão de irritação, ou responde de
+  forma seca e cortante depois de ter sido cordial.
+- false para desacordo comercial normal: "tá caro", "não tenho interesse",
+  "não é pra mim". Discordar NÃO é estar irritado.
+- false para pressa: "to sem tempo agora", "depois eu vejo".
+- Errar aqui para o lado do true faz o dono da clínica receber alerta em toda
+  negociação normal — e aí ele para de olhar os alertas, inclusive os de verdade.
 
 Escreva em português do Brasil.`;

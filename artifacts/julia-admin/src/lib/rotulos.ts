@@ -32,6 +32,26 @@ export const PLANO_PT: Record<string, string> = {
   pro: "Pro",
 };
 
+/**
+ * Motivos da central de vigia. O servidor já manda `motivoTexto` pronto — este
+ * mapa é a rede para quando só o código estiver em mãos (o selo na lista de
+ * dentistas, por exemplo).
+ */
+export const MOTIVO_ATENCAO_PT: Record<string, string> = {
+  pediu_pessoa: "Pediu para falar com uma pessoa",
+  irritado: "Parece irritado",
+  julia_estranha: "A Júlia pode ter errado",
+  sem_resposta: "Está sem resposta há mais de 15 min",
+};
+
+/** Versão curta, para caber no selo da linha da tabela. */
+export const MOTIVO_ATENCAO_CURTO_PT: Record<string, string> = {
+  pediu_pessoa: "Quer falar com você",
+  irritado: "Irritado",
+  julia_estranha: "Júlia estranha",
+  sem_resposta: "Sem resposta",
+};
+
 export const SITUACAO_FOLLOWUP_PT: Record<string, string> = {
   pending: "Agendado",
   sent: "Enviado",
@@ -49,3 +69,9 @@ export const rotuloPlano = (v: string | null | undefined): string =>
 
 export const rotuloFollowUp = (v: string | null | undefined): string =>
   (v && SITUACAO_FOLLOWUP_PT[v]) || v || "—";
+
+export const rotuloAtencao = (v: string | null | undefined): string =>
+  (v && MOTIVO_ATENCAO_PT[v]) || v || "—";
+
+export const rotuloAtencaoCurto = (v: string | null | undefined): string =>
+  (v && MOTIVO_ATENCAO_CURTO_PT[v]) || v || "—";

@@ -69,6 +69,16 @@ export const leadsTable = pgTable("leads", {
   // significa conversa normal.
   pausedUntil: timestamp("paused_until"),
   handoffRequested: boolean("handoff_requested").notNull().default(false),
+  // CENTRAL DE VIGIA: por que esta conversa precisa de uma pessoa agora.
+  // Um de "pediu_pessoa" | "irritado" | "julia_estranha" | "sem_resposta", ou
+  // null quando não precisa (ou quando já foi resolvido). Quando dois gatilhos
+  // batem no mesmo lead, prevalece o mais grave — a ordem está em
+  // api-server/src/lib/atencao.ts, que é quem escreve aqui.
+  atencao: text("atencao"),
+  atencaoDesde: timestamp("atencao_desde"),
+  // O trecho que disparou, para o painel explicar o motivo sem obrigar a abrir
+  // a conversa inteira.
+  atencaoDetalhe: text("atencao_detalhe"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

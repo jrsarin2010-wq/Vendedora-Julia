@@ -1,10 +1,14 @@
 import { useGetDashboardStats, getGetDashboardStatsQueryKey, useGetFunnelStats, getGetFunnelStatsQueryKey, useGetRecentActivity, getGetRecentActivityQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, UserCheck, UserX, Target, AlertTriangle, Clock, ArrowRight } from "lucide-react";
+import { Users, UserCheck, UserX, Target, AlertTriangle, Clock, ArrowRight, MessageCircle, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { rotuloEtapa } from "@/lib/rotulos";
+import { listarAtencao, resolverAtencao, type ItemDeAtencao } from "@/lib/atencao-api";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats({
@@ -28,6 +32,8 @@ export default function Dashboard() {
           <p className="text-sm text-muted-foreground mt-1">Como está o trabalho da Júlia agora.</p>
         </div>
       </div>
+
+      <PrecisamDeVoce />
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -184,7 +190,133 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ 
+/** Chave única da consulta da central, para invalidar de qualquer tela. */
+export const CHAVE_ATENCAO = ["atencao"] as const;
+
+/**
+ * CENTRAL DE VIGIA — a seção do topo.
+ *
+ * Fica ANTES dos números de propósito: número é para acompanhar, isto é para
+ * agir hoje. O telefone é um link wa.me porque ele responde pelo WhatsApp, não
+ * aqui dentro.
+ *
+ * Quando está vazia, mostra uma linha discreta em vez de desaparecer. O vazio
+ * também é informação: "nada precisa de você" é diferente de "a seção não
+ * carregou".
+ */
+function PrecisamDeVoce() {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: CHAVE_ATENCAO,
+    queryFn: listarAtencao,
+    // A vigia do servidor roda a cada 5 min; 60s aqui deixa o painel aberto
+    // acompanhar sem virar polling agressivo.
+    refetchInterval: 60_000,
+  });
+
+  if (isLoading) {
+    return <Skeleton className="h-24 w-full rounded-md" />;
+  }
+
+  if (isError) {
+    return (
+      <Card className="border-destructive/40">
+        <CardContent className="p-4 text-sm text-destructive">
+          Não consegui carregar os avisos. Atualize a página.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const itens = data?.itens ?? [];
+
+  if (itens.length === 0) {
+    return (
+      <p
+        className="text-sm text-muted-foreground flex items-center gap-2"
+        data-testid="atencao-vazio"
+      >
+        <Check size={14} className="text-green-500" />
+        Nada precisa de você agora.
+      </p>
+    );
+  }
+
+  return (
+    <Card className="shadow-sm border-red-500/40" data-testid="atencao-lista">
+      <CardHeader className="border-b border-border/50 pb-4">
+        <CardTitle className="text-base font-semibold font-mono flex items-center gap-2">
+          <AlertTriangle size={16} className="text-red-500" />
+          Precisam de você
+          <Badge variant="secondary" className="ml-1">{itens.length}</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0 divide-y divide-border/50">
+        {itens.map((item) => (
+          <LinhaDeAtencao key={item.id} item={item} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LinhaDeAtencao({ item }: { item: ItemDeAtencao }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const resolver = useMutation({
+    mutationFn: () => resolverAtencao(item.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CHAVE_ATENCAO });
+      toast({ title: "Resolvido", description: "Saiu da lista." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <div className="p-4 flex flex-col sm:flex-row sm:items-start gap-3" data-testid={`atencao-item-${item.id}`}>
+      <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link href={`/leads/${item.id}`} className="text-sm font-medium hover:underline">
+            {item.name || item.phone}
+          </Link>
+          <Badge variant="outline" className="text-[10px]">{item.motivoTexto}</Badge>
+        </div>
+        {item.detalhe && (
+          <p className="text-xs text-muted-foreground italic break-words">“{item.detalhe}”</p>
+        )}
+        {item.painPoints && (
+          <p className="text-xs text-muted-foreground">Dor: {item.painPoints}</p>
+        )}
+        {item.desde && (
+          <p className="text-[10px] text-muted-foreground/70 font-mono">
+            desde {new Date(item.desde).toLocaleString("pt-BR")}
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <Button asChild size="sm" variant="default">
+          <a href={item.whatsapp} target="_blank" rel="noreferrer">
+            <MessageCircle size={14} className="mr-1.5" />
+            Responder
+          </a>
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => resolver.mutate()}
+          disabled={resolver.isPending}
+          data-testid={`atencao-resolver-${item.id}`}
+        >
+          Já cuidei disso
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({
   title, 
   value, 
   isLoading, 

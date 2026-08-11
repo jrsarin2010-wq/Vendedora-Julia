@@ -5,6 +5,7 @@ import {
   leadsTable,
   leadMessagesTable,
   followUpsTable,
+  type Lead,
 } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
 import { openai, speechToText, detectAudioFormat } from "@workspace/integrations-openai-ai-server";
@@ -18,6 +19,7 @@ import {
 import {
   sendWhatsAppMessage,
   sendTelegramAlert,
+  sendTelegramAtencao,
   sendTelegramPausa,
   fetchWhatsAppMediaBase64,
   sendWhatsAppAudio,
@@ -31,6 +33,16 @@ import {
 } from "../lib/demos";
 import { pareceCelularReal, padraoDeServico } from "../lib/filtro-spam";
 import { enviadaPorNos } from "../lib/enviadas-por-nos";
+import {
+  MOTIVO_PT,
+  limparAtencao,
+  marcarAtencao,
+  pareceConfuso,
+  pareceIrritado,
+  recortarDetalhe,
+  respostaLonga,
+  respostaRepetida,
+} from "../lib/atencao";
 
 const router: IRouter = Router();
 
@@ -119,9 +131,44 @@ async function pausarPorHumano(
     .where(eq(leadsTable.id, lead.id));
   req.log.info({ leadId: lead.id, ate }, "Humano assumiu — Júlia pausada");
 
+  // Ele entrou na conversa: o aviso da central já cumpriu a função e sai da
+  // lista. Vale para QUALQUER motivo — inclusive os que não se limpam com o
+  // tempo — porque aqui não houve passagem de tempo, houve ação dele.
+  await limparAtencao(lead, "o humano assumiu a conversa");
+
   if (!jaEstavaPausada) {
     await sendTelegramPausa({ type: "pausa", lead, ate });
   }
+}
+
+/**
+ * Marca irritação e avisa no Telegram UMA VEZ POR EPISÓDIO.
+ *
+ * O "uma vez" não precisa de contador nem de carimbo de tempo: sai de graça da
+ * precedência. `marcarAtencao` só devolve true quando a marcação MUDOU, e
+ * `irritado` não substitui `irritado` (empate não substitui). Então a segunda,
+ * terceira e décima mensagem irritada do mesmo episódio não geram alerta — e,
+ * se o lead já estava em `pediu_pessoa` (mais grave), também não, porque o dono
+ * já foi chamado para essa conversa. Um alerta por mensagem seria o caminho mais
+ * curto para ele silenciar o bot.
+ */
+async function avisarIrritacao(
+  lead: Lead,
+  texto: string,
+  sinal: string,
+  req: { log: { warn: (o: unknown, m: string) => void } },
+): Promise<void> {
+  if (!(await marcarAtencao(lead, "irritado", texto))) return;
+
+  req.log.warn(
+    { leadId: lead.id, sinal },
+    "Dentista parece irritado — alerta enviado",
+  );
+  await sendTelegramAtencao({
+    lead,
+    motivo: MOTIVO_PT.irritado,
+    detalhe: recortarDetalhe(texto),
+  });
 }
 
 // IDs de mensagem já processados, pra não responder duas vezes se o Evolution
@@ -415,6 +462,25 @@ router.post("/webhook/whatsapp", async (req, res) => {
       return;
     }
 
+    // CENTRAL DE VIGIA, primeira camada: o que dá para decidir só pelo texto
+    // dele, sem esperar o extrator. Fica ANTES da chamada de IA de propósito —
+    // se ele está irritado, o alerta não deve esperar a Júlia formular resposta.
+    //
+    // O extrator confirma depois (segunda camada), no bloco de extração: a lista
+    // fixa é rápida e literal, o modelo pega o que ela não alcança. Mesmo
+    // desenho do opt-out.
+    const sinalDeIrritacao = pareceIrritado(text);
+    if (sinalDeIrritacao) {
+      await avisarIrritacao(lead, text, sinalDeIrritacao, req);
+    }
+
+    // Gatilho 3.1 — ele reclamou de não estar sendo entendido. É reclamação
+    // sobre a JÚLIA, então não vai para o Telegram: fica no painel.
+    const sinalDeConfusao = pareceConfuso(text);
+    if (sinalDeConfusao) {
+      await marcarAtencao(lead, "julia_estranha", text);
+    }
+
     // Get last N messages for context.
     // Buscamos as 30 MAIS RECENTES (desc) e depois invertemos para a ordem
     // cronológica (mais antiga → mais nova), que é o que o modelo espera.
@@ -520,6 +586,41 @@ router.post("/webhook/whatsapp", async (req, res) => {
       );
     }
 
+    // CENTRAL DE VIGIA, gatilho 3 — sinais de que a Júlia escorregou.
+    //
+    // Só dá para avaliar aqui: dois dos sinais dependem do texto que ela acabou
+    // de produzir e de saber se ele chegou. Nada disso vai para o Telegram — é
+    // reclamação sobre ela, não lead pegando fogo.
+    //
+    // A resposta anterior dela é o último "outbound" do histórico. O histórico
+    // foi lido depois de gravar a mensagem recebida, mas antes de gravar esta
+    // resposta, então o que está lá é mesmo a fala anterior.
+    const respostaAnterior =
+      [...history].reverse().find((m) => m.direction === "outbound")?.content ?? null;
+
+    if (!delivered) {
+      // A falha de envio já é logada acima — e log ninguém lê. Sem marcar no
+      // lead, um dentista que ficou sem resposta por erro de entrega era
+      // exatamente o caso invisível que esta rodada existe para acabar.
+      await marcarAtencao(
+        lead,
+        "julia_estranha",
+        "A resposta não foi entregue no WhatsApp.",
+      );
+    } else if (respostaRepetida(textoLimpo, respostaAnterior)) {
+      await marcarAtencao(
+        lead,
+        "julia_estranha",
+        `Ela repetiu quase a mesma resposta: "${textoLimpo}"`,
+      );
+    } else if (respostaLonga(textoLimpo)) {
+      await marcarAtencao(
+        lead,
+        "julia_estranha",
+        `Resposta de ${textoLimpo.length} caracteres — o prompt manda 2-3 linhas.`,
+      );
+    }
+
     // O ÁUDIO DE DEMONSTRAÇÃO, depois do texto — a narração prepara o ouvido.
     // Tudo aqui é bônus: o texto já foi entregue, então nenhuma falha daqui
     // para baixo pode interromper a conversa.
@@ -600,6 +701,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         funnelStage?: string | null;
         isCustomer?: boolean;
         wantsToStop?: boolean;
+        irritado?: boolean;
       };
 
       const update: {
@@ -699,6 +801,18 @@ router.post("/webhook/whatsapp", async (req, res) => {
           );
         lead.status = "lost";
         req.log.info({ leadId: lead.id }, "Opt-out detectado por intenção — follow-ups encerrados");
+      }
+
+      // CENTRAL DE VIGIA, segunda camada da irritação: o que a lista fixa não
+      // alcança (tom seco, frustração dita sem palavra-chave). O prompt do
+      // extrator é explicitamente conservador, porque "tá caro" e "não tenho
+      // interesse" são desacordo comercial — se isso virasse alerta, ele
+      // receberia notificação de toda negociação normal.
+      //
+      // Se a lista fixa já marcou nesta mesma mensagem, `avisarIrritacao` não
+      // manda nada: a precedência barra o Telegram repetido.
+      if (parsed.irritado === true) {
+        await avisarIrritacao(lead, text, "extrator", req);
       }
     } catch (err) {
       req.log.warn(
@@ -830,6 +944,12 @@ router.post("/webhook/whatsapp", async (req, res) => {
           updatedAt: new Date(),
         })
         .where(eq(leadsTable.id, lead.id));
+
+      // CENTRAL DE VIGIA, gatilho 1. O alerta de Telegram deste caso já existe
+      // (logo abaixo, o `sendTelegramAlert` detalhado da Rodada 17) — o que
+      // faltava era ele aparecer na lista do painel. É o motivo mais grave,
+      // então prevalece sobre qualquer outro que já estivesse marcado.
+      await marcarAtencao(lead, "pediu_pessoa", text);
 
       // Reload for updated data
       const updatedLead = (

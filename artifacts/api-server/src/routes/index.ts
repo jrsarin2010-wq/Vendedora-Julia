@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import atencaoRouter from "./atencao";
 import authRouter from "./auth";
 import healthRouter from "./health";
 import leadsRouter from "./leads";
@@ -23,6 +24,9 @@ router.use(requireAuth, leadsImportRouter);
 // Também antes de leadsRouter: "/leads/:id/outreach-preview" é mais
 // específico que "/leads/:id", e os dois são GET.
 router.use(requireAuth, outreachRouter);
+// Antes de leadsRouter pelo mesmo motivo: "/leads/:id/atencao/resolver" é mais
+// específico que "/leads/:id".
+router.use(requireAuth, atencaoRouter);
 router.use(requireAuth, leadsRouter);
 router.use(requireAuth, statsRouter);
 
