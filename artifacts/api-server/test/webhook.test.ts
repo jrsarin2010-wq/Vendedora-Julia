@@ -86,7 +86,9 @@ wa.entrega = true;
 await post(evento("quanto custa?"));
 ok("entregou: resposta gravada", saidas("outbound").length === 1);
 ok("entregou: mensagem recebida gravada", saidas("inbound").length === 1);
-ok("entregou: follow-ups armados", state.followUps.length === 4);
+// A leva agora é da cadência da temperatura (Rodada 41). Com o extrator neutro
+// do stub, só pontua o respondeu_algo (3) → frio → 2 toques.
+ok("entregou: follow-ups armados", state.followUps.length === 2, String(state.followUps.length));
 
 wa.entrega = false;
 await post(evento("quanto custa?"));

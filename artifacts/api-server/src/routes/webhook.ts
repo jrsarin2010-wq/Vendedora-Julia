@@ -13,7 +13,6 @@ import {
   JULIA_SYSTEM_PROMPT,
   JULIA_EXTRACTION_PROMPT,
   FOLLOW_UP_TEMPLATES,
-  FOLLOW_UP_DELAYS_HOURS,
   buildLeadBriefing,
 } from "../julia-persona";
 import {
@@ -49,6 +48,7 @@ import {
   registrarSinais,
   faixaDaTemperatura,
   statusDaFaixa,
+  CADENCIA_POR_FAIXA,
 } from "../lib/temperatura";
 
 const router: IRouter = Router();
@@ -1077,20 +1077,31 @@ router.post("/webhook/whatsapp", async (req, res) => {
     // sempre criamos uma nova. Assim, se o lead sumir, a cadência recomeça do
     // último contato. (Só não arma se o lead já fechou ou foi perdido.)
     if (!["closed", "lost"].includes(lead.status)) {
-      const scheduledFollowUps = FOLLOW_UP_DELAYS_HOURS.map((hours, idx) => ({
-        leadId: lead.id,
-        scheduledAt: new Date(Date.now() + hours * 60 * 60 * 1000),
-        touchNumber: idx + 1,
-        // Explícito, apesar do padrão do schema já ser "conversa": é aqui que
-        // se decide que estes toques PODEM citar a conversa e a dor, porque
-        // chegar neste ponto significa que ele respondeu alguma coisa.
-        kind: "conversa" as const,
-        messageTemplate: FOLLOW_UP_TEMPLATES[((idx + 1) as keyof typeof FOLLOW_UP_TEMPLATES)](
-          lead.name,
-          lead.painPoints,
-        ),
-        status: "pending" as const,
-      }));
+      // RODADA 41 (Parte 2): a leva nasce na cadência da temperatura DE AGORA
+      // — a atualização logo acima veio antes disto de propósito. Como toda
+      // resposta dele cancela a leva antiga e arma esta, um lead frio que
+      // pergunta o preço troca de cadência aqui, sem passo extra.
+      const cadencia = CADENCIA_POR_FAIXA[faixaDaTemperatura(lead.temperatura ?? 0)];
+
+      const scheduledFollowUps = cadencia.map((hours, idx) => {
+        // O ÚLTIMO toque é sempre a despedida (template 4, "essa é minha última
+        // mensagem"): numa cadência de dois toques, prometer a última mensagem
+        // e nunca mandá-la deixaria a porta entreaberta para sempre — e mandar
+        // um toque do meio como final quebraria a promessa ao contrário.
+        const template = (idx === cadencia.length - 1 ? 4 : idx + 1) as
+          keyof typeof FOLLOW_UP_TEMPLATES;
+        return {
+          leadId: lead.id,
+          scheduledAt: new Date(Date.now() + hours * 60 * 60 * 1000),
+          touchNumber: idx + 1,
+          // Explícito, apesar do padrão do schema já ser "conversa": é aqui que
+          // se decide que estes toques PODEM citar a conversa e a dor, porque
+          // chegar neste ponto significa que ele respondeu alguma coisa.
+          kind: "conversa" as const,
+          messageTemplate: FOLLOW_UP_TEMPLATES[template](lead.name, lead.painPoints),
+          status: "pending" as const,
+        };
+      });
 
       await db.insert(followUpsTable).values(scheduledFollowUps);
     }

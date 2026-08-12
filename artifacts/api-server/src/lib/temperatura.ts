@@ -113,3 +113,29 @@ export function registrarSinais(
     temperatura: lista.reduce((soma, s) => soma + SINAIS_DE_TEMPERATURA[s], 0),
   };
 }
+
+/**
+ * CADÊNCIA POR TEMPERATURA (Parte 2) — horas após a última mensagem dele.
+ *
+ * Antes, todo mundo recebia a mesma sequência: lenta demais para quem está
+ * decidindo, insistente demais para quem só olhou. Agora quem ferve recebe
+ * quatro toques rápidos; quem está frio recebe dois e para.
+ *
+ * A recalculada quando a temperatura muda sai de graça: o webhook cancela a
+ * leva pendente e arma uma nova a cada resposta dele, e a temperatura só muda
+ * quando ele responde — então a leva nova já nasce na cadência certa.
+ *
+ * Regras que protegem o número, travadas por teste:
+ * - temperatura mais alta = MAIS toques, nunca intervalo menor que
+ *   INTERVALO_MINIMO_HORAS;
+ * - o total nunca passa de MAXIMO_DE_TOQUES, independente da temperatura.
+ */
+export const INTERVALO_MINIMO_HORAS = 2;
+export const MAXIMO_DE_TOQUES = 4;
+
+export const CADENCIA_POR_FAIXA: Record<Faixa, number[]> = {
+  fervendo: [2, 12, 24, 72], // 4 toques, rápido
+  quente: [4, 24, 72, 168], // 4 toques
+  morno: [24, 72, 168], // 3 toques
+  frio: [48, 168], // 2 toques, e para
+};

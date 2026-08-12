@@ -344,7 +344,8 @@ secao("ele responde: sai da cadência de abordagem e entra na de conversa");
     JSON.stringify(toques().map((f: any) => f.status)),
   );
   const novos = state.followUps.filter((f: any) => f.kind === "conversa");
-  ok("e a leva de conversa foi armada no lugar", novos.length === 4, JSON.stringify(novos.length));
+  // "quem é você?" pontua só o respondeu_algo → frio → 2 toques (Rodada 41).
+  ok("e a leva de conversa foi armada no lugar", novos.length === 2, JSON.stringify(novos.length));
   ok("todos os pendentes agora são de conversa", pendentes().every((f: any) => f.kind === "conversa"));
 
   // O ciclo seguinte não pode ressuscitar um toque frio.

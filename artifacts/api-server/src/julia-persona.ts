@@ -1169,7 +1169,10 @@ export const FOLLOW_UP_TEMPLATES = {
     }, é só me chamar aqui que eu te ajudo — ou dar uma olhada em https://www.captaclin.com.br. Sucesso com a clínica!`,
 };
 
-export const FOLLOW_UP_DELAYS_HOURS = [1, 24, 72, 168]; // 1h, 1d, 3d, 7d
+// Os intervalos deixaram de ser fixos na Rodada 41: a cadência agora depende
+// da temperatura do lead — ver CADENCIA_POR_FAIXA em lib/temperatura.ts. Os
+// templates acima continuam sendo os textos; o último toque de qualquer
+// cadência usa o 4 (a despedida).
 
 /**
  * Cola a saudação no corpo do toque.
