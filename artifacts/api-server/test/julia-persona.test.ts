@@ -1172,4 +1172,68 @@ secao("Rodada 38 — emoji nos templates fixos: a maioria não tem");
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 40 — "como vou pagar isso? é seguro? não é golpe?". Segurança de
+// pagamento é MEDO, não objeção de preço — e medo se responde com fato
+// verificável: o dinheiro passa pelo Asaas, regulado pelo Banco Central.
+// Verificado antes de aplicar (agosto/2026): o bundle de produção do CaptaClin
+// diz "Pagamento processado por Asaas"; @captaclin.ia existe e está ativo;
+// @asaas.brasil é o perfil oficial verificado do Asaas; asaas.com e a página
+// do Reclame Aqui respondem 200.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 40 — segurança do pagamento: medo se responde com fato");
+ok(
+  "a seção existe",
+  JULIA_SYSTEM_PROMPT.includes('## "COMO VOU PAGAR ISSO? É SEGURO? NÃO É GOLPE?"'),
+);
+ok(
+  "o ponto que resolve: o dinheiro não vem direto pro CaptaClin",
+  JULIA_SYSTEM_PROMPT.includes("o CaptaClin NÃO recebe o dinheiro direto"),
+);
+ok(
+  "Asaas como Instituição de Pagamento autorizada pelo Banco Central",
+  JULIA_SYSTEM_PROMPT.includes("Instituição de Pagamento autorizada pelo Banco Central"),
+);
+ok(
+  "o Instagram certo do Asaas está lá",
+  JULIA_SYSTEM_PROMPT.includes("@asaas.brasil"),
+);
+ok(
+  // A armadilha da pesquisa: existe um perfil quase homônimo que é marca de
+  // roupa. O handle errado não pode estar disponível NEM dentro do aviso —
+  // texto presente é texto que o modelo pode mandar.
+  "o Instagram errado não existe no prompt, nem dentro do aviso",
+  !JULIA_SYSTEM_PROMPT.includes("asaasofficial"),
+);
+ok(
+  "o link do Reclame Aqui do Asaas está lá",
+  JULIA_SYSTEM_PROMPT.includes(
+    "https://www.reclameaqui.com.br/empresa/asaas-gestao-financeira/",
+  ),
+);
+ok(
+  "a nota do Reclame Aqui vai como aproximação, nunca cravada",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes("nota em torno de 8,4/10"),
+);
+ok(
+  "o Instagram do CaptaClin está em QUEM SOMOS",
+  JULIA_SYSTEM_PROMPT.includes("@captaclin.ia") &&
+    JULIA_SYSTEM_PROMPT.indexOf("@captaclin.ia") <
+      JULIA_SYSTEM_PROMPT.indexOf('## "COMO VOU PAGAR ISSO?'),
+);
+ok(
+  'proíbe dizer que o Asaas "nunca teve reclamação"',
+  JULIA_SYSTEM_PROMPT.includes('Nunca diga que o Asaas "nunca teve reclamação"'),
+);
+ok(
+  "proíbe se ofender com a pergunta sobre golpe",
+  JULIA_SYSTEM_PROMPT.includes("Nunca se ofenda com a pergunta") &&
+    JULIA_SYSTEM_PROMPT.includes("quem não vai comprar não pergunta se é golpe"),
+);
+ok(
+  "manda parar depois de responder, sem emendar venda",
+  JULIA_SYSTEM_PROMPT.includes("DEPOIS DE RESPONDER, PARE"),
+);
+
 fim();
