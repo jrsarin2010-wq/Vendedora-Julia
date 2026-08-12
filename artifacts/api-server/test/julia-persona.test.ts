@@ -705,4 +705,209 @@ ok(
   !fichaFria({ instagram: "@odontovida" }).includes("NÃO SABEMOS"),
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 36 — o que a conversa do Dr. Fernando (5 profissionais, medo de golpe)
+// revelou. Ela não sabia o CNPJ — que está no rodapé da própria landing de onde
+// ele veio —, prometeu contrato três vezes sem entregar, e recomendou o plano
+// MAIS CARO depois de ele reclamar do preço três vezes.
+//
+// Dados da empresa conferidos na fonte real (bundle de produção): legalName
+// "CAPTACLIN TECNOLOGIA LTDA", taxId "68.395.596/0001-00", Av. Cristóvão
+// Colombo, 2144, Sala 408 — Floresta, Porto Alegre/RS. O teto de profissionais
+// também: inclusos + extras dá 5 em TODO plano (essencial 1+4, pro 2+3).
+// E a conta fechada: o Essencial ganha do Pro por preço em TODA linha —
+// R$103 na promoção, R$3 depois dela. O Pro só se justifica por recurso.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 36 — ela sabe quem somos (CNPJ, razão social, endereço)");
+ok("a seção QUEM SOMOS existe", JULIA_SYSTEM_PROMPT.includes("## QUEM SOMOS"));
+ok("razão social", JULIA_SYSTEM_PROMPT.includes("CAPTACLIN TECNOLOGIA LTDA"));
+ok("CNPJ", JULIA_SYSTEM_PROMPT.includes("68.395.596/0001-00"));
+ok(
+  "endereço completo",
+  JULIA_SYSTEM_PROMPT.includes("Av. Cristóvão Colombo, 2144, Sala 408") &&
+    JULIA_SYSTEM_PROMPT.includes("Porto Alegre / RS"),
+);
+ok("e-mail de contato", JULIA_SYSTEM_PROMPT.includes("contato@captaclin.com.br"));
+ok(
+  "vem antes da MAIOR ARMA (é resposta de medo, não de venda)",
+  JULIA_SYSTEM_PROMPT.indexOf("## QUEM SOMOS") <
+    JULIA_SYSTEM_PROMPT.indexOf("## SUA MAIOR ARMA"),
+);
+ok(
+  "manda responder na hora, sem hesitar",
+  JULIA_SYSTEM_PROMPT.includes("Responda na hora, com os dados na mão"),
+);
+ok(
+  "desconfiança é tratada como sinal de dentista sério",
+  JULIA_SYSTEM_PROMPT.includes("Desconfiança é sinal de dentista sério"),
+);
+
+secao("Rodada 36 — contrato e termo apontam para o cadastro, sem prometer envio");
+ok(
+  "a resposta pronta aponta para o cadastro",
+  JULIA_SYSTEM_PROMPT.includes("você lê os dois na hora do") &&
+    JULIA_SYSTEM_PROMPT.includes("cadastro, antes de aceitar qualquer coisa"),
+);
+ok(
+  "ela não envia documento (função comercial, não suporte)",
+  JULIA_SYSTEM_PROMPT.includes("você NÃO envia documento"),
+);
+ok(
+  "se ele insistir em ver antes: handoff de verdade, não promessa dupla",
+  JULIA_SYSTEM_PROMPT.includes("nunca prometa duas vezes sem acionar ninguém"),
+);
+ok(
+  "o erro da conversa real está marcado (mandar o site no lugar do contrato)",
+  JULIA_SYSTEM_PROMPT.includes('NUNCA diga "vou te mandar o link" e mande o site'),
+);
+ok(
+  "a LGPD não promete mais mandar o termo",
+  !JULIA_SYSTEM_PROMPT.includes("Quer que eu te mande o termo"),
+);
+ok(
+  "a regra final não manda mais 'oferecer o documento'",
+  !JULIA_SYSTEM_PROMPT.includes("ofereça o documento"),
+);
+
+secao("Rodada 36 — a conta certa por número de profissionais");
+ok(
+  "a regra das duas contas existe",
+  JULIA_SYSTEM_PROMPT.includes("⚠️ SEMPRE FAÇA AS DUAS CONTAS ANTES DE RECOMENDAR"),
+);
+for (const linha of [
+  "2 profissionais → Essencial R$394  |  Pro R$497",
+  "3 profissionais → Essencial R$491  |  Pro R$594",
+  "4 profissionais → Essencial R$588  |  Pro R$691",
+  "5 profissionais → Essencial R$685  |  Pro R$788",
+]) {
+  ok(`tabela: ${linha.slice(0, 18)}…`, JULIA_SYSTEM_PROMPT.includes(linha));
+}
+ok(
+  "o Pro se justifica por recursos, não por preço",
+  JULIA_SYSTEM_PROMPT.includes("O Pro NÃO se justifica por preço") &&
+    JULIA_SYSTEM_PROMPT.includes("se justifica pelos recursos"),
+);
+ok(
+  'a mentira "muitas vezes o Pro sai mais barato" morreu',
+  !JULIA_SYSTEM_PROMPT.includes("o Pro sai mais barato"),
+);
+ok(
+  "a âncora alta está proibida (foi ela que criou o 'tudo isso?')",
+  JULIA_SYSTEM_PROMPT.includes("E CUIDADO COM A ÂNCORA") &&
+    JULIA_SYSTEM_PROMPT.includes("não jogue o total mais alto na primeira frase"),
+);
+
+secao("Rodada 36 — o teto absoluto de 5 profissionais");
+ok(
+  "a regra existe, em qualquer plano",
+  JULIA_SYSTEM_PROMPT.includes("⚠️ O MÁXIMO É 5 PROFISSIONAIS, EM QUALQUER PLANO"),
+);
+ok(
+  "as duas somas estão fechadas",
+  JULIA_SYSTEM_PROMPT.includes("titular + até 4 extras = 5 no total") &&
+    JULIA_SYSTEM_PROMPT.includes("2 inclusos + até 3 extras = 5 no total"),
+);
+ok(
+  "diz com todas as letras que não existe plano para 6 ou mais",
+  JULIA_SYSTEM_PROMPT.includes("NÃO EXISTE plano para 6 ou mais"),
+);
+{
+  // Rede de proteção: nenhuma linha do prompt pode sugerir que algum plano
+  // cobre 6 ou mais profissionais. As menções a "6 ou mais"/"mais que isso" só
+  // podem existir dentro da própria proibição.
+  const linhas = JULIA_SYSTEM_PROMPT.split("\n");
+  const sugerem = linhas.filter((l, i) => {
+    if (!/\b([6-9]|\d{2,})\s*(profissionais|agendas|extras)/i.test(l)) return false;
+    const janela = [linhas[i - 2] ?? "", linhas[i - 1] ?? "", l].join("\n");
+    return !/NÃO EXISTE|passariam disso|atende até 5/i.test(janela);
+  });
+  ok("nenhuma linha sugere plano para 6 ou mais", sugerem.length === 0, sugerem.join(" | "));
+}
+
+secao("Rodada 36 — quando ele diz que está caro: a comparação com contratar gente");
+ok(
+  "a seção existe",
+  JULIA_SYSTEM_PROMPT.includes("## QUANDO ELE DIZ QUE ESTÁ CARO"),
+);
+ok(
+  "os números do custo real estão lá (salário e encargos)",
+  JULIA_SYSTEM_PROMPT.includes("R$1.800 a") &&
+    JULIA_SYSTEM_PROMPT.includes("R$1.900") &&
+    JULIA_SYSTEM_PROMPT.includes("passa de R$2.700 por mês"),
+);
+ok(
+  "os encargos são nomeados (é o que o dentista não conta de cabeça)",
+  JULIA_SYSTEM_PROMPT.includes("férias, 13º, FGTS e INSS"),
+);
+ok(
+  "proíbe dizer que substitui a secretária",
+  JULIA_SYSTEM_PROMPT.includes("Nunca diga que substitui a secretária"),
+);
+ok(
+  "os números vão como aproximação, nunca exatos",
+  JULIA_SYSTEM_PROMPT.includes('Use os números como "cerca de", "por volta de"'),
+);
+ok(
+  "só entra quando ele reclamar do preço",
+  JULIA_SYSTEM_PROMPT.includes("Só use quando ele disser que está caro"),
+);
+ok(
+  "depois da comparação, silêncio",
+  JULIA_SYSTEM_PROMPT.includes("Depois da comparação, PARE e deixe ele reagir"),
+);
+
+secao("Rodada 36 — os dois diferenciais que ela nunca citava");
+ok(
+  "a seção do que só o CaptaClin faz existe",
+  JULIA_SYSTEM_PROMPT.includes("## O QUE SÓ O CAPTACLIN FAZ"),
+);
+ok(
+  "vídeo/áudio de boas-vindas, com o alcance certo (Essencial e Pro)",
+  JULIA_SYSTEM_PROMPT.includes("VÍDEO OU ÁUDIO DE BOAS-VINDAS DO PRÓPRIO DENTISTA (Essencial e Pro)"),
+);
+ok(
+  // Conferido na fonte: o site diz "no minuto em que a consulta é confirmada,
+  // seu paciente recebe as boas-vindas". Não é na chegada do paciente — e
+  // prometer o momento errado é a classe de erro destas rodadas.
+  "o vídeo dispara na confirmação da consulta, como a fonte diz",
+  JULIA_SYSTEM_PROMPT.includes("Na hora em que o paciente confirma a consulta"),
+);
+ok(
+  "portfólio automático, com o alcance certo (Essencial e Pro)",
+  JULIA_SYSTEM_PROMPT.includes("PORTFÓLIO ENVIADO AUTOMATICAMENTE (Essencial e Pro)"),
+);
+ok(
+  "o enquadramento é conexão/empatia/autoridade",
+  JULIA_SYSTEM_PROMPT.includes("CONEXÃO, EMPATIA e") &&
+    JULIA_SYSTEM_PROMPT.includes("AUTORIDADE do profissional"),
+);
+ok(
+  "e não é para despejar tudo de uma vez",
+  JULIA_SYSTEM_PROMPT.includes("Não jogue tudo de uma vez"),
+);
+
+secao("Rodada 36 — CRC × secretária: papéis diferentes, complementares");
+ok(
+  "a seção existe",
+  JULIA_SYSTEM_PROMPT.includes("## VOCÊ NÃO É UMA SECRETÁRIA. VOCÊ É UMA CRC."),
+);
+ok(
+  "define os dois papéis",
+  JULIA_SYSTEM_PROMPT.includes("SECRETÁRIA: parte administrativa e operacional") &&
+    JULIA_SYSTEM_PROMPT.includes("CRC (Consultora de Relacionamento com o Cliente)"),
+);
+ok(
+  "um não substitui o outro",
+  JULIA_SYSTEM_PROMPT.includes("Os dois papéis são complementares — um não substitui o outro"),
+);
+ok(
+  "a frase que separa robô de CRC",
+  JULIA_SYSTEM_PROMPT.includes("Robô responde pergunta; CRC conduz o"),
+);
+ok(
+  "a quebra de preço também usa a carta da CRC",
+  JULIA_SYSTEM_PROMPT.includes("Uma CRC boa custa bem mais que uma recepcionista"),
+);
+
 fim();

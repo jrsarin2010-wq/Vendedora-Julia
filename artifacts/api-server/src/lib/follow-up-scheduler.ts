@@ -1,10 +1,14 @@
 import { db } from "@workspace/db";
 import { followUpsTable, leadsTable, leadMessagesTable } from "@workspace/db";
-import { eq, lte, and } from "drizzle-orm";
+import { eq, lte, and, desc } from "drizzle-orm";
 import { sendWhatsAppMessage } from "./integrations";
 import { logger } from "./logger";
 import { saudacao } from "./tratamento";
-import { verificarSemResposta } from "./atencao";
+import {
+  verificarSemResposta,
+  marcarAtencao,
+  pareceMensagemComPromessa,
+} from "./atencao";
 import { lerConfig, podeDispararAgora, EXPLICACAO_BLOQUEIO } from "./outreach";
 import { ABORDAGEM_TOQUES, ABORDAGEM_DELAYS_HOURS } from "../julia-persona";
 
@@ -114,6 +118,58 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
           "Lead pausado (humano assumiu) — follow-up adiado, segue pendente",
         );
         continue;
+      }
+
+      // RODADA 36 — o toque 1 de conversa não sai por cima de pendência NOSSA.
+      //
+      // O caso real: a Júlia prometeu o contrato, ninguém mandou, e uma hora
+      // depois o toque 1 chegou com "a gente começou a conversar e acabou
+      // ficando pela metade". A conversa não ficou pela metade — ficou com uma
+      // promessa dela em aberto. Do lado do dentista, o toque soa como ela
+      // ignorando o que ele pediu.
+      //
+      // Por isso, antes do toque 1: se o lead já está marcado para atenção
+      // (central de vigia, Rodada 33), ou se a ÚLTIMA mensagem da conversa é
+      // nossa e contém uma promessa ("vou pedir pra", "deixa eu confirmar"...),
+      // o toque é CANCELADO — não adiado — e o lead vai para a central. É caso
+      // de gente entregar o prometido, não de robô puxar assunto. Os toques
+      // seguintes (24h em diante) ficam: se ninguém resolveu até lá, silêncio
+      // eterno seria pior.
+      if (followUp.kind === "conversa" && followUp.touchNumber === 1) {
+        let motivo: string | null = null;
+
+        if (lead.atencao) {
+          motivo = `lead já marcado para atenção (${lead.atencao})`;
+        } else {
+          const ultima = (
+            await db
+              .select()
+              .from(leadMessagesTable)
+              .where(eq(leadMessagesTable.leadId, lead.id))
+              .orderBy(desc(leadMessagesTable.createdAt))
+              .limit(1)
+          )[0];
+          const promessa =
+            ultima && ultima.direction === "outbound"
+              ? pareceMensagemComPromessa(ultima.content)
+              : null;
+          if (promessa) {
+            motivo = `última mensagem é nossa e promete algo ("${promessa}")`;
+            await marcarAtencao(lead, "julia_estranha", ultima.content);
+          }
+        }
+
+        if (motivo) {
+          await db
+            .update(followUpsTable)
+            .set({ status: "cancelled" })
+            .where(eq(followUpsTable.id, followUp.id));
+          logger.info(
+            { leadId: lead.id, touchNumber: followUp.touchNumber, motivo },
+            "Toque 1 suprimido: promessa pendente é caso de gente, não de robô",
+          );
+          continue;
+        }
       }
 
       // Toque de ABORDAGEM: mensagem fria, para quem nunca respondeu. Só sai na

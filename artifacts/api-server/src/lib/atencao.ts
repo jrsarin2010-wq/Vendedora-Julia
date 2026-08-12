@@ -131,6 +131,44 @@ export function pareceIrritado(texto: string): string | null {
   return acharSinal(texto, SINAIS_DE_IRRITACAO);
 }
 
+/**
+ * RODADA 36 — a Júlia prometeu e a conversa parou ali.
+ *
+ * O caso real: o dentista pediu o contrato, ela disse "vou pedir pra alguém do
+ * time te mandar", ninguém mandou — e uma hora depois o follow-up automático
+ * chegou dizendo que a conversa "ficou pela metade". Do lado dele: pediu
+ * documento, não recebeu, e ainda levou um "vamos continuar?".
+ *
+ * Estes são os jeitos que a PRÓPRIA JÚLIA promete coisa (o prompt ensina vários
+ * deles, como o "deixa eu confirmar certinho e te falo" do SE NÃO SOUBER).
+ * Quando a última mensagem da conversa é dela e contém um destes, o toque 1
+ * não é caso de robô — é caso de gente entregar o que foi prometido.
+ */
+export const SINAIS_DE_PROMESSA = [
+  "vou te mandar",
+  "vou mandar",
+  "vou te enviar",
+  "vou enviar",
+  "vou pedir pra",
+  "vou pedir para",
+  "vou confirmar",
+  "deixa eu confirmar",
+  "vou verificar",
+  "deixa eu verificar",
+  "vou checar",
+  "te falo",
+  "te aviso",
+  "te retorno",
+  "já te mando",
+  "vou providenciar",
+  "tô providenciando",
+  "estou providenciando",
+];
+
+export function pareceMensagemComPromessa(texto: string): string | null {
+  return acharSinal(texto, SINAIS_DE_PROMESSA);
+}
+
 export function pareceConfuso(texto: string): string | null {
   return acharSinal(texto, SINAIS_DE_CONFUSAO);
 }
