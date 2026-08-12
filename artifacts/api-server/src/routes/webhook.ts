@@ -56,15 +56,12 @@ import {
   statusDaFaixa,
   CADENCIA_POR_FAIXA,
 } from "../lib/temperatura";
+import { REPLY_MODEL, EXTRACTION_MODEL } from "../lib/modelos";
 
 const router: IRouter = Router();
 
-// Modelos de IA da Júlia (configuráveis por variável de ambiente, pra trocar
-// fácil no futuro sem mexer no código):
-//  - resposta de venda: rápido e econômico (GPT-5.4 Mini)
-//  - analista de dor/objeção: tarefa simples, o mais barato (GPT-5.4 Nano)
-const REPLY_MODEL = process.env.JULIA_REPLY_MODEL ?? "gpt-5.4-mini";
-const EXTRACTION_MODEL = process.env.JULIA_EXTRACTION_MODEL ?? "gpt-5.4-nano";
+// Modelos de IA da Júlia: nomes e defaults moram em lib/modelos.ts (fonte
+// única — a sonda de boot confere os mesmos nomes que este arquivo usa).
 
 // Etapas do funil, na ordem em que uma negociação avança. Serve para a regra
 // MONOTÔNICA abaixo: o extrator sugere a etapa, mas ela só pode ir para frente.

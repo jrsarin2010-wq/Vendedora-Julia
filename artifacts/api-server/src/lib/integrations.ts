@@ -363,6 +363,25 @@ async function enviarAoTelegram(text: string, contexto: string): Promise<void> {
   }
 }
 
+/**
+ * Alerta da sonda de boot (lib/sonda-modelo.ts): um modelo configurado não
+ * respondeu. Sem este alerta, a falha seria descoberta pelo primeiro dentista
+ * a escrever — e ele descobriria com silêncio.
+ */
+export async function sendTelegramSondaModelo(
+  modelo: string,
+  papeis: string,
+  detalhe: string,
+): Promise<void> {
+  const linhas = [
+    `🔴 *Modelo de IA não responde — a Júlia pode estar muda*`,
+    `Modelo: \`${modelo}\` (papel: ${papeis})`,
+    `Erro: ${detalhe}`,
+    `Confira \`JULIA_REPLY_MODEL\` / \`JULIA_EXTRACTION_MODEL\` / \`JULIA_OUTREACH_MODEL\` no Railway — voltar ao modelo anterior é imediato, sem deploy de código.`,
+  ];
+  await enviarAoTelegram(linhas.join("\n"), "sonda-modelo");
+}
+
 export async function sendTelegramAlert(alert: HandoffAlert): Promise<void> {
   const { lead, lastMessage } = alert;
 

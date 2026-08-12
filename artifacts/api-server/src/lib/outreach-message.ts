@@ -10,8 +10,9 @@
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { JULIA_OUTREACH_PROMPT, buildOutreachBriefing } from "../julia-persona";
 import { comRepique, esperasDeRepique } from "./repique";
-
-const OUTREACH_MODEL = process.env.JULIA_OUTREACH_MODEL ?? "gpt-5.4-mini";
+// Nome e default do modelo moram em lib/modelos.ts (fonte única, conferida
+// pela sonda de boot).
+import { OUTREACH_MODEL } from "./modelos";
 
 export interface DadosDoLead {
   name: string | null;

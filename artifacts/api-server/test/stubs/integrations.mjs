@@ -22,6 +22,8 @@ export const wa = {
   pausas: [],
   /** Alertas da central de vigia (Rodada 33). */
   atencoes: [],
+  /** Alertas da sonda de modelo (boot). */
+  sondas: [],
   /**
    * Limpa só o que foi REGISTRADO. Os flags de comportamento (entrega, media)
    * são configurados pelo teste e não devem ser zerados entre chamadas.
@@ -31,6 +33,7 @@ export const wa = {
     this.alertas = [];
     this.pausas = [];
     this.atencoes = [];
+    this.sondas = [];
   },
 };
 
@@ -53,6 +56,9 @@ export async function sendTelegramPausa(alert) {
 }
 export async function sendTelegramAtencao(alert) {
   wa.atencoes.push(alert);
+}
+export async function sendTelegramSondaModelo(modelo, papeis, detalhe) {
+  wa.sondas.push({ modelo, papeis, detalhe });
 }
 export function linkDoWhatsApp(phone) {
   return `https://wa.me/${String(phone).replace(/\D/g, "")}`;

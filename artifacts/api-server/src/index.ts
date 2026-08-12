@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { startFollowUpScheduler } from "./lib/follow-up-scheduler";
 import { startOutreachScheduler } from "./lib/outreach-scheduler";
+import { sondarModelosNoBoot } from "./lib/sonda-modelo";
 
 const rawPort = process.env["PORT"];
 
@@ -24,6 +25,11 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  // A primeira coisa depois de abrir a porta: conferir que os modelos
+  // configurados existem. Nome de modelo errado não derruba deploy nenhum —
+  // derruba a primeira conversa, em silêncio (ver lib/sonda-modelo.ts).
+  // `void` de propósito: a sonda avisa, nunca atrasa nem derruba o boot.
+  void sondarModelosNoBoot();
   startFollowUpScheduler();
   // Começa desligado: só dispara com OUTREACH_ENABLED=true no ambiente.
   startOutreachScheduler();
