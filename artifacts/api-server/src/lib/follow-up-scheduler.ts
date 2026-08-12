@@ -10,13 +10,29 @@ import {
   pareceMensagemComPromessa,
 } from "./atencao";
 import { lerConfig, podeDispararAgora, EXPLICACAO_BLOQUEIO } from "./outreach";
-import { ABORDAGEM_TOQUES, ABORDAGEM_DELAYS_HOURS } from "../julia-persona";
+import {
+  ABORDAGEM_TOQUES,
+  ABORDAGEM_DELAYS_HOURS,
+  TOQUES_REATIVACAO,
+  REATIVACAO_DELAYS_DIAS,
+} from "../julia-persona";
+import {
+  LIMITE_REATIVACOES_POR_DIA,
+  EXPLICACAO_FORA,
+  elegivelParaReativacao,
+  decidirToqueDeReativacao,
+  lerNovidade,
+  contarReativacoesDeHoje,
+} from "./reativacao";
 
 /**
- * Um toque de ABORDAGEM pode sair NESTE instante?
+ * Um toque de ABORDAGEM (ou de REATIVAÇÃO) pode sair NESTE instante?
  *
- * Ele não é follow-up de conversa: quem recebe nunca respondeu nada, então é
- * mensagem fria e vale a MESMA janela da prospecção — inclusive a trava mestra.
+ * A abordagem não é follow-up de conversa: quem recebe nunca respondeu nada,
+ * então é mensagem fria e vale a MESMA janela da prospecção — inclusive a
+ * trava mestra. A reativação pega a mesma regra por outro motivo: quem está
+ * nela ficou 30+ dias sem notícia nossa, e "passei pra te contar uma novidade"
+ * no domingo à noite tem o mesmo cheiro de robô que a mensagem fria.
  * Se o Dr. Sarinho desligar OUTREACH_ENABLED porque as entregas começaram a
  * falhar, os toques já agendados precisam parar junto; senão a trava de
  * emergência protege metade do problema e ele descobre isso do pior jeito.
@@ -58,6 +74,14 @@ function toqueFrioPodeSair(agora: Date): { pode: boolean; motivo?: string } {
 const TOQUES_FRIOS_POR_CICLO = 1;
 
 /**
+ * Reativações por rodada: UMA, pelo mesmo motivo dos toques frios. Com o
+ * agendador rodando a cada 5 minutos, é isso que espalha os envios pela janela
+ * do dia com intervalo irregular — dez leads vencendo juntos no dia +30 sairiam
+ * em bloco, e reativação em bloco é assinatura de robô.
+ */
+const REATIVACOES_POR_CICLO = 1;
+
+/**
  * Uma passada do agendador: pega os follow-ups vencidos e manda os que devem
  * sair. Exportada (como `rodarCicloDeAbordagem`, do outreach) para o teste
  * conseguir exercitar a decisão sem depender de `setInterval`.
@@ -70,6 +94,11 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
   try {
     const now = agora;
     let toquesFriosNesteCiclo = 0;
+    let reativacoesNesteCiclo = 0;
+    // Contado no banco (não em memória) para o limite diário sobreviver a
+    // restart — mesma decisão do agendador de abordagem. Preguiçoso: só
+    // consulta quando uma reativação de fato vence neste ciclo.
+    let reativacoesDeHoje: number | null = null;
 
     // Find pending follow-ups that are due
     const due = await db
@@ -172,6 +201,85 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
         }
       }
 
+      // TOQUE DE REATIVAÇÃO (Rodada 41): a fila longa, +30/+60/+90 dias depois
+      // do fim da cadência de conversa. O texto é montado AQUI, na hora do
+      // envio, porque a dor anotada e a novidade configurada 60 dias atrás
+      // podem não ser as de hoje.
+      const ehReativacao = followUp.kind === "reativacao";
+      let mensagemDeReativacao: string | null = null;
+      if (ehReativacao) {
+        if (reativacoesNesteCiclo >= REATIVACOES_POR_CICLO) continue;
+
+        // Mesma janela, dias úteis e trava mestra da prospecção. Fora dela o
+        // toque ADIA (segue pendente) — inclusive com OUTREACH_ENABLED
+        // desligado: é a mesma trava de emergência, e emergência para a fila
+        // sem destruí-la.
+        const janela = toqueFrioPodeSair(now);
+        if (!janela.pode) {
+          logger.debug(
+            { leadId: lead.id, touchNumber: followUp.touchNumber, motivo: janela.motivo },
+            `Reativação adiada: ${
+              EXPLICACAO_BLOQUEIO[janela.motivo as keyof typeof EXPLICACAO_BLOQUEIO] ??
+              janela.motivo
+            }`,
+          );
+          continue;
+        }
+
+        if (reativacoesDeHoje === null) {
+          const enviadas = await db
+            .select()
+            .from(followUpsTable)
+            .where(
+              and(
+                eq(followUpsTable.kind, "reativacao"),
+                eq(followUpsTable.status, "sent"),
+              ),
+            );
+          reativacoesDeHoje = contarReativacoesDeHoje(
+            enviadas.map((f) => f.sentAt),
+            now,
+          );
+        }
+        if (reativacoesDeHoje >= LIMITE_REATIVACOES_POR_DIA) {
+          logger.info(
+            { leadId: lead.id, hoje: reativacoesDeHoje },
+            "Limite diário de reativações atingido — fica para amanhã",
+          );
+          continue;
+        }
+
+        // Em 30+ dias muita coisa muda: virou cliente, pediu para parar, caiu
+        // na vigia, ou é o toque 2 sem novidade configurada. Nesses casos o
+        // toque MORRE (cancelled) — quem saiu da elegibilidade não volta a ela
+        // esperando o próximo ciclo.
+        const decisao = decidirToqueDeReativacao(
+          followUp.touchNumber,
+          lead,
+          lerNovidade(),
+        );
+        if (!decisao.envia) {
+          if (decisao.cancela) {
+            await db
+              .update(followUpsTable)
+              .set({ status: "cancelled" })
+              .where(eq(followUpsTable.id, followUp.id));
+          }
+          logger.info(
+            { leadId: lead.id, touchNumber: followUp.touchNumber, motivo: decisao.motivo },
+            "Toque de reativação não sai",
+          );
+          continue;
+        }
+
+        mensagemDeReativacao =
+          followUp.touchNumber === 1
+            ? TOQUES_REATIVACAO[1](lead.name, lead.painPoints)
+            : followUp.touchNumber === 2
+              ? TOQUES_REATIVACAO[2](lead.name, lerNovidade())
+              : TOQUES_REATIVACAO[3](lead.name);
+      }
+
       // Toque de ABORDAGEM: mensagem fria, para quem nunca respondeu. Só sai na
       // janela da prospecção e com a trava mestra ligada; fora disso continua
       // "pending" e sai na primeira rodada dentro da janela — mesmo tratamento
@@ -205,6 +313,7 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       // cadência de abordagem existe para corrigir — a rede de segurança não
       // pode ser a porta dos fundos por onde ele volta.
       const message =
+        mensagemDeReativacao ??
         followUp.messageTemplate ??
         (ehAbordagem
           ? ABORDAGEM_TOQUES[followUp.touchNumber >= 2 ? 2 : 1](lead.name)
@@ -231,11 +340,63 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
         messageType: "text",
       });
 
-      // Mark as sent
+      // Mark as sent. O carimbo de quando saiu alimenta o limite diário da
+      // reativação — e não custa nada gravar para os outros tipos também.
       await db
         .update(followUpsTable)
-        .set({ status: "sent" })
+        .set({ status: "sent", sentAt: new Date() })
         .where(eq(followUpsTable.id, followUp.id));
+
+      if (ehReativacao) {
+        reativacoesNesteCiclo++;
+        if (reativacoesDeHoje !== null) reativacoesDeHoje++;
+      }
+
+      // FIM DA CADÊNCIA DE CONVERSA → arma a fila longa (Rodada 41).
+      //
+      // O gatilho é o último toque de conversa sair sem sobrar nada pendente —
+      // não um número fixo de toque, porque a cadência tem tamanho variável
+      // (2 a 4 toques, conforme a temperatura). Se o dentista responder
+      // qualquer coisa depois, o webhook cancela esta fila junto com todo
+      // pendente e arma uma cadência de conversa nova — e quando ELA acabar,
+      // a reativação é rearmada daqui, contando do zero.
+      if (followUp.kind === "conversa") {
+        const restantes = await db
+          .select()
+          .from(followUpsTable)
+          .where(
+            and(
+              eq(followUpsTable.leadId, lead.id),
+              eq(followUpsTable.status, "pending"),
+            ),
+          );
+        if (restantes.length === 0) {
+          const { elegivel, motivo } = elegivelParaReativacao(lead);
+          if (elegivel) {
+            await db.insert(followUpsTable).values(
+              REATIVACAO_DELAYS_DIAS.map((dias, i) => ({
+                leadId: lead.id,
+                scheduledAt: new Date(now.getTime() + dias * 24 * 60 * 60 * 1000),
+                touchNumber: i + 1,
+                kind: "reativacao" as const,
+                // Sem template de propósito: o texto nasce na hora do envio,
+                // com a dor e a novidade daquele dia.
+                messageTemplate: null,
+                status: "pending" as const,
+              })),
+            );
+            logger.info(
+              { leadId: lead.id, dias: REATIVACAO_DELAYS_DIAS },
+              "Cadência de conversa esgotada — lead entrou na fila de reativação",
+            );
+          } else if (motivo) {
+            logger.info(
+              { leadId: lead.id, motivo },
+              `Fim da cadência sem reativação: ${EXPLICACAO_FORA[motivo]}`,
+            );
+          }
+        }
+      }
 
       if (ehAbordagem) {
         toquesFriosNesteCiclo++;

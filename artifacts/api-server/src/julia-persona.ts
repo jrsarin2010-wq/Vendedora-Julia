@@ -1230,6 +1230,62 @@ export const ABORDAGEM_TOQUES = {
 export const ABORDAGEM_DELAYS_HOURS = [3 * 24, 10 * 24];
 
 /**
+ * REATIVAÇÃO DE LONGO PRAZO (Rodada 41) — os três toques da fila longa, para
+ * quem esquentou e não fechou. Em venda B2B muita gente compra no segundo ou
+ * terceiro mês, quando o problema aperta — hoje todo dentista que não fecha em
+ * uma semana está morto no funil.
+ *
+ * Reativação só funciona com MOTIVO NOVO: voltar depois de 30 dias dizendo a
+ * mesma coisa é insistência, não remarketing. Por isso cada toque tem um gancho
+ * próprio (a dor dele, a novidade do produto, a despedida) — e o toque 2 nem
+ * dispara sem novidade configurada.
+ *
+ * A saída fácil em cada toque não é gentileza — é proteção do número. Dar o
+ * opt-out explícito transforma uma denúncia em um "não, obrigado". Denúncia
+ * derruba o número inteiro; opt-out custa um lead.
+ *
+ * Sem emoji em nenhum dos três, de propósito (regra da Rodada 38: emoji em
+ * mensagem automática é assinatura de robô — e aqui ela volta depois de um mês
+ * de silêncio, o pior momento para parecer disparo).
+ */
+export const TOQUES_REATIVACAO = {
+  // +30 dias — o gancho é a DOR dele. Sem dor anotada, o gancho vira a
+  // conversa que existiu (é verdade para todo mundo que entra na reativação:
+  // só entra quem respondeu e esquentou).
+  1: (leadName: string | null, pain: string | null) =>
+    abrir(
+      leadName,
+      `faz um tempo que a gente conversou. ${
+        dor(pain)
+          ? `Você tinha me falado sobre ${dor(pain)}. Isso melhorou aí, ou continua do mesmo jeito?`
+          : `Na época o WhatsApp da clínica era uma preocupação. Isso melhorou aí, ou continua do mesmo jeito?`
+      } Se não fizer mais sentido, é só me dizer que eu não te procuro mais.`,
+    ),
+
+  // +60 dias — o gancho é o que MUDOU no produto. A novidade vem de
+  // REATIVACAO_NOVIDADE (ver lib/reativacao.ts); vazia, o toque não dispara.
+  2: (leadName: string | null, novidade: string) =>
+    abrir(
+      leadName,
+      `passando pra te contar uma novidade: ${novidade}. Lembrei de você por causa daquilo que a gente conversou. E se preferir que eu não te procure mais, é só me dizer.`,
+    ),
+
+  // +90 dias — o último, e é uma despedida honesta.
+  3: (leadName: string | null) =>
+    abrir(
+      leadName,
+      `essa é a última vez que eu te procuro, prometo. Se um dia o WhatsApp da clínica virar um problema, você sabe onde me achar: https://www.captaclin.com.br — sucesso com a clínica!`,
+    ),
+};
+
+/**
+ * Dias contados a partir do FIM da cadência de conversa (o último toque dela).
+ * O tamanho da lista é o teto: crescer daqui é decidir procurar uma quarta vez
+ * quem não respondeu três reativações.
+ */
+export const REATIVACAO_DELAYS_DIAS = [30, 60, 90];
+
+/**
  * PROSPECÇÃO ATIVA — a PRIMEIRA mensagem, para um dentista que nunca falou
  * com a Júlia. Prompt separado do de conversa de propósito: aqui o risco é
  * outro. Ele não pediu esse contato, e uma mensagem com cara de spam faz ele

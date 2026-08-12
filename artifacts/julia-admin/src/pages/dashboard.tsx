@@ -9,9 +9,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { rotuloEtapa } from "@/lib/rotulos";
 import { listarAtencao, resolverAtencao, type ItemDeAtencao } from "@/lib/atencao-api";
 import { listarDuvidasDoSite } from "@/lib/duvidas-api";
-import { listarTemperatura } from "@/lib/temperatura-api";
+import { listarTemperatura, listarReativacao } from "@/lib/temperatura-api";
 import { FAIXA_PT, type Faixa } from "@/lib/rotulos";
-import { Flame } from "lucide-react";
+import { Flame, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
@@ -193,8 +193,82 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      <EmReativacao />
+
       <LandingNaoResponde />
     </div>
+  );
+}
+
+/**
+ * EM REATIVAÇÃO (Rodada 41) — quem está na fila longa (+30/+60/+90 dias).
+ *
+ * Leitura de acompanhamento, não de ação: estes leads esquentaram, não
+ * fecharam, e a Júlia vai voltar a falar com eles sozinha. A lista existe para
+ * o vazio não ser confundido com "ninguém sobrou" — dentista que some do funil
+ * era exatamente o buraco desta rodada.
+ */
+function EmReativacao() {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["reativacao"],
+    queryFn: listarReativacao,
+    refetchInterval: 60_000,
+  });
+
+  if (isLoading) return <Skeleton className="h-24 w-full rounded-md" />;
+  if (isError) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Não consegui carregar a fila de reativação.
+      </p>
+    );
+  }
+
+  const itens = data?.itens ?? [];
+
+  return (
+    <Card className="shadow-sm border-border" data-testid="em-reativacao">
+      <CardHeader className="border-b border-border/50 pb-4">
+        <CardTitle className="text-base font-semibold font-mono flex items-center gap-2">
+          <History size={16} className="text-primary" />
+          Em reativação
+          {itens.length > 0 && <Badge variant="secondary" className="ml-1">{itens.length}</Badge>}
+        </CardTitle>
+        <p className="text-xs text-muted-foreground pt-1">
+          Esquentaram, não fecharam, e a Júlia volta a procurá-los em +30, +60 e
+          +90 dias — com saída fácil em cada toque.
+        </p>
+      </CardHeader>
+      <CardContent className="p-0">
+        {itens.length === 0 ? (
+          <div className="p-6 text-center text-muted-foreground text-sm">
+            Ninguém na fila longa agora.
+          </div>
+        ) : (
+          <div className="divide-y divide-border/50 max-h-[300px] overflow-y-auto">
+            {itens.map((item) => (
+              <Link
+                key={item.id}
+                href={`/leads/${item.id}`}
+                className="flex items-center justify-between gap-3 p-4 hover:bg-muted/50 transition-colors"
+                data-testid={`reativacao-item-${item.id}`}
+              >
+                <span className="text-sm font-medium truncate">
+                  {item.name || item.phone}
+                </span>
+                <span className="text-xs text-muted-foreground font-mono shrink-0">
+                  toque {item.proximoToque} em{" "}
+                  {new Date(item.agendadoPara).toLocaleDateString("pt-BR", {
+                    day: "2-digit",
+                    month: "short",
+                  })}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

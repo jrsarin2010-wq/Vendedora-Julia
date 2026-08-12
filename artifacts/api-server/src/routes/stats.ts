@@ -5,7 +5,7 @@ import {
   leadMessagesTable,
   followUpsTable,
 } from "@workspace/db";
-import { eq, sql, desc, isNotNull } from "drizzle-orm";
+import { eq, and, sql, desc, isNotNull, inArray } from "drizzle-orm";
 import { GetRecentActivityQueryParams } from "@workspace/api-zod";
 import { contarAssuntos } from "../lib/duvidas-do-site";
 import { faixaDaTemperatura, type Faixa } from "../lib/temperatura";
@@ -146,6 +146,61 @@ router.get("/stats/temperatura", async (req, res) => {
     res.json(contagem);
   } catch (err) {
     req.log.error({ err }, "Failed to get temperature stats");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/stats/reativacao — quem está na fila longa (Rodada 41).
+ *
+ * Um lead aparece uma vez, com o PRÓXIMO toque dele (o pendente mais cedo).
+ * Fora do contrato OpenAPI, como as outras telas de operação.
+ */
+router.get("/stats/reativacao", async (req, res) => {
+  try {
+    const pendentes = await db
+      .select()
+      .from(followUpsTable)
+      .where(
+        and(
+          eq(followUpsTable.kind, "reativacao"),
+          eq(followUpsTable.status, "pending"),
+        ),
+      );
+
+    // O próximo toque de cada lead = o pendente com o menor scheduledAt.
+    const proximoPorLead = new Map<number, { touchNumber: number; scheduledAt: Date }>();
+    for (const f of pendentes) {
+      const atual = proximoPorLead.get(f.leadId);
+      if (!atual || new Date(f.scheduledAt) < new Date(atual.scheduledAt)) {
+        proximoPorLead.set(f.leadId, {
+          touchNumber: f.touchNumber,
+          scheduledAt: f.scheduledAt,
+        });
+      }
+    }
+
+    const ids = [...proximoPorLead.keys()];
+    const leads = ids.length
+      ? await db.select().from(leadsTable).where(inArray(leadsTable.id, ids))
+      : [];
+
+    const itens = leads
+      .map((l) => {
+        const proximo = proximoPorLead.get(l.id)!;
+        return {
+          id: l.id,
+          name: l.name,
+          phone: l.phone,
+          proximoToque: proximo.touchNumber,
+          agendadoPara: new Date(proximo.scheduledAt).toISOString(),
+        };
+      })
+      .sort((a, b) => a.agendadoPara.localeCompare(b.agendadoPara));
+
+    res.json({ itens, total: itens.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get reactivation queue");
     res.status(500).json({ error: "Internal server error" });
   }
 });

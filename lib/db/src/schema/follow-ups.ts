@@ -17,6 +17,11 @@ export const followUpStatusEnum = pgEnum("follow_up_status", [
  * "abordagem" — ele recebeu a primeira mensagem e NUNCA respondeu. São dois
  *   toques, e nenhum deles pode citar conversa nem dor: não houve nem uma nem
  *   outra.
+ * "reativacao" — a cadência de conversa acabou sem fechar (Rodada 41). São até
+ *   três toques longos (+30/+60/+90 dias), só para quem chegou a esquentar
+ *   (warm/hot), cada um com saída explícita. O texto NÃO fica gravado aqui:
+ *   é montado na hora do envio, porque a dor e a novidade de 60 dias depois
+ *   podem não ser as de hoje.
  *
  * A distinção mora no banco, e não numa dedução em tempo de envio, porque é ela
  * que decide o TEXTO que sai para alguém que não pediu contato. Deduzir errado
@@ -26,6 +31,7 @@ export const followUpStatusEnum = pgEnum("follow_up_status", [
 export const followUpKindEnum = pgEnum("follow_up_kind", [
   "conversa",
   "abordagem",
+  "reativacao",
 ]);
 
 export const followUpsTable = pgTable("follow_ups", {
@@ -38,6 +44,10 @@ export const followUpsTable = pgTable("follow_ups", {
   kind: followUpKindEnum("kind").notNull().default("conversa"),
   messageTemplate: text("message_template"),
   status: followUpStatusEnum("status").notNull().default("pending"),
+  // Quando REALMENTE saiu (nulo enquanto pendente/cancelado). Existe por causa
+  // do limite diário da reativação — "no máximo 10 por dia" precisa saber
+  // quantas saíram HOJE, e a data de criação não diz isso.
+  sentAt: timestamp("sent_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
