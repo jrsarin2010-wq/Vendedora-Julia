@@ -1959,6 +1959,108 @@ secao("Rodada 48 — quem atende sozinho também recebe a conta");
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 49 — parar quando ele encerra. Conversa real da Dra. Luana, parte 2:
+// depois de "Obrigada, vou ver aqui" e "Show", a Júlia insistiu DUAS vezes — a
+// segunda repetindo as regras do trial já explicadas. O prompt proibia
+// insistir depois de um NÃO; encerramento cordial não tinha casa. E o 15 de
+// mensagens do trial foi dito quando o assunto já era o Básico (que tem 60) —
+// o produto parecia 4x pior do que é.
+//
+// A correção 2 do documento (sequência numerada do primeiro "tá caro") NÃO
+// entrou, de propósito: os horários provaram que o trecho do primeiro "caro"
+// rodou entre 21:45 e 21:52 UTC de 12/08, no deployment do prompt da Rodada
+// 47 — o deploy da 48 só entrou no ar às 22:01:15. A regra da 48 nunca foi
+// exercitada ali; antes de reforçá-la, o teste dela precisa ser refeito.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 49 — reconhece o encerramento e para");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok("a seção existe", JULIA_SYSTEM_PROMPT.includes("## RECONHEÇA O ENCERRAMENTO E PARE"));
+  ok(
+    "encerramento não precisa de um 'não'",
+    corrido.includes('a conversa acabou, mesmo sem um "não"'),
+  );
+  for (const sinal of [
+    '"obrigado", "obrigada", "valeu"',
+    '"vou ver", "vou olhar", "vou analisar", "vou pensar com calma"',
+    '"show", "beleza", "ok", "tá bom", "entendi" — sozinhos, sem pergunta junto',
+    '"depois eu te falo", "qualquer coisa eu chamo"',
+    "ou simplesmente ele parar de fazer perguntas",
+  ]) {
+    ok(`sinal listado: ${sinal.slice(0, 40)}…`, JULIA_SYSTEM_PROMPT.includes(sinal));
+  }
+  ok(
+    "a resposta é UMA despedida, e acabou",
+    JULIA_SYSTEM_PROMPT.includes("O QUE FAZER: UMA despedida curta e cordial, e ACABOU."),
+  );
+  ok(
+    "proíbe repetir informação já dada",
+    corrido.includes("repetir o trial, o preço, o link ou qualquer coisa que você já disse"),
+  );
+  ok(
+    'a muleta exata da conversa real está marcada ("só pra você não ficar com dúvida")',
+    JULIA_SYSTEM_PROMPT.includes('"só pra você não ficar com dúvida..."'),
+  );
+  ok(
+    "proíbe pergunta para reabrir a conversa",
+    corrido.includes("fazer mais uma pergunta para reabrir a conversa"),
+  );
+  ok(
+    "quem cuida do resto é o follow-up",
+    corrido.includes("o follow-up cuida do resto"),
+  );
+  ok(
+    "não briga com a objeção 'vou pensar' (a lição da 48: gatilho ambíguo se desambigua)",
+    corrido.includes('um "vou pensar" seco ainda é objeção'),
+  );
+  ok(
+    "o princípio 10 ganhou a exceção do encerramento",
+    corrido.includes("depois dele, pergunta não segura conversa — reabre incômodo"),
+  );
+  ok(
+    "a seção fica depois do sinal de compra (os dois 'pare' andam juntos)",
+    JULIA_SYSTEM_PROMPT.indexOf("## RECONHEÇA O ENCERRAMENTO E PARE") >
+      JULIA_SYSTEM_PROMPT.indexOf("## RECONHEÇA O SINAL DE COMPRA E PARE DE VENDER"),
+  );
+}
+
+secao("Rodada 49 — 15 é do trial, 60 é dos planos pagos");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok("a distinção existe", JULIA_SYSTEM_PROMPT.includes("NÃO CONFUNDA OS DOIS LIMITES"));
+  ok(
+    "os dois números estão lado a lado",
+    corrido.includes("TRIAL: 15 mensagens por contato a cada 24h") &&
+      corrido.includes("PLANOS PAGOS (Básico, Essencial e Pro): 60 por contato a cada 24h"),
+  );
+  ok(
+    "manda dizer a qual dos dois se refere",
+    corrido.includes("Diga sempre a qual dos dois você está se referindo"),
+  );
+  ok(
+    "a fala do trial emenda o teto maior do pago",
+    corrido.includes("Nos planos pagos são 60, folga de sobra pra atendimento normal"),
+  );
+  {
+    // Rede de proteção no espírito das Rodadas 31/32/36: toda linha que fala
+    // em "15 mensagens" precisa do trial na vizinhança. É o 15 solto, longe do
+    // trial, que fez o Básico parecer 4x menor numa conversa real.
+    const linhas = JULIA_SYSTEM_PROMPT.split("\n");
+    const soltas = linhas.filter((l, i) => {
+      if (!/15\s*mensagens/i.test(l)) return false;
+      const janela = [linhas[i - 2] ?? "", linhas[i - 1] ?? "", l].join("\n");
+      return !/trial/i.test(janela);
+    });
+    ok(
+      'todo "15 mensagens" do prompt está colado no trial',
+      soltas.length === 0,
+      soltas.join(" | "),
+    );
+  }
+}
+
 secao("Rodada 44 — o prompt cabe no orçamento de tokens");
 {
   const tokens = tamanhoEmTokens(JULIA_SYSTEM_PROMPT);
