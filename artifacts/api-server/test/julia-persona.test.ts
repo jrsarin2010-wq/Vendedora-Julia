@@ -1885,6 +1885,80 @@ secao("Rodada 47 — recomendação exige profissionais E verba de anúncio");
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 48 — a conta vem antes de descer de plano. Conversa real da Dra.
+// Luana (atende sozinha, R$100/mês de anúncio): a Rodada 47 funcionou —
+// descoberta completa, desceu para o Básico, tirou o R$97 que o colega não
+// precisava — mas a comparação com o custo de secretária (Rodada 45) nunca
+// apareceu, com dois "caro" na mesa. O gatilho "está caro" tinha DUAS
+// instruções concorrentes e o modelo escolhia uma; e a comparação inteira
+// pressupunha secretária existente, então para quem atende sozinho ela
+// parecia inaplicável. Agora a ordem é explícita e o caso solo tem fala.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 48 — o 'tá caro' tem duas respostas, na ordem certa");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok(
+    "a ordem é explícita, e as duas acontecem",
+    JULIA_SYSTEM_PROMPT.includes('O "TÁ CARO" TEM DUAS RESPOSTAS, NESTA ORDEM — as duas acontecem'),
+  );
+  ok(
+    "a primeira resposta é a conta",
+    corrido.includes('No PRIMEIRO "tá caro": MOSTRE A CONTA'),
+  );
+  ok(
+    "o porquê está dito: preço no vácuo é só um número",
+    corrido.includes('"R$197" sozinho é só um número'),
+  );
+  ok(
+    "descer de plano sem a conta está proibido",
+    corrido.includes("NUNCA desça de plano sem antes ter mostrado a conta"),
+  );
+  ok(
+    "o caro repetido agora exige a conta antes",
+    corrido.includes("plano reconsiderado sem a conta é desconto no escuro") &&
+      corrido.includes("Se ele repetir que está caro DEPOIS de ver a conta"),
+  );
+  ok(
+    "a regra da Rodada 47 continua de pé (o primeiro caro é da comparação)",
+    corrido.includes("A comparação acima vale para o PRIMEIRO"),
+  );
+  ok(
+    "a ordem mora DENTRO da seção do caro, antes dos números",
+    JULIA_SYSTEM_PROMPT.indexOf('O "TÁ CARO" TEM DUAS RESPOSTAS') >
+      JULIA_SYSTEM_PROMPT.indexOf("## QUANDO ELE DIZ QUE ESTÁ CARO") &&
+      JULIA_SYSTEM_PROMPT.indexOf('O "TÁ CARO" TEM DUAS RESPOSTAS') <
+        JULIA_SYSTEM_PROMPT.indexOf("OS NÚMEROS (use como"),
+  );
+}
+
+secao("Rodada 48 — quem atende sozinho também recebe a conta");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok("o caso existe", JULIA_SYSTEM_PROMPT.includes("SE ELE ATENDE SOZINHO"));
+  ok(
+    "a conta muda de verbo: o que CUSTARIA contratar",
+    corrido.includes("compare com o que CUSTARIA contratar"),
+  );
+  ok(
+    "a fala pronta existe e fecha no plano do caso solo",
+    corrido.includes("pra contratar alguém só pra responder o WhatsApp") &&
+      corrido.includes("O Básico é R$197"),
+  );
+  ok(
+    "os números do caso solo continuam aproximados (uns, não cravados)",
+    corrido.includes("uns R$1.900 de salário"),
+  );
+  ok(
+    "o caso solo fica dentro da seção do caro, antes do PARE",
+    JULIA_SYSTEM_PROMPT.indexOf("SE ELE ATENDE SOZINHO") >
+      JULIA_SYSTEM_PROMPT.indexOf("## QUANDO ELE DIZ QUE ESTÁ CARO") &&
+      JULIA_SYSTEM_PROMPT.indexOf("SE ELE ATENDE SOZINHO") <
+        JULIA_SYSTEM_PROMPT.indexOf("DEPOIS DA CONTA, PARE"),
+  );
+}
+
 secao("Rodada 44 — o prompt cabe no orçamento de tokens");
 {
   const tokens = tamanhoEmTokens(JULIA_SYSTEM_PROMPT);
