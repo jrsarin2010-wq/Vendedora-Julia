@@ -312,7 +312,9 @@ ok(
   // O texto da Rodada 30 ("você PRECISA do nome dele") virou a sequência da
   // Rodada 42 — a exigência do nome continua, mais forte: ele não é opcional.
   "manda pedir o nome mesmo quando ele chega com pergunta",
-  JULIA_SYSTEM_PROMPT.includes("Boa pergunta! Já te explico certinho. Antes, como posso te chamar?"),
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "Boa pergunta! Já te explico certinho. Eu sou a Júlia, do CaptaClin — antes, como posso te chamar?",
+  ),
 );
 
 secao("Rodada 30 — preço se fala");
@@ -1275,6 +1277,76 @@ secao("Rodada 42 — o nome não é opcional");
     "proíbe insistir mais de uma vez pelo nome",
     modoA.replace(/\n\s*/g, " ").includes("não insista mais de uma vez") &&
       modoA.includes("chato é pedir duas vezes"),
+  );
+}
+
+secao("Rodada 42.1 — a apresentação não é cortável");
+{
+  // Ela mandou "Oi! Claro, me fala 🙂 Antes, como posso te chamar?" para quem
+  // tinha escrito "vim pelo site do CaptaClin" — deduziu que ele já sabia quem
+  // ela era. O prompt mandava VARIAR a abertura e não travava o que NÃO varia.
+  const inicioModoA = JULIA_SYSTEM_PROMPT.indexOf("MODO A — ELE CHAMOU VOCÊ");
+  const fimModoA = JULIA_SYSTEM_PROMPT.indexOf("MODO B — VOCÊ CHAMOU ELE");
+  const modoA = JULIA_SYSTEM_PROMPT.slice(inicioModoA, fimModoA);
+  const corrido = modoA.replace(/\n\s*/g, " ");
+
+  ok(
+    "a trava existe: o que varia e o que não varia",
+    modoA.includes("O QUE VARIA E O QUE NÃO VARIA NA ABERTURA"),
+  );
+  ok(
+    "varia a palavra, nunca o elemento",
+    corrido.includes("Você varia as PALAVRAS, nunca os elementos"),
+  );
+  ok(
+    "elemento 1 — quem ela é, sempre e sem exceção",
+    corrido.includes('1. Quem você é: "Júlia, do CaptaClin" — sempre, sem exceção'),
+  );
+  ok(
+    "elemento 2 — o pedido do nome, sem 'se quiser'",
+    corrido.includes('2. O pedido do nome, sem "se quiser"'),
+  );
+  ok(
+    "proíbe cortar a apresentação achando que ele já sabe",
+    corrido.includes("Não corte a apresentação achando que ele já sabe"),
+  );
+  ok(
+    "e diz o porquê: ele falou com o SITE, não com ela",
+    corrido.includes("ele falou com o SITE, não com você — quem atende se apresenta"),
+  );
+  ok(
+    "mesmo com pressa (ele já chegou com a dúvida), a apresentação fica",
+    corrido.includes("A apresentação continua obrigatória aqui"),
+  );
+
+  // A trava só vale se os EXEMPLOS a obedecerem — foi um exemplo sem
+  // apresentação que ela copiou. Toda fala de abertura entre aspas no MODO A
+  // que peça o nome tem que dizer quem ela é.
+  const pedemONome = (corrido.match(/"[^"]*(?:como posso te chamar|com quem eu falo|qual seu nome|qual é o seu nome)[^"]*"/gi) ?? []);
+  ok(
+    "o MODO A tem exemplos de abertura pedindo o nome",
+    pedemONome.length >= 3,
+    `encontrados: ${pedemONome.length}`,
+  );
+  ok(
+    "NENHUM exemplo de abertura pede o nome sem se apresentar",
+    pedemONome.every((frase) => /Júlia/.test(frase) && /CaptaClin/.test(frase)),
+    pedemONome.filter((f) => !/Júlia/.test(f) || !/CaptaClin/.test(f)).join(" | "),
+  );
+
+  // E o "VARIE" lá embaixo, que foi quem autorizou o corte, agora aponta para
+  // a trava em vez de mandar variar sem limite.
+  ok(
+    "o VARIE diz que variar não é cortar elemento",
+    JULIA_SYSTEM_PROMPT.includes(
+      "Variar é escolher outras PALAVRAS, nunca cortar elementos",
+    ),
+  );
+  ok(
+    "os três exemplos do VARIE também se apresentam",
+    ["Oi! Aqui é a Júlia, do CaptaClin", "Olá! Júlia falando, do CaptaClin", "Sou a Júlia, do CaptaClin"].every(
+      (e) => JULIA_SYSTEM_PROMPT.includes(e),
+    ),
   );
 }
 
