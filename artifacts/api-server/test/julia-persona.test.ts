@@ -1442,25 +1442,29 @@ ok(
   ),
 );
 ok(
-  // O limite de mensagens por conversa foi procurado no bundle (chaves
-  // maxMessages/messageLimit, e as formas em português) e NÃO existe. Prometer
-  // um teto que ninguém publicou é inventar limite, não ser honesta.
-  "ela é proibida de inventar um teto de mensagens que a fonte não tem",
+  // Rodada 46 fechou a pendência: o limite de 15 EXISTE — não estava no site,
+  // estava no CONTRATO (cláusulas 2.b e 5.2). A Rodada 45 fez certo em tirar
+  // em vez de chutar; agora o número volta com fonte.
+  "os limites do trial são exatamente três: dias, conversas e mensagens",
   JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
-    "Não diga quantas mensagens cabem em cada conversa",
+    "Os limites do trial são exatamente estes três: 3 dias, 2 conversas, 15 mensagens por contato a cada 24h",
   ),
 );
 ok(
-  "o número 15 não aparece mais como limite de mensagens",
-  !JULIA_SYSTEM_PROMPT.includes("15 mensagens"),
+  "inventar teto continua proibido — qualquer número fora desses é chute",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "Qualquer outro número é chute",
+  ),
 );
 
 secao("Rodada 45 — nenhum 'sete dias' sobrou colado no trial");
 {
   // A varredura que a rodada pediu, virada tripwire: toda ocorrência de "7
   // dias" tem que estar perto de um marcador de GARANTIA (é dela que os sete
-  // dias são) ou dentro de uma PROIBIÇÃO. Qualquer outra é promessa errada.
-  const GARANTIA = /garantia|assinar|assinou|assina o plano|reembolso|dinheiro de volta|arrependimento|por lei|CDC|depois de pagar/i;
+  // dias são), da CARÊNCIA de pagamento (Rodada 46 — contrato, Seção 9: 7 dias
+  // com tudo funcionando antes de suspender) ou dentro de uma PROIBIÇÃO.
+  // Qualquer outra é promessa errada.
+  const GARANTIA = /garantia|assinar|assinou|assina o plano|reembolso|dinheiro de volta|arrependimento|por lei|CDC|depois de pagar|carência|vencimento|cobrança|suspen/i;
   const PROIBICAO = /NUNCA|não venda|nao venda|achando que|prometer|classe de erro|não diga|nao diga/i;
 
   const suspeitas: string[] = [];
@@ -1571,6 +1575,155 @@ ok(
   JULIA_SYSTEM_PROMPT.indexOf('## "MAS EU NÃO VOU MANDAR MINHA SECRETÁRIA EMBORA"') >
     JULIA_SYSTEM_PROMPT.indexOf("## QUANDO ELE DIZ QUE ESTÁ CARO"),
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 46 — o que o contrato diz e ela não sabia. Fonte: Contrato de
+// Assinatura v2.4, lido INTEIRO em 12/08/2026 na API pública que a página
+// /contrato consome (GET /api/dental/tos/public?kind=subscription). As
+// cláusulas citadas abaixo são as do texto publicado.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 46 — o teto de mensagens por contato (cláusula 2.b)");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok(
+    "o teto dos planos pagos está lá: 60 por contato",
+    corrido.includes("60 nos planos pagos, 15 no trial"),
+  );
+  ok(
+    "atingido o teto, PAUSA e volta — não acaba",
+    corrido.includes("é PAUSADO e volta sozinho quando reinicia o ciclo de 24h") &&
+      JULIA_SYSTEM_PROMPT.includes("Não é perda, é pausa"),
+  );
+  ok(
+    "o porquê do teto vira argumento, não desculpa",
+    corrido.includes("margem folgada pra atendimento normal"),
+  );
+  ok(
+    "omitir o teto é nomeado como a armadilha do R$97",
+    corrido.includes("Omitir o teto e ele descobrir depois é a mesma armadilha do R$97"),
+  );
+  ok(
+    "o trial diz as 15 mensagens por contato a cada 24h",
+    corrido.includes("Cada conversa admite até 15 mensagens por contato a cada 24h"),
+  );
+  ok(
+    "e o exemplo de fala do trial também",
+    corrido.includes("o que acabar primeiro, com até 15 mensagens em cada"),
+  );
+}
+
+secao("Rodada 46 — se o pagamento falhar (Seção 9)");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok(
+    "a seção existe, enquadrada como tranquilidade",
+    JULIA_SYSTEM_PROMPT.includes('## "E SE O PAGAMENTO FALHAR? MINHA CLÍNICA PARA?"'),
+  );
+  ok(
+    "7 dias de carência com tudo funcionando",
+    corrido.includes("7 dias de carência com tudo funcionando"),
+  );
+  ok(
+    "suspensão só a partir do 8º dia",
+    corrido.includes("Suspensão só a partir do 8º dia"),
+  );
+  ok(
+    "reativação imediata, sem taxa e sem prazo limite",
+    corrido.includes("sem taxa e sem prazo limite"),
+  );
+  ok(
+    "na suspensão os dados ficam guardados e exportáveis",
+    corrido.includes("Os dados ficam guardados e ele pode exportar"),
+  );
+  ok(
+    // Cláusula 9.1 — a nuance que uma leitura apressada perde: NÃO há nova
+    // tentativa automática garantida (isso era do gateway antigo, v2.4 tirou).
+    // Prometer retry é criar a expectativa exata que o contrato desfez.
+    'proíbe prometer "o sistema tenta de novo sozinho"',
+    corrido.includes("não existe nova tentativa automática de cobrança garantida") &&
+      JULIA_SYSTEM_PROMPT.includes('Nunca diga\n"o sistema tenta de novo sozinho"'),
+  );
+}
+
+secao("Rodada 46 — recarga: não expira, mas não tem reembolso fácil (4.4/4.4.1)");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok("o saldo de recarga NÃO EXPIRA", JULIA_SYSTEM_PROMPT.includes("O SALDO NÃO EXPIRA"));
+  ok(
+    "e só é consumido depois da cota do mês",
+    corrido.includes("só é consumido depois que a cota do mês acabar"),
+  );
+  ok(
+    "sem cancelamento nem reembolso automático pelo painel",
+    corrido.includes("NÃO tem cancelamento nem reembolso automático pelo painel"),
+  );
+  ok(
+    "e ela é mandada não prometer reembolso fácil",
+    corrido.includes("não prometa reembolso fácil que o contrato não dá"),
+  );
+}
+
+secao("Rodada 46 — forma de pagamento por tipo (cláusula 7.1)");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok(
+    "assinatura, renovação e mudança de plano: só cartão, com recorrência",
+    corrido.includes("Assinatura, renovação e mudança de plano: exclusivamente no cartão"),
+  );
+  ok(
+    // Com o plano nomeado na mesma frase: o tripwire da Rodada 31 proíbe
+    // oferecer o adicional sem dizer onde ele existe, e tem razão.
+    "PIX paga só o avulso: recargas e o profissional adicional",
+    corrido.includes(
+      "PIX paga só o que é avulso: as recargas e o profissional adicional de R$97 (que só existe no Essencial e Pro)",
+    ),
+  );
+  ok(
+    "o profissional adicional NÃO entra na recorrência do cartão",
+    corrido.includes("A cobrança é À PARTE, por PIX — não entra na recorrência do cartão"),
+  );
+  ok(
+    "a conta dos R$394 continua certa, mas como dois pagamentos",
+    corrido.includes("são dois pagamentos: a mensalidade no cartão e o adicional no PIX"),
+  );
+  ok(
+    'o antigo "PIX serve só para recarga" morreu — estava incompleto',
+    !corrido.includes("PIX serve só para recarga"),
+  );
+}
+
+secao("Rodada 46 — os achados extras da leitura completa");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok(
+    "trial é único por profissional (5.6) — não prometer segundo teste",
+    corrido.includes("o trial é ÚNICO por profissional") &&
+      corrido.includes("Não prometa um segundo teste"),
+  );
+  ok(
+    "upgrade imediato e proporcional; downgrade no ciclo seguinte (Seção 10)",
+    corrido.includes("upgrade vale na hora, pagando só a diferença proporcional") &&
+      corrido.includes("downgrade entra no início do ciclo seguinte"),
+  );
+  ok(
+    "cancelou depois da garantia: acesso até o fim do ciclo pago (8.2.b)",
+    corrido.includes("mantém o acesso até o fim do ciclo que já pagou"),
+  );
+  ok(
+    "a garantia diz COMO exercer (6.4) e não promete data de devolução (6.3)",
+    corrido.includes("o pedido é pelo painel, na área de Assinatura") &&
+      corrido.includes("não prometa data para o dinheiro cair"),
+  );
+  ok(
+    "a garantia vale para PJ por liberalidade (6.2)",
+    corrido.includes("vale até para pessoa jurídica"),
+  );
+  ok(
+    "na dúvida sobre regra escrita, o link do contrato vence o improviso",
+    corrido.includes("mande o link do contrato em vez de arriscar"),
+  );
+}
 
 secao("Rodada 44 — o prompt cabe no orçamento de tokens");
 {
