@@ -228,6 +228,8 @@ ok(
 {
   // O ponto da rodada: o nome não pode estar disponível para ela citar. A
   // única ocorrência tolerada é dentro da própria regra que a proíbe de dizer.
+  // (A Rodada 38 liberou o primeiro nome — "Dr. Renato" faz parte da história
+  // de origem. O que segue proibido é o SOBRENOME e o nome completo.)
   const linhasComNome = JULIA_SYSTEM_PROMPT.split("\n").filter((l) => /Sarinho/.test(l));
   ok(
     "o nome aparece no máximo uma vez, e só dentro da proibição",
@@ -730,9 +732,11 @@ ok(
 );
 ok("e-mail de contato", JULIA_SYSTEM_PROMPT.includes("contato@captaclin.com.br"));
 ok(
-  "vem antes da MAIOR ARMA (é resposta de medo, não de venda)",
+  // Na Rodada 38 a "MAIOR ARMA" virou a história de origem, mas a ordem
+  // continua a mesma: os dados frios da empresa vêm antes da narrativa.
+  "vem antes da história de origem (é resposta de medo, não de venda)",
   JULIA_SYSTEM_PROMPT.indexOf("## QUEM SOMOS") <
-    JULIA_SYSTEM_PROMPT.indexOf("## SUA MAIOR ARMA"),
+    JULIA_SYSTEM_PROMPT.indexOf("## DE ONDE VEM O CAPTACLIN"),
 );
 ok(
   "manda responder na hora, sem hesitar",
@@ -1002,6 +1006,123 @@ ok(
 ok(
   "o teto continua: nunca mais de um na mesma mensagem",
   JULIA_SYSTEM_PROMPT.includes("Nunca mais de um emoji na mesma mensagem"),
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 38 — posicionamento de categoria e a história do fundador. A Júlia
+// para de dizer "a gente tá começando agora" como desculpa e passa a contar a
+// história real (Dr. Renato, o projeto de gestão, os dois engenheiros) e a
+// criar a própria categoria: a primeira secretária COMERCIAL da odontologia.
+// O que NÃO mudou: inventar número, depoimento ou resultado segue proibido.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 38 — a história do Dr. Renato");
+ok(
+  "a seção de origem existe",
+  JULIA_SYSTEM_PROMPT.includes("## DE ONDE VEM O CAPTACLIN"),
+);
+ok(
+  "a história completa está lá: projeto de gestão, saída, dois engenheiros",
+  JULIA_SYSTEM_PROMPT.includes("projeto grande de gestão em odontologia") &&
+    JULIA_SYSTEM_PROMPT.includes("Ele saiu de lá e se juntou a dois engenheiros de software"),
+);
+ok(
+  "o eixo da história: gestão cuida de quem JÁ é paciente",
+  JULIA_SYSTEM_PROMPT.includes("Sistema de gestão cuida de quem JÁ é paciente"),
+);
+ok(
+  "a história entra em pedaços, não recitada de uma vez",
+  JULIA_SYSTEM_PROMPT.includes("não recite a história inteira de uma vez"),
+);
+ok(
+  "nome completo e Instagram do Dr. Renato: ela diz que não sabe",
+  JULIA_SYSTEM_PROMPT.includes("SE ELE PERGUNTAR O NOME COMPLETO OU O INSTAGRAM DO DR. RENATO") &&
+    JULIA_SYSTEM_PROMPT.includes('"essa eu não sei te dizer"'),
+);
+ok(
+  "o nome do projeto anterior está proibido de citar",
+  JULIA_SYSTEM_PROMPT.includes("NÃO cite o nome do projeto anterior"),
+);
+ok(
+  'a desculpa "a gente tá começando agora" morreu — só sobrevive dentro da proibição',
+  JULIA_SYSTEM_PROMPT.split("\n").filter((l) => /começando/.test(l)).length === 1 &&
+    JULIA_SYSTEM_PROMPT.includes('nunca diga "a gente tá começando agora" como se fosse'),
+);
+
+secao("Rodada 38 — a categoria: primeira secretária comercial da odontologia");
+ok(
+  "a seção de categoria existe",
+  JULIA_SYSTEM_PROMPT.includes("## O CAPTACLIN NÃO TEM CONCORRENTE"),
+);
+ok(
+  "a definição da categoria está lá",
+  JULIA_SYSTEM_PROMPT.includes("a primeira secretária COMERCIAL da odontologia"),
+);
+ok(
+  "atendente responde quem chega; comercial vai atrás",
+  JULIA_SYSTEM_PROMPT.includes("Atendente responde quem chega. Comercial vai atrás"),
+);
+for (const item of [
+  "USA TÉCNICA DE VENDA",
+  "CUIDA DO LEAD DE ANÚNCIO E DE INDICAÇÃO",
+  "VAI ATRÁS DE PACIENTE SUMIDO",
+  "CRIA CONEXÃO ANTES DA CADEIRA",
+  "MANTÉM O DENTISTA INFORMADO",
+]) {
+  ok(`item do "que só ela faz": ${item}`, JULIA_SYSTEM_PROMPT.includes(item));
+}
+ok(
+  "o enquadramento recepcionista × vendedor está lá",
+  JULIA_SYSTEM_PROMPT.includes("comparar recepcionista com"),
+);
+ok(
+  "a frase de posicionamento está na ponta da língua",
+  JULIA_SYSTEM_PROMPT.includes("É uma secretária comercial: ela não só responde o paciente"),
+);
+
+secao("Rodada 38 — a ligação por IA, no tempo certo do verbo");
+ok(
+  "a seção existe",
+  JULIA_SYSTEM_PROMPT.includes("## O QUE ESTÁ SENDO CONSTRUÍDO: ligação por IA"),
+);
+ok(
+  '"estamos desenvolvendo", nunca "vai ter"',
+  JULIA_SYSTEM_PROMPT.includes('Diga "estamos desenvolvendo", nunca "vai ter" nem "logo terá"'),
+);
+ok(
+  "data está proibida, até aproximada",
+  JULIA_SYSTEM_PROMPT.includes("NUNCA dê data, nem aproximada"),
+);
+ok(
+  "proibido usar como argumento de fechamento",
+  JULIA_SYSTEM_PROMPT.includes("NUNCA use como argumento de fechamento"),
+);
+ok(
+  "a linha dos planos continua conservadora (em breve, sem data)",
+  JULIA_SYSTEM_PROMPT.includes("EM BREVE, ainda não existe. Nunca prometa data"),
+);
+
+secao("Rodada 38 — o que não podia se perder");
+ok(
+  "a proibição de inventar continua intacta, palavra por palavra",
+  JULIA_SYSTEM_PROMPT.includes(
+    "PROIBIDO ABSOLUTO: inventar número, porcentagem, depoimento, nome de clínica ou resultado",
+  ),
+);
+ok(
+  "quando ele pedir prova, a resposta continua sendo o trial, não uma história",
+  JULIA_SYSTEM_PROMPT.includes("QUANDO ELE PEDIR PROVA OU RESULTADO") &&
+    JULIA_SYSTEM_PROMPT.includes("A prova quem faz é você"),
+);
+ok(
+  "o follow-up 3 perdeu a nota de imaturidade e manteve a honestidade",
+  !FOLLOW_UP_TEMPLATES[3]("Marina", null).includes("começando") &&
+    FOLLOW_UP_TEMPLATES[3]("Marina", null).includes("não vou te mostrar resultado de outra clínica"),
+);
+ok(
+  "o follow-up 3 continua oferecendo trial e garantia, não prova social",
+  FOLLOW_UP_TEMPLATES[3]("Marina", null).includes("trial sem cartão") &&
+    FOLLOW_UP_TEMPLATES[3]("Marina", null).includes("7 dias pra pedir o dinheiro de volta"),
 );
 
 fim();
