@@ -8,6 +8,8 @@ import {
   FOLLOW_UP_TEMPLATES,
   JULIA_SYSTEM_PROMPT,
   JULIA_OUTREACH_PROMPT,
+  TETO_DE_TOKENS,
+  tamanhoEmTokens,
   buildLeadBriefing,
   buildOutreachBriefing,
 } from "../src/julia-persona";
@@ -1383,5 +1385,53 @@ ok(
   "a promoção continua sendo o argumento colado no preço",
   JULIA_SYSTEM_PROMPT.includes("O Essencial tá R$297 nos 3 primeiros meses, depois vai pra R$397"),
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 44 — o teto. Cada resposta ao dentista paga o prompt inteiro, e o
+// limite da conta na OpenAI é por MINUTO: prompt maior significa menos
+// dentistas atendidos por minuto, e foi assim que quinze deles receberam
+// silêncio em 12/08. O teto não impede o prompt de crescer — impede que ele
+// cresça sem ninguém decidir.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 44 — o prompt cabe no orçamento de tokens");
+{
+  const tokens = tamanhoEmTokens(JULIA_SYSTEM_PROMPT);
+  const excesso = tokens - TETO_DE_TOKENS;
+  const cresceu = ((excesso / TETO_DE_TOKENS) * 100).toFixed(1);
+
+  ok(
+    `o prompt de sistema cabe no teto (${tokens} de ${TETO_DE_TOKENS} tokens)`,
+    tokens <= TETO_DE_TOKENS,
+    excesso > 0
+      ? [
+          `O prompt passou do teto: ${tokens} tokens, ${excesso} a mais (+${cresceu}%).`,
+          ``,
+          `NÃO suba o TETO_DE_TOKENS como primeiro reflexo. Rode:`,
+          `    node scripts/analisar-prompt.mjs`,
+          ``,
+          `Ele mostra qual seção engordou, quanto do prompt é exemplo de fala e`,
+          `o que já está dito em outro lugar — na primeira medição havia 12`,
+          `trechos repetidos só entre PLANOS e PERSUADE. Cortar o repetido custa`,
+          `menos que perder capacidade de atendimento: cada 10% de prompt são`,
+          `10% menos dentistas atendidos por minuto.`,
+        ].join("\n        ")
+      : "",
+  );
+
+  // A folga tem que ser pequena para o alarme servir de alarme. Se um dia
+  // sobrar mais de 25%, é porque o teto foi afrouxado demais e parou de acusar.
+  const folga = ((TETO_DE_TOKENS - tokens) / TETO_DE_TOKENS) * 100;
+  ok(
+    `a folga do teto continua apertada (${folga.toFixed(1)}%)`,
+    folga < 25,
+    `Folga de ${folga.toFixed(1)}%: o teto está frouxo demais para acusar crescimento. Baixe TETO_DE_TOKENS para perto do tamanho atual (${tokens}).`,
+  );
+
+  ok(
+    "o fator de conversão está calibrado contra medição real, não chutado",
+    tamanhoEmTokens("x".repeat(3850)) === 1000,
+  );
+}
 
 fim();

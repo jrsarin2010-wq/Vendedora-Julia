@@ -510,14 +510,25 @@ router.post("/webhook/whatsapp", async (req, res) => {
     }
 
     // Get last N messages for context.
-    // Buscamos as 30 MAIS RECENTES (desc) e depois invertemos para a ordem
+    // Buscamos as N MAIS RECENTES (desc) e depois invertemos para a ordem
     // cronológica (mais antiga → mais nova), que é o que o modelo espera.
+    //
+    // Rodada 44 — eram 30, agora são 20. Cada resposta paga o histórico inteiro
+    // em tokens, e o teto da conta é por MINUTO (ver TETO_DE_TOKENS em
+    // julia-persona.ts): 10 mensagens a menos são ~800 tokens por resposta, o
+    // maior ganho isolado que existe sem mexer no prompt.
+    //
+    // Por que 20 e não 15: a ficha do lead guarda os FATOS (dor, objeção,
+    // etapa, plano, temperatura), mas não guarda a NUANCE — o que já foi
+    // oferecido, o que ele recusou, o tom da negociação. 20 economiza a maior
+    // parte e mantém margem para conversa longa.
+    const MENSAGENS_DE_CONTEXTO = 20;
     const recentHistory = await db
       .select()
       .from(leadMessagesTable)
       .where(eq(leadMessagesTable.leadId, lead.id))
       .orderBy(desc(leadMessagesTable.createdAt))
-      .limit(30);
+      .limit(MENSAGENS_DE_CONTEXTO);
 
     const history = recentHistory.reverse();
 
