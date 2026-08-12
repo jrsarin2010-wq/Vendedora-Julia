@@ -13,8 +13,14 @@ import {
   JULIA_SYSTEM_PROMPT,
   JULIA_EXTRACTION_PROMPT,
   FOLLOW_UP_TEMPLATES,
+  AVISO_DE_ESPERA,
   buildLeadBriefing,
 } from "../julia-persona";
+import {
+  comRepique,
+  esperasDeRepique,
+  descreverErro,
+} from "../lib/repique";
 import {
   sendWhatsAppMessage,
   sendTelegramAlert,
@@ -547,15 +553,72 @@ router.post("/webhook/whatsapp", async (req, res) => {
       })),
     ];
 
-    // Call OpenAI (com timeout: se a IA demorar demais, abortamos em vez de travar)
-    const completion = await openai.chat.completions.create(
-      {
-        model: REPLY_MODEL,
-        max_completion_tokens: 512,
-        messages: chatMessages,
-      },
-      { timeout: 30_000 }
-    );
+    // A CHAMADA QUE O DENTISTA ESTÁ ESPERANDO (Rodada 43).
+    //
+    // Antes, um 429 da OpenAI (limite de tokens por minuto da conta, que uma
+    // rajada de respostas simultâneas estoura) caía direto no catch lá embaixo:
+    // uma linha de log, e o dentista sem resposta nenhuma, sem ninguém saber.
+    // Aconteceu quinze vezes em dois minutos no dia 12/08.
+    //
+    // Agora: até três repiques com espera crescente, um aviso de vida antes da
+    // última tentativa, e — se ainda assim falhar — o lead vai para a central
+    // de vigia, que é onde um humano olha. Silêncio nunca mais é o desfecho.
+    let completion;
+    try {
+      completion = await comRepique(
+        () =>
+          openai.chat.completions.create(
+            {
+              model: REPLY_MODEL,
+              max_completion_tokens: 512,
+              messages: chatMessages,
+            },
+            { timeout: 30_000 },
+          ),
+        {
+          // O aviso de espera sai ANTES da espera longa, não depois: aos ~7
+          // segundos ele ainda está olhando a tela; aos 19 já desistiu.
+          //
+          // Vai para o histórico só se foi entregue, como toda mensagem nossa
+          // (Rodada 21) — e o histórico importa aqui: se a última tentativa
+          // falhar, é esta promessa em aberto que segura o toque 1 do
+          // follow-up (Rodada 36).
+          antesDaUltima: async () => {
+            const aviso = AVISO_DE_ESPERA(lead.name);
+            if (await sendWhatsAppMessage(phone, aviso)) {
+              await db.insert(leadMessagesTable).values({
+                leadId: lead.id,
+                direction: "outbound",
+                content: aviso,
+                messageType: "text",
+              });
+              req.log.info({ leadId: lead.id }, "Aviso de espera enviado — IA recusando");
+            }
+          },
+          aoRepicar: ({ tentativa, esperaMs, erro }) =>
+            req.log.warn(
+              { leadId: lead.id, tentativa, esperaMs, erro },
+              "OpenAI recusou — repicando",
+            ),
+        },
+      );
+    } catch (err) {
+      // Acabaram as tentativas (ou o erro não era passageiro — chave errada,
+      // payload inválido). O lead vai para a central COM o motivo técnico: sem
+      // o detalhe, o dono abre a conversa, não vê nada de errado e não entende
+      // por que aquilo está na lista.
+      const detalhe = descreverErro(err);
+      req.log.error(
+        { leadId: lead.id, model: REPLY_MODEL, err },
+        "OpenAI recusou em todas as tentativas — lead para a central de vigia",
+      );
+      await marcarAtencao(
+        lead,
+        "julia_estranha",
+        `A IA não respondeu depois de ${esperasDeRepique().length + 1} tentativas. ${detalhe}`,
+      );
+      return;
+    }
 
     const reply = completion.choices[0]?.message?.content?.trim();
     if (!reply) {
@@ -715,16 +778,29 @@ router.post("/webhook/whatsapp", async (req, res) => {
         `Júlia: ${textoLimpo}`,
       ].join("\n");
 
-      const extraction = await openai.chat.completions.create(
+      // Repique CURTO aqui, de propósito: a resposta do dentista já saiu, então
+      // ninguém está esperando na tela — mas perder a extração custa a dor, a
+      // objeção e os sinais de temperatura desta conversa (Rodada 41). Uma
+      // segunda chance é barata; segurar o processo por 19 segundos numa
+      // rajada, não.
+      const extraction = await comRepique(
+        () =>
+          openai.chat.completions.create(
+            {
+              model: EXTRACTION_MODEL,
+              max_completion_tokens: 200,
+              messages: [
+                { role: "system", content: JULIA_EXTRACTION_PROMPT },
+                { role: "user", content: transcript },
+              ],
+            },
+            { timeout: 20_000 },
+          ),
         {
-          model: EXTRACTION_MODEL,
-          max_completion_tokens: 200,
-          messages: [
-            { role: "system", content: JULIA_EXTRACTION_PROMPT },
-            { role: "user", content: transcript },
-          ],
+          esperas: esperasDeRepique().slice(0, 1),
+          aoRepicar: ({ erro }) =>
+            req.log.warn({ leadId: lead.id, erro }, "Extração recusada — uma segunda tentativa"),
         },
-        { timeout: 20_000 },
       );
 
       const rawExtraction = extraction.choices[0]?.message?.content?.trim() ?? "";

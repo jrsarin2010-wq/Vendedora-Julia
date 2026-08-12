@@ -1277,6 +1277,26 @@ function abrir(leadName: string | null, corpo: string): string {
  * E no que TEM: a saída fácil ("é só me dizer que eu não incomodo mais"). Não é
  * gentileza — é o que transforma uma denúncia em um opt-out.
  */
+/**
+ * O AVISO DE ESPERA (Rodada 43) — a mensagem que sai quando a IA está
+ * recusando e a última tentativa ainda vai acontecer.
+ *
+ * Não é uma resposta: é um sinal de vida. Um dentista que escreve e vê silêncio
+ * conclui que ninguém atende; um que recebe "já te respondo" espera mais alguns
+ * segundos. Custa uma mensagem e salva a conversa.
+ *
+ * Sem emoji, como todo texto fixo (Rodada 38). E o vocativo sai do `saudacao()`
+ * determinístico — nunca "Dr(a).", que o prompt proíbe em qualquer lugar.
+ *
+ * ATENÇÃO ao mexer: "já te respondo" é uma PROMESSA, e está registrada como tal
+ * em lib/atencao.ts (SINAIS_DE_PROMESSA). É isso que impede o toque 1 de
+ * follow-up de cair em cima dela dizendo "a conversa ficou pela metade" quando
+ * a última tentativa também falha. Trocar o texto sem atualizar aquela lista
+ * reabre o buraco da Rodada 36.
+ */
+export const AVISO_DE_ESPERA = (leadName: string | null): string =>
+  abrir(leadName, `só um instante — já te respondo.`);
+
 export const ABORDAGEM_TOQUES = {
   1: (leadName: string | null) =>
     abrir(

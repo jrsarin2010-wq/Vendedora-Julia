@@ -9,6 +9,7 @@
  */
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { JULIA_OUTREACH_PROMPT, buildOutreachBriefing } from "../julia-persona";
+import { comRepique, esperasDeRepique } from "./repique";
 
 const OUTREACH_MODEL = process.env.JULIA_OUTREACH_MODEL ?? "gpt-5.4-mini";
 
@@ -35,16 +36,25 @@ export async function gerarMensagemDeAbordagem(
     origin: lead.origin,
   });
 
-  const resposta = await openai.chat.completions.create(
-    {
-      model: OUTREACH_MODEL,
-      max_completion_tokens: 200,
-      messages: [
-        { role: "system", content: JULIA_OUTREACH_PROMPT },
-        { role: "user", content: briefing },
-      ],
-    },
-    { timeout: 30_000 },
+  // Repique CURTO (Rodada 43): aqui ninguém está esperando — se falhar de vez,
+  // o agendador devolve o lead para a fila e tenta no ciclo seguinte, daqui a
+  // um minuto. A segunda chance existe só para não gastar um ciclo inteiro por
+  // causa de um 429 passageiro. Esperar 19 segundos seria pior: o ciclo da
+  // prospecção é justamente o que espalha os envios pela janela do dia.
+  const resposta = await comRepique(
+    () =>
+      openai.chat.completions.create(
+        {
+          model: OUTREACH_MODEL,
+          max_completion_tokens: 200,
+          messages: [
+            { role: "system", content: JULIA_OUTREACH_PROMPT },
+            { role: "user", content: briefing },
+          ],
+        },
+        { timeout: 30_000 },
+      ),
+    { esperas: esperasDeRepique().slice(0, 1) },
   );
 
   const texto = resposta.choices[0]?.message?.content?.trim();

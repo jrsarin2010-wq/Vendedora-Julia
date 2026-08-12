@@ -160,6 +160,11 @@ export const SINAIS_DE_PROMESSA = [
   "te aviso",
   "te retorno",
   "já te mando",
+  // Rodada 43: o aviso de espera que sai quando a IA está recusando
+  // (AVISO_DE_ESPERA, em julia-persona.ts). Se a última tentativa também
+  // falhar, esta vira a última mensagem da conversa — e é uma promessa em
+  // aberto como qualquer outra.
+  "já te respondo",
   "vou providenciar",
   "tô providenciando",
   "estou providenciando",
