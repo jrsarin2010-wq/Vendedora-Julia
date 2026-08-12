@@ -136,10 +136,12 @@ ok(
 
 secao("Rodada 29 — trial e garantia são coisas DIFERENTES");
 ok(
-  "o trial diz o limite (2 conversas, 15 mensagens)",
-  JULIA_SYSTEM_PROMPT.includes("2 conversas, com até 15 mensagens"),
+  // Rodada 45 corrigiu o limite: são 3 dias OU 2 conversas, o que vier
+  // primeiro. O teto de mensagens por conversa NÃO existe na fonte.
+  "o trial diz os dois limites que existem",
+  JULIA_SYSTEM_PROMPT.includes("3 DIAS ou 2 CONVERSAS, o que vier primeiro"),
 );
-ok("o trial não pede cartão", JULIA_SYSTEM_PROMPT.includes("7 dias, SEM cartão"));
+ok("o trial não pede cartão", JULIA_SYSTEM_PROMPT.includes("SEM cartão"));
 ok(
   "a garantia é apresentada como direito de arrependimento",
   JULIA_SYSTEM_PROMPT.includes("direito de\narrependimento, previsto em lei"),
@@ -837,10 +839,11 @@ ok(
   JULIA_SYSTEM_PROMPT.includes("## QUANDO ELE DIZ QUE ESTÁ CARO"),
 );
 ok(
+  // Rodada 45 trocou a faixa "R$1.800 a R$1.900" por um número só, e levou a
+  // conta até o contador e o total anual — o salário sozinho nunca foi o ponto.
   "os números do custo real estão lá (salário e encargos)",
-  JULIA_SYSTEM_PROMPT.includes("R$1.800 a") &&
-    JULIA_SYSTEM_PROMPT.includes("R$1.900") &&
-    JULIA_SYSTEM_PROMPT.includes("passa de R$2.700 por mês"),
+  JULIA_SYSTEM_PROMPT.includes("por volta de R$1.900 de salário") &&
+    JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes("passa de R$2.700 por mês"),
 );
 ok(
   "os encargos são nomeados (é o que o dentista não conta de cabeça)",
@@ -860,7 +863,7 @@ ok(
 );
 ok(
   "depois da comparação, silêncio",
-  JULIA_SYSTEM_PROMPT.includes("Depois da comparação, PARE e deixe ele reagir"),
+  JULIA_SYSTEM_PROMPT.includes("DEPOIS DA CONTA, PARE. Deixe ele reagir"),
 );
 
 secao("Rodada 36 — os dois diferenciais que ela nunca citava");
@@ -912,8 +915,12 @@ ok(
   JULIA_SYSTEM_PROMPT.includes("Robô responde pergunta; CRC conduz o"),
 );
 ok(
-  "a quebra de preço também usa a carta da CRC",
-  JULIA_SYSTEM_PROMPT.includes("Uma CRC boa custa bem mais que uma recepcionista"),
+  // Rodada 45 moveu a carta da CRC para o fecho da objeção "não vou mandar
+  // minha secretária embora", que é onde ela desarma em vez de comparar.
+  "a carta da CRC fecha o reenquadramento da secretária",
+  JULIA_SYSTEM_PROMPT.includes(
+    "não é papel de secretária, é papel de CRC",
+  ),
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1393,6 +1400,177 @@ ok(
 // silêncio em 12/08. O teto não impede o prompt de crescer — impede que ele
 // cresça sem ninguém decidir.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 45 — o trial é de 3 DIAS, não 7. Conferido na fonte real (bundle de
+// produção de captaclin.com.br, 12/08/2026): "Dura 3 dias ou 2 conversas (o que
+// vier primeiro), sem cartão" e o selo "✅ 3 dias grátis · 7 dias de garantia".
+// Os 7 dias que sobrevivem são só os da GARANTIA (CDC art. 49, confirmado no
+// mesmo bundle). Prometer sete dias de teste é a mesma classe de erro das
+// Rodadas 30, 31 e 36: o dentista entra esperando uma semana e o acesso morre
+// no terceiro dia.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 45 — o trial é de 3 dias");
+ok(
+  "o prompt diz 3 dias, e diz que é o que vier primeiro",
+  JULIA_SYSTEM_PROMPT.includes("3 DIAS ou 2 CONVERSAS, o que vier primeiro"),
+);
+ok(
+  "o exemplo de fala também diz 3 dias",
+  JULIA_SYSTEM_PROMPT.includes("3 dias ou\n2 conversas, o que acabar primeiro") ||
+    JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+      "3 dias ou 2 conversas, o que acabar primeiro",
+    ),
+);
+ok(
+  'o "o que vier primeiro" é explicado, não só citado',
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "quem usa as duas conversas no primeiro dia acaba o teste no primeiro dia",
+  ),
+);
+ok(
+  "ela é proibida de vender o trial como uma semana",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "Nunca venda o trial como uma semana",
+  ),
+);
+ok(
+  "o aviso explica que os 7 dias são da garantia, não do trial",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "os 7 dias são da GARANTIA e só existem depois de assinar",
+  ),
+);
+ok(
+  // O limite de mensagens por conversa foi procurado no bundle (chaves
+  // maxMessages/messageLimit, e as formas em português) e NÃO existe. Prometer
+  // um teto que ninguém publicou é inventar limite, não ser honesta.
+  "ela é proibida de inventar um teto de mensagens que a fonte não tem",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "Não diga quantas mensagens cabem em cada conversa",
+  ),
+);
+ok(
+  "o número 15 não aparece mais como limite de mensagens",
+  !JULIA_SYSTEM_PROMPT.includes("15 mensagens"),
+);
+
+secao("Rodada 45 — nenhum 'sete dias' sobrou colado no trial");
+{
+  // A varredura que a rodada pediu, virada tripwire: toda ocorrência de "7
+  // dias" tem que estar perto de um marcador de GARANTIA (é dela que os sete
+  // dias são) ou dentro de uma PROIBIÇÃO. Qualquer outra é promessa errada.
+  const GARANTIA = /garantia|assinar|assinou|assina o plano|reembolso|dinheiro de volta|arrependimento|por lei|CDC|depois de pagar/i;
+  const PROIBICAO = /NUNCA|não venda|nao venda|achando que|prometer|classe de erro|não diga|nao diga/i;
+
+  const suspeitas: string[] = [];
+  const texto = JULIA_SYSTEM_PROMPT;
+  for (const m of texto.matchAll(/(7|sete)\s*dias?/gi)) {
+    const ini = Math.max(0, (m.index ?? 0) - 180);
+    const contexto = texto.slice(ini, (m.index ?? 0) + 180).replace(/\s+/g, " ");
+    if (GARANTIA.test(contexto) || PROIBICAO.test(contexto)) continue;
+    suspeitas.push(contexto.slice(0, 120));
+  }
+  ok(
+    'todo "7 dias" do prompt é da garantia ou de uma proibição',
+    suspeitas.length === 0,
+    suspeitas.join(" || "),
+  );
+
+  // E o caminho inverso: nenhuma frase pode oferecer o trial por 7 dias.
+  const proibidas = [
+    "trial grátis de 7 dias",
+    "trial de 7 dias",
+    "7 dias, SEM cartão",
+    "7 dias grátis, sem cartão",
+    "de graça por 7 dias",
+    "7 dias com tudo liberado",
+  ];
+  const achadas = proibidas.filter((p) => JULIA_SYSTEM_PROMPT.includes(p));
+  ok(
+    "nenhuma forma de oferecer o trial por 7 dias sobreviveu",
+    achadas.length === 0,
+    achadas.join(" | "),
+  );
+}
+
+secao("Rodada 45 — a comparação com secretária, completa");
+ok(
+  "o contador entrou na conta",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "Some o contador que processa a folha",
+  ),
+);
+ok(
+  "o custo mensal fecha perto de R$3.000",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes("chega perto de R$3.000 por mês"),
+);
+ok(
+  "o número ANUAL existe — é onde a diferença aparece",
+  JULIA_SYSTEM_PROMPT.includes("R$36 mil") && JULIA_SYSTEM_PROMPT.includes("R$3.564"),
+);
+ok(
+  "e a diferença anual é dita",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes("A diferença\n passa de R$32 mil") ||
+    JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes("A diferença passa de R$32 mil"),
+);
+ok(
+  "a conta é dita em duas partes, mês e ano",
+  JULIA_SYSTEM_PROMPT.includes("A CONTA, dita com calma e em DUAS partes"),
+);
+ok(
+  "manda parar depois da conta",
+  JULIA_SYSTEM_PROMPT.includes("DEPOIS DA CONTA, PARE"),
+);
+ok(
+  "o que ela NÃO faz cobre madrugada e fim de semana",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "não atende feriado, e não atende de madrugada",
+  ),
+);
+
+secao("Rodada 45 — 'não vou mandar minha secretária embora'");
+ok(
+  "a objeção tem seção própria",
+  JULIA_SYSTEM_PROMPT.includes('## "MAS EU NÃO VOU MANDAR MINHA SECRETÁRIA EMBORA"'),
+);
+ok(
+  "ela concorda de verdade — o dentista está certo",
+  JULIA_SYSTEM_PROMPT.includes("E o dentista está CERTO — concorde de verdade"),
+);
+ok(
+  "proíbe sugerir demissão em qualquer forma, inclusive como hipótese",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "NUNCA sugira demitir ninguém. Nem por insinuação, nem como hipótese, nem como conta",
+  ),
+);
+ok(
+  "o reenquadramento é LIBERAÇÃO, não substituição",
+  JULIA_SYSTEM_PROMPT.includes("não é de substituição, é de LIBERAÇÃO"),
+);
+ok(
+  'a palavra "libera" aparece no reenquadramento',
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "você libera a sua secretária pra fazer o que ela faz melhor",
+  ),
+);
+ok(
+  "a IA fica com agenda e WhatsApp, inclusive quando ela não está lá",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "inclusive de madrugada e no fim de semana, quando ela não está lá",
+  ),
+);
+ok(
+  "diz para que serve a comparação — dimensionar, não demitir",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "serve para DIMENSIONAR o valor, não para propor demissão",
+  ),
+);
+ok(
+  "a seção vem depois da comparação de custo, que é quando a objeção aparece",
+  JULIA_SYSTEM_PROMPT.indexOf('## "MAS EU NÃO VOU MANDAR MINHA SECRETÁRIA EMBORA"') >
+    JULIA_SYSTEM_PROMPT.indexOf("## QUANDO ELE DIZ QUE ESTÁ CARO"),
+);
 
 secao("Rodada 44 — o prompt cabe no orçamento de tokens");
 {
