@@ -4,6 +4,7 @@
  */
 import { ok, secao, fim } from "./assert";
 import {
+  ABORDAGEM_TOQUES,
   FOLLOW_UP_TEMPLATES,
   JULIA_SYSTEM_PROMPT,
   JULIA_OUTREACH_PROMPT,
@@ -1031,8 +1032,22 @@ ok(
   JULIA_SYSTEM_PROMPT.includes("Sistema de gestão cuida de quem JÁ é paciente"),
 );
 ok(
-  "a história entra em pedaços, não recitada de uma vez",
-  JULIA_SYSTEM_PROMPT.includes("não recite a história inteira de uma vez"),
+  "a história só sai com gancho, nunca por iniciativa própria",
+  JULIA_SYSTEM_PROMPT.includes("QUANDO CONTAR — só com gancho. NUNCA por iniciativa própria"),
+);
+ok(
+  "os ganchos estão listados (desconfiança, origem, comparação, diferencial)",
+  JULIA_SYSTEM_PROMPT.includes('"nunca ouvi falar", "como vou confiar?"') &&
+    JULIA_SYSTEM_PROMPT.includes('"quem criou?", "como surgiu?"'),
+);
+ok(
+  "e o quando NÃO contar também (abertura, enfeite, confiança já dada, bis)",
+  JULIA_SYSTEM_PROMPT.includes("não conhecer sua biografia") &&
+    JULIA_SYSTEM_PROMPT.includes("Duas vezes na mesma conversa"),
+);
+ok(
+  "a história entra em pedaços, nunca a saga inteira",
+  JULIA_SYSTEM_PROMPT.includes("conte em PEDAÇOS, nunca a saga inteira"),
 );
 ok(
   "nome completo e Instagram do Dr. Renato: ela diz que não sabe",
@@ -1124,5 +1139,37 @@ ok(
   FOLLOW_UP_TEMPLATES[3]("Marina", null).includes("trial sem cartão") &&
     FOLLOW_UP_TEMPLATES[3]("Marina", null).includes("7 dias pra pedir o dinheiro de volta"),
 );
+
+secao("Rodada 38 — emoji nos templates fixos: a maioria não tem");
+{
+  // A Rodada 37 calibrou o emoji da conversa ao vivo, mas os textos fixos são
+  // determinísticos — a regra do prompt não os alcança. Emoji em toda mensagem
+  // automática é a assinatura mais óbvia de robô, e estas são justamente as
+  // mensagens que o dentista recebe sem pedir.
+  const EMOJI = /\p{Extended_Pictographic}/u;
+  const fixos = [
+    FOLLOW_UP_TEMPLATES[1]("Marina", null),
+    FOLLOW_UP_TEMPLATES[2]("Marina", null),
+    FOLLOW_UP_TEMPLATES[3]("Marina", null),
+    FOLLOW_UP_TEMPLATES[4]("Marina", null),
+    ABORDAGEM_TOQUES[1]("Marina"),
+    ABORDAGEM_TOQUES[2]("Marina"),
+  ];
+  const comEmoji = fixos.filter((t) => EMOJI.test(t));
+  ok(
+    "dos 6 textos fixos, no máximo 2 têm emoji",
+    comEmoji.length <= 2,
+    comEmoji.join(" | "),
+  );
+  ok(
+    "nenhum toque de abordagem fria tem emoji (emoji de estranho soa forçado)",
+    !EMOJI.test(ABORDAGEM_TOQUES[1]("Marina")) &&
+      !EMOJI.test(ABORDAGEM_TOQUES[2]("Marina")),
+  );
+  ok(
+    "nenhum texto fixo tem mais de um emoji",
+    fixos.every((t) => (t.match(/\p{Extended_Pictographic}/gu) ?? []).length <= 1),
+  );
+}
 
 fim();

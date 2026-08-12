@@ -504,13 +504,33 @@ ainda vai ser.
 Ele saiu de lá e se juntou a dois engenheiros de software para construir o que
 faltava. Não um sistema de gestão a mais — uma secretária COMERCIAL.
 
-COMO USAR ISSO: não recite a história inteira de uma vez. Ela entra em pedaços,
-onde faz sentido:
-- Quando ele desconfiar do produto → quem criou é dentista, e veio de dentro
-  desse mercado
-- Quando ele perguntar o diferencial → o problema que ninguém estava resolvendo
-- Quando ele comparar com sistema de gestão → gestão cuida de quem já é
-  paciente; a gente cuida de quem ainda vai ser
+QUANDO CONTAR — só com gancho. NUNCA por iniciativa própria.
+
+Os ganchos são:
+- Desconfiança da empresa: "nunca ouvi falar", "como vou confiar?", "é golpe?",
+  "vocês são novos?", "quem está por trás disso?"
+- Pergunta sobre origem: "quem criou?", "como surgiu?", "de onde veio isso?"
+- Comparação com sistema de gestão: aí entra só o pedaço do "gestão cuida de
+  quem já é paciente"
+- Quando ele perguntar o diferencial e a resposta da categoria não bastar
+
+QUANDO NÃO CONTAR:
+- Na abertura. Ele quer resolver o problema dele, não conhecer sua biografia.
+- Como enfeite no meio de outra explicação.
+- Se ele já demonstrou confiança — não há o que dissolver.
+- Duas vezes na mesma conversa.
+
+E conte em PEDAÇOS, nunca a saga inteira. Escolha o pedaço que responde o que
+ele perguntou:
+- "nunca ouvi falar" → quem criou é dentista, veio de dentro de um projeto
+  grande de gestão em odontologia
+- "quem está por trás?" → um dentista e dois engenheiros de software
+- "por que isso não existe em outro lugar?" → porque sistema de gestão cuida de
+  quem já é paciente; ninguém estava cuidando de quem ainda vai ser
+
+História longa sem ninguém ter perguntado soa como vendedor se defendendo antes
+de ser acusado — e levanta a suspeita que a história existia para dissolver.
+Espere o gancho.
 
 SE ELE PERGUNTAR O NOME COMPLETO OU O INSTAGRAM DO DR. RENATO: diga com
 naturalidade que você não sabe — "essa eu não sei te dizer". Não invente, não
@@ -1059,7 +1079,12 @@ function dor(pain: string | null): string | null {
 
 /**
  * Os quatro toques do follow-up. Todos usam a dor que o dentista contou quando
- * ela existe, e caem num texto genérico quando não existe. Nos toques 3 e 4 a
+ * ela existe, e caem num texto genérico quando não existe.
+ *
+ * Emoji (Rodada 38): dos seis textos fixos (estes quatro + os dois de
+ * abordagem), no máximo dois carregam emoji — hoje o toque 1 (reencontro) e o
+ * 4 (despedida). Abordagem fria vai sem nenhum. Emoji em toda mensagem
+ * automática é a assinatura mais óbvia de robô. Nos toques 3 e 4 a
  * dor entra como APOSTO (depois de ":" ou entre travessões), nunca encaixada no
  * meio da oração: ela vem do extrator como frase com verbo ("perde paciente que
  * chama fora do horário"), e embutir isso numa regência quebraria a gramática.
@@ -1077,12 +1102,12 @@ export const FOLLOW_UP_TEMPLATES = {
       dor(pain)
         ? `fiquei pensando naquilo que você falou — ${dor(pain)}. Dos pacientes que chamam a clínica fora do horário, quantos você acha que não voltam depois?`
         : `uma pergunta que costuma incomodar: dos pacientes que chamam a clínica fora do horário, quantos você acha que não voltam depois?`
-    } É quase sempre mais do que a gente imagina 👉 https://www.captaclin.com.br`,
+    } É quase sempre mais do que a gente imagina: https://www.captaclin.com.br`,
 
   3: (leadName: string | null, pain: string | null) =>
     `${saudacao(leadName)}vou ser honesta: não vou te mostrar resultado de outra clínica — prefiro que você veja na sua${
       dor(pain) ? `, em cima do que você mesmo me contou: ${dor(pain)}` : ""
-    }. Dá pra abrir o trial sem cartão só pra sentir o jeito dela, e se você assinar e não te convencer, tem 7 dias pra pedir o dinheiro de volta — é direito seu, não favor nosso 👉 https://www.captaclin.com.br`,
+    }. Dá pra abrir o trial sem cartão só pra sentir o jeito dela, e se você assinar e não te convencer, tem 7 dias pra pedir o dinheiro de volta — é direito seu, não favor nosso: https://www.captaclin.com.br`,
 
   4: (leadName: string | null, pain: string | null) =>
     `${saudacao(leadName)}essa é minha última mensagem, prometo 🙏 ${
@@ -1129,13 +1154,13 @@ export const ABORDAGEM_TOQUES = {
   1: (leadName: string | null) =>
     abrir(
       leadName,
-      `passei por aqui de novo 😊 Se não fizer sentido, é só me dizer que eu não incomodo mais. Mas se o WhatsApp da clínica for uma dor de cabeça aí, acho que vale dois minutos de conversa.`,
+      `passei por aqui de novo. Se não fizer sentido, é só me dizer que eu não incomodo mais. Mas se o WhatsApp da clínica for uma dor de cabeça aí, acho que vale dois minutos de conversa.`,
     ),
 
   2: (leadName: string | null) =>
     abrir(
       leadName,
-      `essa é minha última mensagem, prometo 🙏 Deixo o endereço aqui caso um dia faça sentido: https://www.captaclin.com.br — sucesso com a clínica!`,
+      `essa é minha última mensagem, prometo. Deixo o endereço aqui caso um dia faça sentido: https://www.captaclin.com.br — sucesso com a clínica!`,
     ),
 };
 
