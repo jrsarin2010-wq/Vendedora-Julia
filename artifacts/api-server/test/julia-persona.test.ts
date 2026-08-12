@@ -1725,6 +1725,166 @@ secao("Rodada 46 — os achados extras da leitura completa");
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 47 — a Júlia para de pedir permissão pra vender. Conversa real com a
+// Dra. Juliana (atende sozinha, R$100/mês de anúncio): seis pedidos de licença
+// ("se quiser, eu te comparo..."), contrato oferecido sem ninguém pedir logo
+// depois de dissolver o "é golpe?", e o Essencial recomendado três vezes no
+// escuro — com três "tá caro" de resposta e nenhuma reconsideração de plano.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 47 — ela não pede permissão para fazer o próprio trabalho");
+ok(
+  "a seção existe",
+  JULIA_SYSTEM_PROMPT.includes("## VOCÊ NÃO PEDE PERMISSÃO PARA FAZER SEU TRABALHO"),
+);
+ok(
+  "vendedor bom não pergunta se pode mostrar — mostra",
+  JULIA_SYSTEM_PROMPT.includes("Vendedor bom não pergunta se pode mostrar. Ele mostra."),
+);
+ok(
+  'proíbe abrir argumento com "se quiser"',
+  JULIA_SYSTEM_PROMPT.includes('"Se quiser, eu te comparo com..."') &&
+    JULIA_SYSTEM_PROMPT.includes('"Se quiser, eu posso te falar sobre..."'),
+);
+ok('proíbe "quer que eu te mostre"', JULIA_SYSTEM_PROMPT.includes('"Quer que eu te mostre...?"'));
+ok('proíbe "posso te explicar"', JULIA_SYSTEM_PROMPT.includes('"Posso te explicar...?"'));
+ok(
+  "o porquê está dito: oferta se recusa",
+  JULIA_SYSTEM_PROMPT.includes("transforma argumento em OFERTA — e oferta se recusa"),
+);
+ok(
+  "permissão antes de pergunta pessoal continua permitida",
+  JULIA_SYSTEM_PROMPT.includes('"Posso te fazer uma pergunta?" antes de perguntar quanto ele fatura'),
+);
+ok(
+  "permissão antes do link de assinatura continua permitida",
+  JULIA_SYSTEM_PROMPT.includes('"Quer que eu já te mande o link?" antes do link de assinatura'),
+);
+ok(
+  "o fecho: argumento e informação se mostram, não se perguntam",
+  JULIA_SYSTEM_PROMPT.includes(
+    "Argumento, comparação, explicação e informação: mostra. Não pergunta.",
+  ),
+);
+ok(
+  // A exceção não pode matar os links de conferência da resposta do golpe
+  // ("se quiser conferir, tá tudo público" ENTREGA os links na mesma mensagem).
+  "entregar link de conferência junto da resposta não é pedir licença",
+  JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes(
+    "o problema é a mensagem que só oferece e não entrega nada",
+  ),
+);
+
+secao("Rodada 47 — contrato e termos só entram se ele pedir");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok("a regra existe, colada nos links", JULIA_SYSTEM_PROMPT.includes("MAS SÓ SE ELE PEDIR"));
+  ok(
+    "o conhecimento do contrato é para conduzir, não para empurrar documento",
+    corrido.includes("não para empurrar documento"),
+  );
+  ok(
+    "proíbe oferecer por iniciativa própria",
+    corrido.includes("NUNCA ofereça contrato, termos ou política de privacidade por iniciativa própria"),
+  );
+  ok(
+    "o porquê: planta desconfiança que não existia",
+    corrido.includes("planta uma desconfiança que não existia"),
+  );
+  ok(
+    "os três casos em que o link entra estão listados",
+    corrido.includes("quando ele pedir o documento") &&
+      corrido.includes("quer ler antes de assinar") &&
+      corrido.includes("regra jurídica delicada"),
+  );
+  ok(
+    'depois de responder "é golpe?", sem emendar documento',
+    corrido.includes("E NEM ofereça contrato e termos que ele não pediu"),
+  );
+  ok(
+    "e o porquê de não emendar: parece defesa",
+    corrido.includes("emendar mais prova parece que você está insistindo em se defender"),
+  );
+}
+
+secao('Rodada 47 — "caro" repetido não é objeção, é plano errado');
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok(
+    "a regra existe",
+    JULIA_SYSTEM_PROMPT.includes('⚠️ "CARO" REPETIDO NÃO É OBJEÇÃO — É PLANO ERRADO'),
+  );
+  ok(
+    "na segunda vez o problema é o plano, não o argumento",
+    corrido.includes("na segunda vez o problema não é o argumento — é o plano"),
+  );
+  ok(
+    "reconsiderar em voz alta, sem constrangimento",
+    JULIA_SYSTEM_PROMPT.includes("Reconsidere em voz alta, sem constrangimento"),
+  );
+  ok(
+    "a fala pronta desce de plano com os fatos que ela contou",
+    corrido.includes("o Essencial é maior do que você precisa agora") &&
+      corrido.includes("O Básico resolve o seu caso"),
+  );
+  ok(
+    "descer de plano é virar consultora, e consultora fecha",
+    corrido.includes("é virar consultora, e consultora fecha"),
+  );
+  ok(
+    "a regra fica DEPOIS da comparação com a recepcionista (que vale pro primeiro caro)",
+    JULIA_SYSTEM_PROMPT.indexOf('"CARO" REPETIDO') >
+      JULIA_SYSTEM_PROMPT.indexOf("## QUANDO ELE DIZ QUE ESTÁ CARO") &&
+      corrido.includes("A comparação acima vale para o PRIMEIRO"),
+  );
+}
+
+secao("Rodada 47 — recomendação exige profissionais E verba de anúncio");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok(
+    "o pré-requisito existe",
+    JULIA_SYSTEM_PROMPT.includes(
+      "⚠️ RECOMENDAÇÃO TEM PRÉ-REQUISITO: PROFISSIONAIS E VERBA DE ANÚNCIO",
+    ),
+  );
+  ok(
+    "as duas perguntas estão nomeadas",
+    corrido.includes("quantos profissionais atendem, e se ele anuncia — e com quanto por mês"),
+  );
+  ok(
+    'sem as duas respostas, recomendação é chute que vira "tá caro"',
+    corrido.includes('chute que erra pra cima vira "tá caro"'),
+  );
+  ok(
+    "a trava de preço também barra a recomendação no escuro",
+    corrido.includes("a resposta NÃO é o valor NEM uma recomendação de plano"),
+  );
+  ok(
+    "os critérios de cada plano existem",
+    JULIA_SYSTEM_PROMPT.includes("PARA QUEM CADA PLANO SERVE"),
+  );
+  ok(
+    "BÁSICO: sozinho, verba pequena, não perder quem chama",
+    corrido.includes("BÁSICO: atende sozinho, verba de anúncio pequena ou nenhuma"),
+  );
+  ok(
+    "ESSENCIAL: anúncio de verdade, equipe, ou precisa que ela venda",
+    corrido.includes("ESSENCIAL: investe de verdade em anúncio") &&
+      corrido.includes("precisa que ela VENDA (SPIN, remarketing, CRM) e não só atenda"),
+  );
+  ok(
+    "PRO: recuperação, pós-consulta e relatórios",
+    corrido.includes("PRO: quer recuperação de paciente, pós-consulta automático e relatórios"),
+  );
+  ok(
+    "o pré-requisito vem antes do PREÇO SE FALA, dentro da seção de planos",
+    JULIA_SYSTEM_PROMPT.indexOf("RECOMENDAÇÃO TEM PRÉ-REQUISITO") <
+      JULIA_SYSTEM_PROMPT.indexOf("PREÇO SE FALA"),
+  );
+}
+
 secao("Rodada 44 — o prompt cabe no orçamento de tokens");
 {
   const tokens = tamanhoEmTokens(JULIA_SYSTEM_PROMPT);
