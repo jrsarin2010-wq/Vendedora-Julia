@@ -15,6 +15,30 @@ export const STATUS_PT: Record<string, string> = {
   lost: "Perdido",
 };
 
+/**
+ * TEMPERATURA (Rodada 41). As faixas e os limites são os mesmos de
+ * api-server/src/lib/temperatura.ts — duplicados aqui porque o painel não
+ * importa código do servidor. Se os limites mudarem lá, mudam aqui.
+ */
+export const FAIXA_PT: Record<string, string> = {
+  frio: "Frio",
+  morno: "Morno",
+  quente: "Quente",
+  fervendo: "Fervendo",
+};
+
+export type Faixa = "frio" | "morno" | "quente" | "fervendo";
+
+export function faixaDaTemperatura(pontos: number): Faixa {
+  if (pontos >= 60) return "fervendo";
+  if (pontos >= 30) return "quente";
+  if (pontos >= 10) return "morno";
+  return "frio";
+}
+
+export const rotuloFaixa = (v: string | null | undefined): string =>
+  (v && FAIXA_PT[v]) || v || "—";
+
 export const ETAPA_PT: Record<string, string> = {
   new: "Novo",
   contacted: "Contatado",

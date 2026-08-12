@@ -8,6 +8,7 @@ import {
 import { eq, sql, desc, isNotNull } from "drizzle-orm";
 import { GetRecentActivityQueryParams } from "@workspace/api-zod";
 import { contarAssuntos } from "../lib/duvidas-do-site";
+import { faixaDaTemperatura, type Faixa } from "../lib/temperatura";
 
 const router: IRouter = Router();
 
@@ -116,6 +117,35 @@ router.get("/stats/duvidas-do-site", async (req, res) => {
     res.json({ assuntos, total });
   } catch (err) {
     req.log.error({ err }, "Failed to get landing questions");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/stats/temperatura — quantos leads em cada faixa (Rodada 41).
+ *
+ * É a leitura mais útil do funil que existe: quantos estão só olhando, quantos
+ * avaliando, quantos decidindo. Fora do contrato OpenAPI, no mesmo esquema das
+ * dúvidas do site: tela de operação do painel, não modelo de dados.
+ *
+ * Cliente e perdido ficam de fora da conta — a temperatura é leitura de quem
+ * ainda está no funil, e um "fervendo" que já assinou só inflaria o número.
+ */
+router.get("/stats/temperatura", async (req, res) => {
+  try {
+    const leads = await db
+      .select({ temperatura: leadsTable.temperatura, status: leadsTable.status })
+      .from(leadsTable);
+
+    const contagem: Record<Faixa, number> = { frio: 0, morno: 0, quente: 0, fervendo: 0 };
+    for (const l of leads) {
+      if (l.status === "closed" || l.status === "lost") continue;
+      contagem[faixaDaTemperatura(l.temperatura ?? 0)]++;
+    }
+
+    res.json(contagem);
+  } catch (err) {
+    req.log.error({ err }, "Failed to get temperature stats");
     res.status(500).json({ error: "Internal server error" });
   }
 });

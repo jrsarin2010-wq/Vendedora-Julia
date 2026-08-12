@@ -45,6 +45,11 @@ import {
   respostaLonga,
   respostaRepetida,
 } from "../lib/atencao";
+import {
+  registrarSinais,
+  faixaDaTemperatura,
+  statusDaFaixa,
+} from "../lib/temperatura";
 
 const router: IRouter = Router();
 
@@ -364,7 +369,10 @@ router.post("/webhook/whatsapp", async (req, res) => {
         .values({
           phone,
           origin: daLanding ? ORIGEM_SITE : "whatsapp",
-          status: "warm",
+          // Nasce frio: mandar mensagem não esquenta ninguém (Rodada 41). O
+          // status certo é derivado da temperatura logo abaixo, nesta mesma
+          // passada — se a mensagem trouxer sinal de compra, ele já sobe aqui.
+          status: "cold",
           funnelStage: "new",
           lastMessageAt: new Date(),
         })
@@ -690,6 +698,11 @@ router.post("/webhook/whatsapp", async (req, res) => {
       }
     }
 
+    // Os sinais de temperatura que o extrator encontrar (Rodada 41). Fica fora
+    // do try da extração porque a temperatura é atualizada mais abaixo mesmo
+    // quando a extração falha — o "respondeu_algo" não depende de IA.
+    let sinaisDaConversa: string[] = [];
+
     // Analista de bastidor: lê a conversa e anota a dor e a objeção do lead,
     // pra você receber o lead com contexto. Roda DEPOIS de enviar a resposta
     // (não atrasa o dentista) e nunca derruba o fluxo se falhar.
@@ -726,7 +739,15 @@ router.post("/webhook/whatsapp", async (req, res) => {
         wantsToStop?: boolean;
         irritado?: boolean;
         duvidaDoSite?: string | null;
+        sinais?: string[];
       };
+
+      // Sinais de temperatura. A validação de nome fica em registrarSinais
+      // (sinal desconhecido é descartado); aqui só garantimos que é uma lista
+      // de strings, porque o modelo às vezes inventa formato.
+      if (Array.isArray(parsed.sinais)) {
+        sinaisDaConversa = parsed.sinais.filter((s) => typeof s === "string");
+      }
 
       const update: {
         painPoints?: string;
@@ -1005,6 +1026,50 @@ router.post("/webhook/whatsapp", async (req, res) => {
           lastMessage: text,
         });
       }
+    }
+
+    // TEMPERATURA DE VERDADE (Rodada 41): o que esquenta um lead não é ele
+    // falar, é O QUE ele fala. Soma os sinais desta mensagem aos já vistos —
+    // sem repetir (perguntar preço três vezes vale 15, não 45) — e deriva o
+    // status da pontuação. Antes, "warm" era qualquer um que mandou mensagem:
+    // quem comparou planos ficava igual a quem mandou "oi".
+    //
+    // Roda ANTES de armar a leva de follow-ups, de propósito: a cadência é
+    // escolhida pela temperatura, e tem que ser a temperatura DE AGORA.
+    try {
+      const novos = [...sinaisDaConversa, "respondeu_algo"];
+      // O handoff tem detector próprio (acima), mais confiável que o extrator
+      // para este sinal — por isso ele não está na lista do prompt.
+      if (handoffRequested) novos.push("pediu_pessoa");
+
+      const { sinaisVistos, temperatura } = registrarSinais(lead.sinaisVistos, novos);
+
+      if (
+        temperatura !== (lead.temperatura ?? 0) ||
+        sinaisVistos !== (lead.sinaisVistos ?? "")
+      ) {
+        // "closed" e "lost" são terminais: a pontuação continua sendo anotada
+        // (é história da conversa), mas não rebaixa nem ressuscita ninguém.
+        const terminal = lead.status === "closed" || lead.status === "lost";
+        const statusDerivado = statusDaFaixa(faixaDaTemperatura(temperatura));
+
+        await db
+          .update(leadsTable)
+          .set({
+            temperatura,
+            sinaisVistos,
+            ...(terminal ? {} : { status: statusDerivado }),
+            updatedAt: new Date(),
+          })
+          .where(eq(leadsTable.id, lead.id));
+
+        // Reflete em memória: a armação da leva logo abaixo lê estes campos.
+        lead.temperatura = temperatura;
+        lead.sinaisVistos = sinaisVistos;
+        if (!terminal) lead.status = statusDerivado;
+      }
+    } catch (err) {
+      req.log.warn({ err, leadId: lead.id }, "Atualização de temperatura falhou (seguindo sem)");
     }
 
     // Arma uma leva NOVA de follow-ups, contando a partir de agora.

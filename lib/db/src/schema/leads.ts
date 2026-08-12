@@ -1,4 +1,4 @@
-import { pgTable, serial, text, boolean, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -73,6 +73,15 @@ export const leadsTable = pgTable("leads", {
   mainObjection: text("main_objection"),
   planInterest: planInterestEnum("plan_interest"),
   status: leadStatusEnum("status").notNull().default("cold"),
+  // TEMPERATURA POR SINAL (Rodada 41). A pontuação acumulada da conversa —
+  // pediu link vale 30, perguntou preço 15, respondeu qualquer coisa 3. As
+  // faixas (frio/morno/quente/fervendo) e a tabela de pontos moram em
+  // api-server/src/lib/temperatura.ts. O `status` acima vira DERIVADO disto
+  // para hot/warm/cold; "closed" e "lost" continuam terminais.
+  temperatura: integer("temperatura").notNull().default(0),
+  // Os sinais que JÁ pontuaram nesta conversa ("perguntou_preco,contou_a_dor"),
+  // para o mesmo sinal não somar duas vezes. Mesmo formato do demosEnviadas.
+  sinaisVistos: text("sinais_vistos"),
   notes: text("notes"),
   // Áudios de demonstração já enviados a este lead, separados por vírgula
   // ("vou_pensar,fora_do_horario"). É o que impede repetir a mesma demo, que

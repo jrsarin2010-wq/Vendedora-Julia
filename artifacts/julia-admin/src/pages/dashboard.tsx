@@ -9,6 +9,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { rotuloEtapa } from "@/lib/rotulos";
 import { listarAtencao, resolverAtencao, type ItemDeAtencao } from "@/lib/atencao-api";
 import { listarDuvidasDoSite } from "@/lib/duvidas-api";
+import { listarTemperatura } from "@/lib/temperatura-api";
+import { FAIXA_PT, type Faixa } from "@/lib/rotulos";
+import { Flame } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
@@ -74,6 +77,8 @@ export default function Dashboard() {
           testId="stat-handoffs"
         />
       </div>
+
+      <TemperaturaDoFunil />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Funnel Chart */}
@@ -267,6 +272,57 @@ function LandingNaoResponde() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * TEMPERATURA DO FUNIL (Rodada 41) — quantos leads em cada faixa.
+ *
+ * É a leitura mais útil do funil que existe: quantos estão só olhando (frio),
+ * avaliando (morno), decidindo (quente) e com múltiplos sinais de compra
+ * (fervendo). Cliente e Perdido não entram na conta.
+ */
+function TemperaturaDoFunil() {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["temperatura"],
+    queryFn: listarTemperatura,
+    refetchInterval: 60_000,
+  });
+
+  if (isLoading) return <Skeleton className="h-24 w-full rounded-md" />;
+  if (isError) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Não consegui carregar a temperatura do funil.
+      </p>
+    );
+  }
+
+  const faixas: { faixa: Faixa; cor: string }[] = [
+    { faixa: "fervendo", cor: "text-red-500" },
+    { faixa: "quente", cor: "text-orange-500" },
+    { faixa: "morno", cor: "text-yellow-500" },
+    { faixa: "frio", cor: "text-blue-500" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4" data-testid="temperatura-funil">
+      {faixas.map(({ faixa, cor }) => (
+        <Card key={faixa} className="shadow-sm border-border" data-testid={`temperatura-${faixa}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between pb-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                {FAIXA_PT[faixa]}
+              </p>
+              <Flame className={`h-4 w-4 ${cor}`} />
+            </div>
+            <div className="text-2xl font-bold font-mono tracking-tight">
+              {data?.[faixa] ?? 0}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }
 

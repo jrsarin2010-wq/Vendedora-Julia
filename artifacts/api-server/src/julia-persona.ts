@@ -1387,9 +1387,10 @@ Extraia, do ponto de vista do dentista:
 8. Se ele está IRRITADO, frustrado ou perdendo a paciência.
 9. Se o dentista veio do site e fez uma pergunta que a PÁGINA deveria ter
    respondido, qual foi o assunto.
+10. Quais SINAIS DE INTERESSE apareceram nesta conversa.
 
 Responda SOMENTE com um JSON, sem nada antes ou depois, neste formato exato:
-{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>, "irritado": <true ou false>, "duvidaDoSite": "<assunto em 2 a 4 palavras, ou null>"}
+{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>, "irritado": <true ou false>, "duvidaDoSite": "<assunto em 2 a 4 palavras, ou null>", "sinais": ["<sinal1>", "<sinal2>", ...]}
 
 Etapas possíveis, em ordem:
 - new: mal começou, ainda não se sabe nada da clínica dele.
@@ -1431,6 +1432,17 @@ Regras de "irritado" (seja CONSERVADOR — na dúvida, false):
 - false para pressa: "to sem tempo agora", "depois eu vejo".
 - Errar aqui para o lado do true faz o dono da clínica receber alerta em toda
   negociação normal — e aí ele para de olhar os alertas, inclusive os de verdade.
+
+Regras de "sinais":
+- Sinais possíveis (use exatamente estes nomes, e só os que REALMENTE apareceram):
+  pediu_link, perguntou_como_assinar, disse_vou_pensar, perguntou_contrato,
+  perguntou_seguranca, perguntou_preco, comparou_planos, perguntou_recurso,
+  contou_a_dor, disse_quantos_prof
+- Liste apenas o que aconteceu de fato. Na dúvida, não inclua.
+- "disse_vou_pensar" só quando ele demonstrou interesse e ADIOU a decisão — não
+  quando recusou. "Não é pra mim" NÃO é vou pensar: um é recusa, o outro é
+  quase-fechamento.
+- Array vazio quando nada disso apareceu.
 
 Regras de "duvidaDoSite":
 - Preencha SOMENTE quando o dentista veio do site e a primeira coisa que ele

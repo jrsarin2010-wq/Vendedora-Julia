@@ -24,7 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Filter, AlertTriangle, Trash2, Loader2, Eraser } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apagarLead, apagarImportadosPendentes } from "@/lib/import-api";
-import { rotuloStatus, rotuloEtapa, rotuloPlano, rotuloAtencao, rotuloAtencaoCurto } from "@/lib/rotulos";
+import { rotuloStatus, rotuloEtapa, rotuloPlano, rotuloAtencao, rotuloAtencaoCurto, rotuloFaixa, faixaDaTemperatura, type Faixa } from "@/lib/rotulos";
 import { ConfirmarExclusao } from "@/components/confirmar-exclusao";
 import { listarAtencao } from "@/lib/atencao-api";
 
@@ -58,10 +58,35 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/**
+ * TEMPERATURA (Rodada 41). Para quem ainda está no funil, a leitura útil não é
+ * o status — é a faixa da pontuação de sinais. Cliente e Perdido continuam com
+ * o selo de status, porque para eles temperatura não significa nada.
+ */
+export function TemperaturaBadge({ temperatura }: { temperatura: number }) {
+  const faixa = faixaDaTemperatura(temperatura);
+
+  const cores: Record<Faixa, string> = {
+    fervendo: "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800",
+    quente: "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800",
+    morno: "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800",
+    frio: "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800",
+  };
+
+  return (
+    <Badge variant="outline" className={`font-mono text-[10px] uppercase tracking-wider ${cores[faixa]}`} data-testid={`temperatura-badge-${faixa}`}>
+      {rotuloFaixa(faixa)}
+    </Badge>
+  );
+}
+
 export default function Leads() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounceLocal(search, 300);
-  const [statusFilter, setStatusFilter] = useState<ListLeadsStatus | "all">("all");
+  // Filtro de temperatura: as quatro faixas são filtradas no cliente (o campo
+  // não está no contrato OpenAPI); Cliente e Perdido continuam sendo filtro de
+  // status no servidor, porque status eles ainda têm.
+  const [tempFilter, setTempFilter] = useState<Faixa | ListLeadsStatus | "all">("all");
   const [stageFilter, setStageFilter] = useState<ListLeadsFunnelStage | "all">("all");
   const [soAtencao, setSoAtencao] = useState(false);
   const [apagandoId, setApagandoId] = useState<number | null>(null);
@@ -71,7 +96,7 @@ export default function Leads() {
 
   const queryParams: any = {};
   if (debouncedSearch) queryParams.search = debouncedSearch;
-  if (statusFilter !== "all") queryParams.status = statusFilter;
+  if (tempFilter === "closed" || tempFilter === "lost") queryParams.status = tempFilter;
   if (stageFilter !== "all") queryParams.funnelStage = stageFilter;
 
   const { data, isLoading } = useListLeads(queryParams, {
@@ -91,9 +116,20 @@ export default function Leads() {
     (atencao?.itens ?? []).map((i) => [i.id, i.motivo] as const),
   );
 
-  const leadsVisiveis = (data?.leads ?? []).filter(
-    (lead) => !soAtencao || motivoPorLead.has(lead.id),
-  );
+  const ehFaixa = (v: string): v is Faixa =>
+    ["frio", "morno", "quente", "fervendo"].includes(v);
+
+  const leadsVisiveis = (data?.leads ?? []).filter((lead) => {
+    if (soAtencao && !motivoPorLead.has(lead.id)) return false;
+    if (tempFilter !== "all" && ehFaixa(tempFilter)) {
+      // O `Lead` do contrato não conhece `temperatura`; o servidor manda a
+      // linha inteira do banco, então o campo existe em tempo de execução.
+      const temperatura = (lead as { temperatura?: number }).temperatura ?? 0;
+      if (lead.status === "closed" || lead.status === "lost") return false;
+      if (faixaDaTemperatura(temperatura) !== tempFilter) return false;
+    }
+    return true;
+  });
 
   function recarregar() {
     queryClient.invalidateQueries({ queryKey: getListLeadsQueryKey(queryParams) });
@@ -174,15 +210,16 @@ export default function Leads() {
             />
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
-            <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+            <Select value={tempFilter} onValueChange={(v: any) => setTempFilter(v)}>
               <SelectTrigger className="w-full sm:w-[150px] h-9 bg-background" data-testid="select-status-filter">
-                <SelectValue placeholder="Situação" />
+                <SelectValue placeholder="Temperatura" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas as situações</SelectItem>
-                <SelectItem value="hot">Quente</SelectItem>
-                <SelectItem value="warm">Morno</SelectItem>
-                <SelectItem value="cold">Frio</SelectItem>
+                <SelectItem value="all">Todas as temperaturas</SelectItem>
+                <SelectItem value="fervendo">Fervendo</SelectItem>
+                <SelectItem value="quente">Quente</SelectItem>
+                <SelectItem value="morno">Morno</SelectItem>
+                <SelectItem value="frio">Frio</SelectItem>
                 <SelectItem value="closed">Cliente</SelectItem>
                 <SelectItem value="lost">Perdido</SelectItem>
               </SelectContent>
@@ -228,7 +265,7 @@ export default function Leads() {
               <TableRow>
                 <TableHead className="font-mono text-xs uppercase tracking-wider w-[250px]">Contato</TableHead>
                 <TableHead className="font-mono text-xs uppercase tracking-wider">Etapa</TableHead>
-                <TableHead className="font-mono text-xs uppercase tracking-wider">Situação</TableHead>
+                <TableHead className="font-mono text-xs uppercase tracking-wider">Temperatura</TableHead>
                 <TableHead className="font-mono text-xs uppercase tracking-wider">Plano de interesse</TableHead>
                 <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Último contato</TableHead>
                 <TableHead className="w-[60px]"></TableHead>
@@ -288,7 +325,11 @@ export default function Leads() {
                     </TableCell>
                     <TableCell>
                       <Link href={`/leads/${lead.id}`} className="block">
-                        <StatusBadge status={lead.status} />
+                        {lead.status === "closed" || lead.status === "lost" ? (
+                          <StatusBadge status={lead.status} />
+                        ) : (
+                          <TemperaturaBadge temperatura={(lead as { temperatura?: number }).temperatura ?? 0} />
+                        )}
                       </Link>
                     </TableCell>
                     <TableCell>
