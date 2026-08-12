@@ -12,6 +12,11 @@ import leadsRouter from "../src/routes/leads";
 import roteadorPrincipal from "../src/routes/index";
 import { requireAuth } from "../src/lib/auth";
 import { state } from "./stubs/db.mjs";
+// O schema DE VERDADE, importado pelo caminho do arquivo (e não por
+// "@workspace/db", que o teste troca pelo stub): a seção da Rodada 42 varre as
+// foreign keys reais, e o stub não tem foreign key nenhuma.
+import * as schemaReal from "../../../lib/db/src/schema/index";
+import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 
 /**
  * Acha o handler de uma rota pelo método e caminho, para o teste não depender
@@ -163,6 +168,91 @@ ok(
   state.messages.filter((m: any) => m.leadId === 3).length === 4 &&
     state.messages.filter((m: any) => m.leadId === 4).length === 6,
 );
+
+secao("Rodada 42 — a lixeira apaga TUDO, inclusive a fila de reativação");
+state.reset();
+state.nextId = 500;
+// Um lead com tudo que a Rodada 41 pendurou nele: temperatura, sinais,
+// marcação de vigia e follow-ups de TODOS os kinds — inclusive a fila longa.
+leadCom(
+  1,
+  {
+    atencao: "pediu_pessoa",
+    atencaoDetalhe: "quero falar com uma pessoa",
+    temperatura: 33,
+    sinaisVistos: "pediu_pessoa,respondeu_algo",
+  },
+  2,
+  0,
+);
+for (const kind of ["conversa", "abordagem", "reativacao", "reativacao", "reativacao"]) {
+  state.followUps.push({ id: state.nextId++, leadId: 1, kind, status: "pending" });
+}
+leadCom(2, {}, 1, 0); // vizinho, com a própria fila de reativação
+state.followUps.push({ id: state.nextId++, leadId: 2, kind: "reativacao", status: "pending" });
+
+r = await chamarRota(apagarUm, { params: { id: "1" } });
+ok("status 200", r.status === 200, JSON.stringify(r));
+ok(
+  "os 5 follow-ups (todos os kinds) entraram na conta",
+  corpo(r).followUpsApagados === 5,
+  JSON.stringify(r.body),
+);
+ok(
+  "nenhum follow-up órfão, de NENHUM kind",
+  !state.followUps.some((f: any) => f.leadId === 1),
+  JSON.stringify(state.followUps),
+);
+ok("nenhuma mensagem órfã", !state.messages.some((m: any) => m.leadId === 1));
+ok(
+  "o cadastro sumiu — e com ele temperatura, sinais e a marcação da vigia",
+  !state.leads.some((l: any) => l.id === 1),
+);
+ok(
+  "a fila de reativação do vizinho continua",
+  state.followUps.filter((f: any) => f.leadId === 2 && f.kind === "reativacao").length === 1,
+);
+
+secao("Rodada 42 — tripwire: nada no schema referencia leads.id sem cobertura");
+{
+  // Varre o schema REAL: toda tabela cujo foreign key aponta para leads. Se
+  // alguém criar uma tabela nova pendurada em lead, as duas asserções abaixo
+  // quebram sozinhas — e o conserto é (1) onDelete: "cascade" no schema e
+  // (2) adicionar a tabela em apagarLeadEDependentes (routes/leads.ts) e na
+  // lista COBERTAS aqui.
+  const tabelas = Object.values(schemaReal).filter(
+    (v): v is InstanceType<typeof PgTable> => v instanceof PgTable,
+  );
+  ok("o schema real foi carregado (leads está nele)", tabelas.some((t) => getTableConfig(t).name === "leads"));
+
+  const referenciamLeads = new Set<string>();
+  const semCascade: string[] = [];
+  for (const tabela of tabelas) {
+    const cfg = getTableConfig(tabela);
+    for (const fk of cfg.foreignKeys) {
+      const alvo = getTableConfig(fk.reference().foreignTable).name;
+      if (alvo !== "leads") continue;
+      referenciamLeads.add(cfg.name);
+      if (fk.onDelete !== "cascade") semCascade.push(cfg.name);
+    }
+  }
+
+  ok(
+    "toda foreign key para leads.id tem onDelete: cascade",
+    semCascade.length === 0,
+    `sem cascade: ${JSON.stringify(semCascade)}`,
+  );
+
+  // A lista de quem a rota DELETE /leads/:id apaga explicitamente. Tem que ser
+  // IGUAL ao que o schema referencia — nem a mais (rota apagando fantasma),
+  // nem a menos (tabela nova ficaria órfã se o cascade falhar um dia).
+  const COBERTAS = ["follow_ups", "lead_messages"];
+  ok(
+    "a exclusão cobre EXATAMENTE o que referencia leads.id",
+    JSON.stringify([...referenciamLeads].sort()) === JSON.stringify(COBERTAS),
+    `schema: ${JSON.stringify([...referenciamLeads].sort())} × rota: ${JSON.stringify(COBERTAS)} — tabela nova? Adicione em apagarLeadEDependentes e aqui.`,
+  );
+}
 
 secao("faxina sem nada para apagar");
 state.reset();

@@ -28,6 +28,25 @@ import { rotuloStatus, rotuloEtapa, rotuloPlano, rotuloAtencao, rotuloAtencaoCur
 import { ConfirmarExclusao } from "@/components/confirmar-exclusao";
 import { listarAtencao } from "@/lib/atencao-api";
 
+/**
+ * O texto do diálogo de exclusão (Rodada 42): diz EXATAMENTE o que vai sumir,
+ * item por item, com a contagem real de mensagens — "todo o histórico (47
+ * mensagens)" pesa mais que "todo o histórico", e evita o clique distraído.
+ */
+function descricaoDaExclusao(totalMensagens: number): string {
+  const historico =
+    totalMensagens === 1
+      ? "todo o histórico da conversa (1 mensagem)"
+      : `todo o histórico da conversa (${totalMensagens} mensagens)`;
+  return [
+    "Isso apaga TUDO deste dentista, e não tem volta:",
+    "· o cadastro",
+    `· ${historico}`,
+    "· os follow-ups agendados",
+    "· a fila de reativação",
+  ].join("\n");
+}
+
 // Simple debounce hook for local use
 function useDebounceLocal<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -347,7 +366,10 @@ export default function Leads() {
                     <TableCell className="text-right">
                       <ConfirmarExclusao
                         titulo={`Apagar ${lead.name || lead.phone}?`}
-                        descricao="Apaga o dentista, todas as mensagens trocadas com ele e os follow-ups agendados. Não dá para desfazer."
+                        descricao={descricaoDaExclusao(
+                          (lead as { totalMensagens?: number }).totalMensagens ?? 0,
+                        )}
+                        textoConfirmar="Apagar tudo"
                         aoConfirmar={() => confirmarExclusao(lead.id, lead.name || lead.phone)}
                       >
                         <Button

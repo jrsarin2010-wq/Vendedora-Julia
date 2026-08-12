@@ -37,7 +37,11 @@ export function ConfirmarExclusao({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{titulo}</AlertDialogTitle>
-          <AlertDialogDescription>{descricao}</AlertDialogDescription>
+          {/* pre-line: a descrição da exclusão total lista item por item o que
+              vai sumir, e a lista só cumpre o papel se quebrar linha. */}
+          <AlertDialogDescription className="whitespace-pre-line">
+            {descricao}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel data-testid="btn-cancelar-exclusao">Cancelar</AlertDialogCancel>

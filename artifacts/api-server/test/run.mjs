@@ -40,10 +40,21 @@ const plugin = {
       ),
     }));
 
+    // O drizzle-orm é trocado SÓ para o código do próprio api-server. O teste
+    // de exclusão total (Rodada 42) importa o schema REAL de lib/db pelo
+    // caminho do arquivo, e esse schema puxa o drizzle-zod de verdade — que
+    // importa `is`, `Column`, `SQL`... do drizzle-orm de verdade. Se o stub
+    // (que só tem eq/and/or) interceptasse esses imports, o bundle quebraria.
+    build.onResolve({ filter: /^drizzle-orm$/ }, (args) => {
+      const doMundoReal =
+        args.importer.includes("node_modules") ||
+        args.importer.includes(path.join("lib", "db"));
+      return doMundoReal ? undefined : { path: path.join(stubDir, "drizzle.mjs") };
+    });
+
     const trocas = [
       [/^@workspace\/db$/, "db.mjs"],
       [/^@workspace\/integrations-openai-ai-server$/, "openai.mjs"],
-      [/^drizzle-orm$/, "drizzle.mjs"],
       // Só o módulo de integrações externas (WhatsApp/Telegram). Os outros
       // arquivos de src/lib (tratamento, filtro-spam, outreach) são testados
       // de verdade.

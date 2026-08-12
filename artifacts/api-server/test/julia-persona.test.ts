@@ -82,8 +82,10 @@ ok(
   JULIA_SYSTEM_PROMPT.includes("ficha diz import, maps ou instagram"),
 );
 ok(
-  "no MODO A ela responde a pergunta dele antes de fazer as dela",
-  JULIA_SYSTEM_PROMPT.includes("RESPONDA primeiro"),
+  // Rodada 42 reescreveu a abertura: a pergunta dele não é ignorada — o
+  // essencial vai em uma frase, com o pedido do nome na mesma mensagem.
+  "no MODO A a pergunta dele não é ignorada para pedir o nome",
+  JULIA_SYSTEM_PROMPT.includes("ignorar a pergunta dele para pedir o nome irrita"),
 );
 ok("no MODO B ela pede licença", JULIA_SYSTEM_PROMPT.includes("PEÇA LICENÇA de verdade"));
 ok(
@@ -307,8 +309,10 @@ ok(
 secao("Rodada 30 — nome sempre, e nunca 'Dr.' no vácuo");
 ok('proíbe "Dr." sozinho', JULIA_SYSTEM_PROMPT.includes('NUNCA escreva "Dr." sozinho, sem nome'));
 ok(
-  "manda responder a pergunta primeiro e emendar o nome",
-  JULIA_SYSTEM_PROMPT.includes("Mesmo quando ele já chega com uma pergunta, você PRECISA do nome dele"),
+  // O texto da Rodada 30 ("você PRECISA do nome dele") virou a sequência da
+  // Rodada 42 — a exigência do nome continua, mais forte: ele não é opcional.
+  "manda pedir o nome mesmo quando ele chega com pergunta",
+  JULIA_SYSTEM_PROMPT.includes("Boa pergunta! Já te explico certinho. Antes, como posso te chamar?"),
 );
 
 secao("Rodada 30 — preço se fala");
@@ -1234,6 +1238,78 @@ ok(
 ok(
   "manda parar depois de responder, sem emendar venda",
   JULIA_SYSTEM_PROMPT.includes("DEPOIS DE RESPONDER, PARE"),
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 42 — a conversa real que motivou: ela escreveu "se quiser, me diz como
+// posso te chamar" (e ele pulou o nome), e respondeu "R$491" na segunda
+// mensagem (e a conversa morreu ali). O nome não é opcional, e preço sem dor é
+// só um número grande.
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 42 — o nome não é opcional");
+{
+  // O recorte é o MODO A: é a abertura de quem chama, onde o nome se pede. O
+  // "se quiser" existe legitimamente em outros pontos do prompt ("Se quiser
+  // ler agora, tá público") — o que não pode é aparecer no pedido do nome.
+  const inicioModoA = JULIA_SYSTEM_PROMPT.indexOf("MODO A — ELE CHAMOU VOCÊ");
+  const fimModoA = JULIA_SYSTEM_PROMPT.indexOf("MODO B — VOCÊ CHAMOU ELE");
+  const modoA = JULIA_SYSTEM_PROMPT.slice(inicioModoA, fimModoA);
+  ok("o recorte do MODO A existe", inicioModoA > -1 && fimModoA > inicioModoA);
+  ok(
+    'o MODO A não contém "se quiser" nem "se puder" soltos no pedido do nome',
+    !modoA.toLowerCase().includes("e, se quiser") &&
+      !modoA.toLowerCase().includes("se puder, me diz") &&
+      modoA.includes('NUNCA escreva "se quiser", "se puder" ou "se preferir" ao pedir o nome'),
+  );
+  ok(
+    "a ordem da abertura é apresentar → pedir o nome → oferecer ajuda",
+    modoA.includes("apresentar → PEDIR O NOME → oferecer ajuda"),
+  );
+  ok("e o nome não é opcional", modoA.includes("o nome NÃO é opcional"));
+  ok(
+    "se ele chega com dúvida: essencial em uma frase E o nome na mesma mensagem",
+    modoA.includes("responda o essencial em UMA frase E peça o nome na MESMA mensagem"),
+  );
+  ok(
+    "proíbe insistir mais de uma vez pelo nome",
+    modoA.replace(/\n\s*/g, " ").includes("não insista mais de uma vez") &&
+      modoA.includes("chato é pedir duas vezes"),
+  );
+}
+
+secao("Rodada 42 — preço antes da dor mata a venda");
+ok(
+  "a trava existe: nunca dar preço na primeira resposta sobre plano",
+  JULIA_SYSTEM_PROMPT.includes("NUNCA DÊ PREÇO NA PRIMEIRA RESPOSTA SOBRE PLANO"),
+);
+ok(
+  "a resposta à pergunta de preço é UMA pergunta que dimensiona a dor",
+  JULIA_SYSTEM_PROMPT.includes("a\nresposta NÃO é o valor") ||
+    JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ").includes("a resposta NÃO é o valor"),
+);
+ok(
+  "o porquê está dito: preço sem dor é só um número grande",
+  JULIA_SYSTEM_PROMPT.includes("Preço sem dor é só um número grande"),
+);
+ok(
+  "se ele insistir, o valor sai na hora — fugir duas vezes queima a confiança",
+  JULIA_SYSTEM_PROMPT.includes("SE ELE INSISTIR NO PREÇO") &&
+    JULIA_SYSTEM_PROMPT.includes("dê o valor, sem enrolar") &&
+    JULIA_SYSTEM_PROMPT.includes("Fugir duas vezes da mesma pergunta irrita"),
+);
+ok(
+  "tráfego pago é o maior gancho — nunca pular direto para o preço",
+  JULIA_SYSTEM_PROMPT.includes("E QUANDO ELE DISSER QUE FAZ TRÁFEGO PAGO") &&
+    JULIA_SYSTEM_PROMPT.includes("NUNCA passe direto para o preço"),
+);
+ok(
+  'o "PREÇO SE FALA" continua de pé, agora sem contradizer a trava',
+  JULIA_SYSTEM_PROMPT.includes("PREÇO SE FALA — a trava acima muda o QUANDO, nunca o SE"),
+);
+ok(
+  "a promoção continua sendo o argumento colado no preço",
+  JULIA_SYSTEM_PROMPT.includes("O Essencial tá R$297 nos 3 primeiros meses, depois vai pra R$397"),
 );
 
 fim();

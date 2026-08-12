@@ -5,7 +5,7 @@ import {
   leadMessagesTable,
   followUpsTable,
 } from "@workspace/db";
-import { eq, desc, ilike, and, or, sql } from "drizzle-orm";
+import { eq, desc, ilike, and, or, sql, inArray } from "drizzle-orm";
 import {
   ListLeadsQueryParams,
   UpdateLeadBody,
@@ -47,7 +47,30 @@ router.get("/leads", async (req, res) => {
         .where(whereClause),
     ]);
 
-    res.json({ leads, total: totalResult[0]?.count ?? 0 });
+    // Quantas mensagens cada lead tem (Rodada 42). Alimenta o diálogo de
+    // exclusão do painel: "todo o histórico (47 mensagens)" pesa mais que
+    // "todo o histórico", e evita o clique distraído. Uma consulta agregada
+    // para a página inteira, não uma por lead.
+    const ids = leads.map((l) => l.id);
+    const contagens = ids.length
+      ? await db
+          .select({
+            leadId: leadMessagesTable.leadId,
+            total: sql<number>`count(*)::int`,
+          })
+          .from(leadMessagesTable)
+          .where(inArray(leadMessagesTable.leadId, ids))
+          .groupBy(leadMessagesTable.leadId)
+      : [];
+    const mensagensPorLead = new Map(contagens.map((c) => [c.leadId, c.total]));
+
+    res.json({
+      leads: leads.map((l) => ({
+        ...l,
+        totalMensagens: mensagensPorLead.get(l.id) ?? 0,
+      })),
+      total: totalResult[0]?.count ?? 0,
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to list leads");
     res.status(500).json({ error: "Internal server error" });

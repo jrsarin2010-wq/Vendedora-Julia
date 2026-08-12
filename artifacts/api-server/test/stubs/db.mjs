@@ -101,6 +101,11 @@ function thenable(executar) {
     orderBy() {
       return b;
     },
+    // Aceito e ignorado, como o orderBy: nenhum teste depende do agregado, mas
+    // a rota de listagem usa GROUP BY e não pode quebrar o bundle.
+    groupBy() {
+      return b;
+    },
     innerJoin(tabela, cond) {
       b._join = { tabela, cond };
       return b;
