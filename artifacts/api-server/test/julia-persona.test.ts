@@ -743,23 +743,16 @@ ok(
   JULIA_SYSTEM_PROMPT.includes("Desconfiança é sinal de dentista sério"),
 );
 
-secao("Rodada 36 — contrato e termo apontam para o cadastro, sem prometer envio");
+// A Rodada 36 apontava contrato e termo para o cadastro porque as páginas
+// públicas não existiam. Na Rodada 37 elas entraram no ar e a resposta virou
+// mandar o link — o que sobrevive da 36 é o núcleo: nunca entregar o site no
+// lugar do documento, e handoff de verdade para o que os links não cobrem.
+secao("Rodada 36 — o que sobreviveu à chegada dos links públicos");
 ok(
-  "a resposta pronta aponta para o cadastro",
-  JULIA_SYSTEM_PROMPT.includes("você lê os dois na hora do") &&
-    JULIA_SYSTEM_PROMPT.includes("cadastro, antes de aceitar qualquer coisa"),
-);
-ok(
-  "ela não envia documento (função comercial, não suporte)",
-  JULIA_SYSTEM_PROMPT.includes("você NÃO envia documento"),
-);
-ok(
-  "se ele insistir em ver antes: handoff de verdade, não promessa dupla",
-  JULIA_SYSTEM_PROMPT.includes("nunca prometa duas vezes sem acionar ninguém"),
-);
-ok(
-  "o erro da conversa real está marcado (mandar o site no lugar do contrato)",
-  JULIA_SYSTEM_PROMPT.includes('NUNCA diga "vou te mandar o link" e mande o site'),
+  "o erro da conversa real continua marcado (o site no lugar do documento)",
+  JULIA_SYSTEM_PROMPT.includes(
+    "NUNCA mande o endereço da página inicial achando que é o documento",
+  ),
 );
 ok(
   "a LGPD não promete mais mandar o termo",
@@ -908,6 +901,107 @@ ok(
 ok(
   "a quebra de preço também usa a carta da CRC",
   JULIA_SYSTEM_PROMPT.includes("Uma CRC boa custa bem mais que uma recepcionista"),
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 37 — links públicos, revelação de IA e calibragem de emoji.
+// As páginas /termos e /contrato foram conferidas no ar antes de os links
+// entrarem no prompt (rotas registradas no bundle de produção da landing —
+// mesma fonte real dos planos).
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 37 — contrato e termo têm link público, e ela manda");
+ok(
+  "o link dos termos está no prompt",
+  JULIA_SYSTEM_PROMPT.includes("https://captaclin.com.br/termos"),
+);
+ok(
+  "o link do contrato está no prompt",
+  JULIA_SYSTEM_PROMPT.includes("https://captaclin.com.br/contrato"),
+);
+ok(
+  "a resposta pronta é mandar o link, resolve na hora",
+  JULIA_SYSTEM_PROMPT.includes("CONTRATO E TERMO — mande o link, resolve na hora"),
+);
+ok(
+  "a instrução de apontar só para o cadastro morreu",
+  !JULIA_SYSTEM_PROMPT.includes("você NÃO envia documento") &&
+    !JULIA_SYSTEM_PROMPT.includes("lê os dois na hora do"),
+);
+ok(
+  "pedir documento continua sendo sinal de dentista sério",
+  JULIA_SYSTEM_PROMPT.replace(/\n/g, " ").includes(
+    "quem não pensa em assinar não pede contrato",
+  ),
+);
+ok(
+  "o handoff sobrevive para o que os links não cobrem",
+  JULIA_SYSTEM_PROMPT.includes("algo que os links não cobrem"),
+);
+ok(
+  "a objeção de LGPD manda o link do termo",
+  JULIA_SYSTEM_PROMPT.includes("Se quiser ler agora, tá público: https://captaclin.com.br/termos"),
+);
+
+secao("Rodada 37 — a revelação de IA");
+ok(
+  "a seção existe",
+  JULIA_SYSTEM_PROMPT.includes("## O MOMENTO DE CONTAR QUE VOCÊ É UMA IA"),
+);
+ok(
+  "os gatilhos de aprovação que autorizam a revelação estão listados",
+  JULIA_SYSTEM_PROMPT.includes("só depois de ele demonstrar aprovação") &&
+    JULIA_SYSTEM_PROMPT.includes('"vou assinar", "pode mandar o link", "vamos lá"') &&
+    JULIA_SYSTEM_PROMPT.includes('"você é atenciosa", "gostei do jeito que você explica"'),
+);
+ok(
+  "proíbe revelar com ele irritado, cético ou reclamando de preço",
+  JULIA_SYSTEM_PROMPT.includes("irritado, cético ou reclamando de preço"),
+);
+ok(
+  "pergunta direta tem resposta direta: a verdade na hora",
+  JULIA_SYSTEM_PROMPT.includes('perguntar direto "você é um robô?"') &&
+    JULIA_SYSTEM_PROMPT.includes("responda a verdade na hora"),
+);
+ok(
+  "não revela na abertura",
+  JULIA_SYSTEM_PROMPT.includes("Na abertura. Antes de ele viver a conversa"),
+);
+ok("uma vez por conversa, nunca duas", JULIA_SYSTEM_PROMPT.includes("UMA vez, nunca duas"));
+ok(
+  "depois de contar, silêncio — sem emendar argumento",
+  JULIA_SYSTEM_PROMPT.includes("DEPOIS DE CONTAR, PARE"),
+);
+ok(
+  "a revelação não vira truque de venda",
+  JULIA_SYSTEM_PROMPT.includes("NUNCA use a revelação como truque de venda"),
+);
+
+secao("Rodada 37 — emoji: a maioria das mensagens não tem");
+ok("a seção existe", JULIA_SYSTEM_PROMPT.includes("## EMOJI — use pouco"));
+ok(
+  "a maioria das mensagens não tem emoji nenhum",
+  JULIA_SYSTEM_PROMPT.replace(/\n/g, " ").includes(
+    "a MAIORIA das mensagens não tem emoji nenhum",
+  ),
+);
+ok(
+  'a regra antiga "no máximo um por mensagem" saiu da regra de ouro',
+  !JULIA_SYSTEM_PROMPT.includes("Emoji: no máximo um"),
+);
+ok(
+  "proíbe emoji em resposta técnica",
+  JULIA_SYSTEM_PROMPT.includes(
+    "em resposta técnica (preço, plano, número de conversas, como funciona)",
+  ),
+);
+ok(
+  "proíbe emoji em duas mensagens seguidas",
+  JULIA_SYSTEM_PROMPT.includes("em duas mensagens seguidas"),
+);
+ok(
+  "o teto continua: nunca mais de um na mesma mensagem",
+  JULIA_SYSTEM_PROMPT.includes("Nunca mais de um emoji na mesma mensagem"),
 );
 
 fim();
