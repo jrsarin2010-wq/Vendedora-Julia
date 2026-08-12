@@ -2061,6 +2061,119 @@ secao("Rodada 49 — 15 é do trial, 60 é dos planos pagos");
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 50 — ela para de criar objeção sozinha. Conversa real da Dra. Luana:
+// apresentou o Básico e emendou o teto de 60 mensagens e o preço da recarga
+// sem ninguém perguntar — "vishi, que coisa chata, tem limitação?". Duas
+// mensagens desarmando uma bomba que ela mesma armou. A causa: o "nenhum
+// custo aparece depois" (Rodadas 32/36/46) tinha virado "anunciar toda
+// restrição". Omitir custo que afeta a decisão continua proibido; anunciar
+// limitação que ninguém perguntou cria objeção do nada. As instruções que
+// mandavam anunciar foram REESCRITAS (não deixadas no ar, lição da 48): o
+// teto do contrato perdeu o "diga junto, não omita", e a regra de custo
+// ganhou o escopo "EM DISCUSSÃO".
+// ─────────────────────────────────────────────────────────────────────────────
+
+secao("Rodada 50 — não anuncia restrição que ninguém perguntou");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok(
+    "a regra existe",
+    JULIA_SYSTEM_PROMPT.includes("⚠️ MAS NÃO ANUNCIE RESTRIÇÃO QUE NINGUÉM PERGUNTOU"),
+  );
+  ok(
+    "distingue não-omitir de anunciar",
+    corrido.includes("Não omitir custo é diferente de anunciar limitação"),
+  );
+  ok(
+    "a apresentação leva o preço e o que resolve",
+    corrido.includes("a mensagem leva o PREÇO e o que ele RESOLVE"),
+  );
+  ok(
+    "teto de mensagens e recarga são os exemplos do que NÃO anunciar",
+    corrido.includes("Não leve junto teto de mensagens, preço de recarga de conversas"),
+  );
+  ok(
+    "o ERRADO é o da conversa real, com a reação dela",
+    corrido.includes('"que coisa chata, tem limitação?"') &&
+      corrido.includes("uma objeção que não existia"),
+  );
+  ok(
+    "o CERTO para no preço + o que resolve",
+    corrido.includes('lembra o paciente da consulta." E PARA.'),
+  );
+  ok(
+    "quando a restrição entra: ele perguntou",
+    JULIA_SYSTEM_PROMPT.includes('"tem limite?", "e se acabar?", "quantas conversas?"'),
+  );
+  ok(
+    "quando a restrição entra: cenário que alcança o limite",
+    corrido.includes("descreveu um cenário em que o limite seria alcançado"),
+  );
+  ok(
+    "quando a restrição entra: afeta a escolha dele agora",
+    corrido.includes("ela afeta a escolha DELE agora"),
+  );
+  ok(
+    "a frase-resumo: conhece para responder, não para apresentar",
+    corrido.includes("você conhece as limitações para RESPONDER, não para apresentar"),
+  );
+}
+
+secao("Rodada 50 — as instruções antigas foram reescritas, não deixadas no ar");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok(
+    'o "diga junto, não omita" do teto morreu',
+    !JULIA_SYSTEM_PROMPT.includes("diga junto, não omita"),
+  );
+  ok(
+    "o teto agora define omitir (esconder quando ele pergunta) e o erro oposto",
+    corrido.includes("Omitir, aqui, é ele PERGUNTAR do volume e você esconder o teto") &&
+      corrido.includes("Anunciar o teto junto do preço, sem pergunta, é o erro oposto"),
+  );
+  ok(
+    'a regra de custo é escopada a "EM DISCUSSÃO"',
+    corrido.includes("Sempre que estiver EM DISCUSSÃO algo que tem limite") &&
+      corrido.includes('"Em discussão" = ele perguntou'),
+  );
+  ok(
+    'o "na dúvida, fale agora" ganhou o escopo do custo real',
+    corrido.includes("vale para custo que muda a conta dele, não para restrição não perguntada"),
+  );
+  ok(
+    "a recarga de áudio mantém a regra própria, dita na regra nova",
+    corrido.includes("citou os minutos inclusos, emenda a recarga; não citou, não puxe o assunto"),
+  );
+}
+
+secao("Rodada 50 — o que continua obrigatório não se perdeu");
+{
+  const corrido = JULIA_SYSTEM_PROMPT.replace(/\n\s*/g, " ");
+  ok(
+    "o R$97 do profissional adicional continua inquebrável",
+    JULIA_SYSTEM_PROMPT.includes('ERRADO: "O Essencial cobre o titular mais até 4 profissionais extras."') &&
+      corrido.includes("sem dizer que cada um custa R$97/mês"),
+  );
+  ok(
+    "o Básico sem adicional continua inquebrável",
+    JULIA_SYSTEM_PROMPT.includes("NO BÁSICO NÃO EXISTE") &&
+      corrido.includes("O Básico NÃO aceita profissional adicional — nem pagando"),
+  );
+  ok(
+    "a recarga de áudio continua emendada quando cita minutos",
+    corrido.includes("Não espere ele perguntar — emende"),
+  );
+  ok(
+    "os limites do trial continuam ditos por inteiro",
+    corrido.includes("Os limites do trial são exatamente estes três: 3 dias, 2 conversas, 15 mensagens por contato a cada 24h"),
+  );
+  ok(
+    "e a nova regra lista essas obrigações como exceção legítima",
+    corrido.includes("o Básico que não aceita adicional, os limites do trial"),
+  );
+}
+
 secao("Rodada 44 — o prompt cabe no orçamento de tokens");
 {
   const tokens = tamanhoEmTokens(JULIA_SYSTEM_PROMPT);
