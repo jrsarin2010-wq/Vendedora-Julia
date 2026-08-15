@@ -33,6 +33,20 @@ export const wa = {
   /** Alertas de número não entregável (Rodada 51). */
   naoEntregaveis: [],
   /**
+   * Consulta de existência no WhatsApp (Etapa 1.5).
+   *
+   * `responder` é o comportamento: recebe o bloco enviado e devolve
+   * `{ ok, itens }`, igual à borda de verdade. Com `null` (o padrão), todo
+   * número "existe" e o jid é o próprio número — assim os testes que não têm
+   * nada a ver com canonicalização seguem valendo sem mudar uma linha.
+   *
+   * `blocos` guarda cada lote enviado, que é como se verifica o fatiamento.
+   */
+  numeros: {
+    responder: null,
+    blocos: [],
+  },
+  /**
    * Limpa só o que foi REGISTRADO. Os flags de comportamento (entrega, media)
    * são configurados pelo teste e não devem ser zerados entre chamadas.
    */
@@ -43,8 +57,27 @@ export const wa = {
     this.atencoes = [];
     this.sondas = [];
     this.naoEntregaveis = [];
+    // Só o registro: `responder` é comportamento configurado pelo teste, como
+    // `entrega` e `media`, e não pode ser zerado no meio de um cenário.
+    this.numeros.blocos = [];
   },
 };
+
+export async function consultarNumerosNoWhatsApp(numeros) {
+  wa.numeros.blocos.push([...numeros]);
+  if (typeof wa.numeros.responder === "function") {
+    return wa.numeros.responder(numeros);
+  }
+  return {
+    ok: true,
+    itens: numeros.map((n) => ({
+      number: n,
+      exists: true,
+      jid: `${n}@s.whatsapp.net`,
+      name: n,
+    })),
+  };
+}
 
 export async function sendWhatsAppMessage(phone, message, primeiraResposta = false) {
   wa.enviadas.push({ tipo: "text", phone, message, primeiraResposta });

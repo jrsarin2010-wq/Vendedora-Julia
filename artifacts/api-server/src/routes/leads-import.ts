@@ -11,12 +11,22 @@
  *   2. lead existente com status "lost"      → ignoradosPorOptOut
  *   3. lead que já existe (qualquer outro)   → duplicados
  *   4. resto                                 → importados
+ *
+ * ETAPA 1.5 — o telefone é canonicalizado ANTES de qualquer comparação. O
+ * número que a planilha traz ("(85) 99999-8888", 13 dígitos com o 55) pode não
+ * ser a identidade que o WhatsApp reconhece: conta antiga vive na forma de 12
+ * dígitos, sem o nono. Comparar a forma da planilha com o que o webhook gravou
+ * (que já vem do jid) não acha o duplicado, e a Júlia aborda de novo quem já é
+ * lead. Ver lib/canonicalizar-telefone.ts.
+ *
+ * Isso acrescenta UMA chamada externa por importação — em lote, não por lead.
  */
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { leadsTable } from "@workspace/db";
 import { inArray } from "drizzle-orm";
 import { normalizarTelefone } from "../lib/filtro-spam";
+import { canonicalizarTelefones } from "../lib/canonicalizar-telefone";
 
 const router: IRouter = Router();
 
@@ -65,7 +75,16 @@ router.post("/leads/import", async (req, res) => {
       duplicados: 0,
       invalidos: 0,
       ignoradosPorOptOut: 0,
+      // O WhatsApp respondeu que o número não existe. Não vira lead: mandar
+      // mensagem para número morto gasta rate limit e queima a reputação do
+      // nosso número.
+      semWhatsapp: 0,
+      // Não houve veredito (Evolution fora do ar, número ausente da resposta).
+      // NÃO é o mesmo que "não tem WhatsApp": estes leads não entram agora e
+      // voltam na lista `paraReprocessar` para uma segunda tentativa.
+      reprocessarDepois: 0,
     };
+    const paraReprocessar: string[] = [];
 
     // ---- 1) normaliza e valida telefone -----------------------------------
     // Também deduplica DENTRO do próprio arquivo: planilha repetida é comum, e
@@ -102,7 +121,45 @@ router.post("/leads/import", async (req, res) => {
     }
 
     if (candidatos.length === 0) {
-      return void res.json(resumo);
+      return void res.json({ ...resumo, paraReprocessar });
+    }
+
+    // ---- 1.5) troca cada telefone pela forma que o WhatsApp reconhece ------
+    // Uma chamada em lote para a importação inteira. Daqui para baixo, TUDO
+    // (comparação com o banco e insert) usa a forma canônica — se não, a
+    // correção da base dura até a próxima planilha.
+    const canonicos = await canonicalizarTelefones(candidatos.map((c) => c.phone));
+
+    const prontos: typeof candidatos = [];
+    const vistosCanonicos = new Set<string>();
+
+    for (const candidato of candidatos) {
+      const resultado = canonicos.get(candidato.phone);
+
+      if (!resultado || resultado.existe === null) {
+        resumo.reprocessarDepois++;
+        paraReprocessar.push(candidato.phone);
+        continue;
+      }
+      if (resultado.existe === false) {
+        resumo.semWhatsapp++;
+        continue;
+      }
+      const phone = resultado.canonico as string;
+
+      // Segunda deduplicação, agora pela forma canônica: a planilha pode
+      // trazer o MESMO dentista nas duas formas (com e sem o nono dígito), e
+      // só depois da canonicalização os dois viram a mesma string.
+      if (vistosCanonicos.has(phone)) {
+        resumo.duplicados++;
+        continue;
+      }
+      vistosCanonicos.add(phone);
+      prontos.push({ ...candidato, phone });
+    }
+
+    if (prontos.length === 0) {
+      return void res.json({ ...resumo, paraReprocessar });
     }
 
     // ---- 2) confronta com o banco -----------------------------------------
@@ -112,13 +169,13 @@ router.post("/leads/import", async (req, res) => {
       .where(
         inArray(
           leadsTable.phone,
-          candidatos.map((c) => c.phone),
+          prontos.map((c) => c.phone),
         ),
       );
 
     const statusPorTelefone = new Map(existentes.map((e) => [e.phone, e.status]));
 
-    const paraInserir = candidatos.filter((c) => {
+    const paraInserir = prontos.filter((c) => {
       const statusExistente = statusPorTelefone.get(c.phone);
       if (statusExistente === undefined) return true;
 
@@ -156,7 +213,7 @@ router.post("/leads/import", async (req, res) => {
     }
 
     req.log.info(resumo, "Importação de leads concluída");
-    res.json(resumo);
+    res.json({ ...resumo, paraReprocessar });
   } catch (err) {
     req.log.error({ err }, "Failed to import leads");
     res.status(500).json({ error: "Internal server error" });

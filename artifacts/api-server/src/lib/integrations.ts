@@ -225,6 +225,103 @@ export async function enviarWhatsAppComDiagnostico(
   }
 }
 
+/** Um item da resposta de `chat/whatsappNumbers`, exatamente como a Evolution devolve. */
+export interface ItemWhatsappNumbers {
+  /** Eco do número que ENVIAMOS. É por ele que se casa a resposta, nunca por posição. */
+  number?: string;
+  exists?: boolean;
+  /**
+   * A identidade canônica da conta ("558592008899@s.whatsapp.net"). Só vale
+   * quando `exists` é true: para número inexistente a Evolution devolve um jid
+   * ESPECULATIVO, montado a partir do que pedimos.
+   */
+  jid?: string;
+  /**
+   * Verificado na v2.3.7: veio o próprio número formatado, não um nome de
+   * perfil. Declarado aqui para documentar que existe — não persistimos.
+   */
+  name?: string;
+}
+
+export interface ConsultaWhatsApp {
+  /**
+   * A consulta ACONTECEU? false para qualquer falha (não configurado, HTTP
+   * ruim, timeout, corpo inesperado). Falha não é veredito: quem chama tem de
+   * tratar como "não sei", jamais como "não tem WhatsApp".
+   */
+  ok: boolean;
+  itens: ItemWhatsappNumbers[];
+}
+
+/**
+ * Um bloco de 50 números vira 50 consultas do lado do WhatsApp, e o orçamento
+ * normal de 10s não cobre isso com folga.
+ */
+const CONSULTA_NUMEROS_TIMEOUT_MS = 20_000;
+
+/**
+ * Pergunta à Evolution QUAIS destes números existem no WhatsApp, em uma única
+ * chamada em lote (`POST chat/whatsappNumbers`).
+ *
+ * Esta função é só a borda: fala HTTP e devolve o corpo. Quem decide o que
+ * fazer com `exists`/`jid` é lib/canonicalizar-telefone.ts — assim a regra
+ * (ler o jid só quando exists é true, casar pelo `number`) fica em código
+ * testado de verdade, e não escondida atrás da rede.
+ *
+ * Nunca lança e nunca loga número completo nem a chave da API.
+ */
+export async function consultarNumerosNoWhatsApp(
+  numeros: string[],
+): Promise<ConsultaWhatsApp> {
+  const { base, chave } = configEvolution();
+  if (!base || !chave) {
+    logger.warn(
+      { quantidade: numeros.length },
+      "Evolution API não configurada — consulta de números não realizada",
+    );
+    return { ok: false, itens: [] };
+  }
+
+  try {
+    const url = urlDaEvolution("chat/whatsappNumbers");
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: chave,
+      },
+      body: JSON.stringify({ numbers: numeros }),
+      signal: AbortSignal.timeout(CONSULTA_NUMEROS_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      logger.error(
+        { status: response.status, quantidade: numeros.length, body },
+        "Evolution whatsappNumbers error",
+      );
+      return { ok: false, itens: [] };
+    }
+
+    const corpo = (await response.json()) as unknown;
+    if (!Array.isArray(corpo)) {
+      logger.error(
+        { quantidade: numeros.length },
+        "Evolution whatsappNumbers devolveu corpo que não é lista — tratando como falha",
+      );
+      return { ok: false, itens: [] };
+    }
+
+    return { ok: true, itens: corpo as ItemWhatsappNumbers[] };
+  } catch (err) {
+    logger.error(
+      { err, quantidade: numeros.length },
+      "Falha ao consultar números no WhatsApp",
+    );
+    return { ok: false, itens: [] };
+  }
+}
+
 /**
  * Busca o áudio (ou outra mídia) de uma mensagem do WhatsApp já decifrado,
  * em base64, usando a Evolution API. O WhatsApp criptografa as mídias, então

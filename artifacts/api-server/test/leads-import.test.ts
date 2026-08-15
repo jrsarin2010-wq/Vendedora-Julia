@@ -159,13 +159,27 @@ const respostaGrande = await importar(demais);
 ok("acima de 2000 → 413", respostaGrande.status === 413, JSON.stringify(respostaGrande));
 ok("e não importa nada", state.leads.length === 0);
 
-secao("resumo sempre traz os quatro contadores");
+secao("resumo sempre traz todos os contadores");
+// Cresceu na Etapa 1.5: a canonicalização acrescentou dois destinos que antes
+// não existiam — "o WhatsApp diz que não existe" (semWhatsapp) e "não deu para
+// saber" (reprocessarDepois, com os números em paraReprocessar). Os dois têm
+// de aparecer SEMPRE, mesmo zerados: um resumo que só mostra o que aconteceu
+// esconde justamente o caso em que a Evolution estava fora do ar.
 state.reset();
 r = await importar([{ phone: "4004" }]);
 const chaves = Object.keys(resumoDe(r)).sort();
 ok(
-  "importados, duplicados, invalidos, ignoradosPorOptOut",
-  JSON.stringify(chaves) === JSON.stringify(["duplicados", "ignoradosPorOptOut", "importados", "invalidos"]),
+  "os quatro originais + semWhatsapp, reprocessarDepois e paraReprocessar",
+  JSON.stringify(chaves) ===
+    JSON.stringify([
+      "duplicados",
+      "ignoradosPorOptOut",
+      "importados",
+      "invalidos",
+      "paraReprocessar",
+      "reprocessarDepois",
+      "semWhatsapp",
+    ]),
   JSON.stringify(chaves),
 );
 

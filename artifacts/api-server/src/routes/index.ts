@@ -3,6 +3,7 @@ import atencaoRouter from "./atencao";
 import authRouter from "./auth";
 import healthRouter from "./health";
 import leadsRouter from "./leads";
+import leadsCanonicalizarRouter from "./leads-canonicalizar";
 import leadsImportRouter from "./leads-import";
 import outreachRouter from "./outreach";
 import statsRouter from "./stats";
@@ -22,6 +23,9 @@ router.use(webhookRouter); // recebe mensagens — protegido por WEBHOOK_SECRET
 // "/leads/import" — o GET pegaria "import" como id. São métodos diferentes
 // (POST vs GET), então hoje não colidiria; a ordem é para não depender disso.
 router.use(requireAuth, leadsImportRouter);
+// Mesma razão da importação: "/leads/canonicalizar" vem antes de "/leads/:id"
+// para não depender de os métodos serem diferentes.
+router.use(requireAuth, leadsCanonicalizarRouter);
 // Também antes de leadsRouter: "/leads/:id/outreach-preview" é mais
 // específico que "/leads/:id", e os dois são GET.
 router.use(requireAuth, outreachRouter);
