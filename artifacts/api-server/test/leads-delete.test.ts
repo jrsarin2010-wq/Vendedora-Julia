@@ -216,41 +216,57 @@ ok(
 secao("Rodada 42 — tripwire: nada no schema referencia leads.id sem cobertura");
 {
   // Varre o schema REAL: toda tabela cujo foreign key aponta para leads. Se
-  // alguém criar uma tabela nova pendurada em lead, as duas asserções abaixo
-  // quebram sozinhas — e o conserto é (1) onDelete: "cascade" no schema e
-  // (2) adicionar a tabela em apagarLeadEDependentes (routes/leads.ts) e na
-  // lista COBERTAS aqui.
+  // alguém criar uma tabela nova pendurada em lead, as asserções abaixo
+  // quebram sozinhas — e o conserto é declarar a intenção: ou o registro MORRE
+  // com o lead (onDelete: "cascade" + apagarLeadEDependentes em routes/leads.ts
+  // + lista MORREM_COM_O_LEAD), ou ele SOBREVIVE de propósito (onDelete:
+  // "set null" + lista SOBREVIVEM). FK sem onDelete nenhum não é opção: o
+  // DELETE do lead quebraria no Postgres.
   const tabelas = Object.values(schemaReal).filter(
     (v): v is InstanceType<typeof PgTable> => v instanceof PgTable,
   );
   ok("o schema real foi carregado (leads está nele)", tabelas.some((t) => getTableConfig(t).name === "leads"));
 
-  const referenciamLeads = new Set<string>();
-  const semCascade: string[] = [];
+  const comCascade = new Set<string>();
+  const comSetNull = new Set<string>();
+  const semProtecao: string[] = [];
   for (const tabela of tabelas) {
     const cfg = getTableConfig(tabela);
     for (const fk of cfg.foreignKeys) {
       const alvo = getTableConfig(fk.reference().foreignTable).name;
       if (alvo !== "leads") continue;
-      referenciamLeads.add(cfg.name);
-      if (fk.onDelete !== "cascade") semCascade.push(cfg.name);
+      if (fk.onDelete === "cascade") comCascade.add(cfg.name);
+      else if (fk.onDelete === "set null") comSetNull.add(cfg.name);
+      else semProtecao.push(cfg.name);
     }
   }
 
   ok(
-    "toda foreign key para leads.id tem onDelete: cascade",
-    semCascade.length === 0,
-    `sem cascade: ${JSON.stringify(semCascade)}`,
+    "toda foreign key para leads.id declara onDelete (cascade ou set null)",
+    semProtecao.length === 0,
+    `sem onDelete: ${JSON.stringify(semProtecao)}`,
   );
 
-  // A lista de quem a rota DELETE /leads/:id apaga explicitamente. Tem que ser
-  // IGUAL ao que o schema referencia — nem a mais (rota apagando fantasma),
-  // nem a menos (tabela nova ficaria órfã se o cascade falhar um dia).
-  const COBERTAS = ["follow_ups", "lead_messages"];
+  // Quem a rota DELETE /leads/:id apaga explicitamente. Tem que ser IGUAL ao
+  // que o schema põe em cascade — nem a mais (rota apagando fantasma), nem a
+  // menos (tabela nova ficaria órfã se o cascade falhar um dia).
+  const MORREM_COM_O_LEAD = ["follow_ups", "lead_messages"];
   ok(
-    "a exclusão cobre EXATAMENTE o que referencia leads.id",
-    JSON.stringify([...referenciamLeads].sort()) === JSON.stringify(COBERTAS),
-    `schema: ${JSON.stringify([...referenciamLeads].sort())} × rota: ${JSON.stringify(COBERTAS)} — tabela nova? Adicione em apagarLeadEDependentes e aqui.`,
+    "cascade = exatamente o que a rota de exclusão apaga",
+    JSON.stringify([...comCascade].sort()) === JSON.stringify(MORREM_COM_O_LEAD),
+    `schema: ${JSON.stringify([...comCascade].sort())} × rota: ${JSON.stringify(MORREM_COM_O_LEAD)} — tabela nova? Adicione em apagarLeadEDependentes e aqui.`,
+  );
+
+  // Quem sobrevive à exclusão do lead, com o motivo registrado. O prospect da
+  // varredura fica DE PROPÓSITO: é o registro histórico da captação, e o
+  // place_id UNIQUE dele é o que impede a próxima varredura de recapturar e
+  // re-prospectar um dentista que foi apagado. Cascade aqui reabriria a porta
+  // da abordagem fria para quem já saiu.
+  const SOBREVIVEM = ["clinicas_prospect"];
+  ok(
+    "set null = exatamente quem sobrevive de propósito",
+    JSON.stringify([...comSetNull].sort()) === JSON.stringify(SOBREVIVEM),
+    `schema: ${JSON.stringify([...comSetNull].sort())} × esperado: ${JSON.stringify(SOBREVIVEM)}`,
   );
 }
 

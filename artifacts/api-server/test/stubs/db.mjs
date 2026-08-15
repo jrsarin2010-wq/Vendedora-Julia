@@ -52,15 +52,31 @@ export const followUpsTable = {
   sentAt: "sentAt",
 };
 
+export const apifyVarredurasTable = {
+  __t: "varreduras",
+  id: "id",
+  termoBusca: "termoBusca",
+  cidade: "cidade",
+  uf: "uf",
+  maxResultados: "maxResultados",
+  prioridade: "prioridade",
+  status: "status",
+  custoRealUsd: "custoRealUsd",
+  disparadaEm: "disparadaEm",
+  concluidaEm: "concluidaEm",
+};
+
 export const state = {
   leads: [],
   messages: [],
   followUps: [],
+  varreduras: [],
   nextId: 1,
   reset() {
     this.leads = [];
     this.messages = [];
     this.followUps = [];
+    this.varreduras = [];
     this.nextId = 1;
   },
 };
@@ -68,6 +84,7 @@ export const state = {
 function linhasDe(tabela) {
   if (tabela.__t === "leads") return state.leads;
   if (tabela.__t === "messages") return state.messages;
+  if (tabela.__t === "varreduras") return state.varreduras;
   return state.followUps;
 }
 
@@ -123,6 +140,12 @@ function thenable(executar) {
       b._ret = true;
       return b;
     },
+    // Como nas tabelas do stub cada coluna é a string do próprio nome, o
+    // `target` já chega como a lista de chaves a comparar.
+    onConflictDoNothing(opts) {
+      b._conflito = opts?.target ?? null;
+      return b;
+    },
     then(res, rej) {
       return Promise.resolve()
         .then(() => executar(b))
@@ -176,7 +199,15 @@ export const db = {
 
   insert(t) {
     const b = thenable(() => {
-      const novas = Array.isArray(b._v) ? b._v : [b._v];
+      const existentes = linhasDe(t);
+      let novas = Array.isArray(b._v) ? b._v : [b._v];
+      // ON CONFLICT DO NOTHING: linha cujo alvo já existe é descartada em
+      // silêncio, e `returning` devolve só o que entrou — igual ao Postgres.
+      if (b._conflito) {
+        novas = novas.filter(
+          (r) => !existentes.some((e) => b._conflito.every((c) => e[c] === r[c])),
+        );
+      }
       const salvas = novas.map((r) => ({
         id: state.nextId++,
         createdAt: new Date(),

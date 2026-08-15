@@ -6,6 +6,7 @@ import leadsRouter from "./leads";
 import leadsImportRouter from "./leads-import";
 import outreachRouter from "./outreach";
 import statsRouter from "./stats";
+import varredurasSeedRouter from "./varreduras-seed";
 import webhookRouter from "./webhook";
 import { requireAuth } from "../lib/auth";
 
@@ -29,5 +30,6 @@ router.use(requireAuth, outreachRouter);
 router.use(requireAuth, atencaoRouter);
 router.use(requireAuth, leadsRouter);
 router.use(requireAuth, statsRouter);
+router.use(requireAuth, varredurasSeedRouter); // fila de varreduras Apify
 
 export default router;
