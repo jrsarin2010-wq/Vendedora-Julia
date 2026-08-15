@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { startFollowUpScheduler } from "./lib/follow-up-scheduler";
 import { startOutreachScheduler } from "./lib/outreach-scheduler";
+import { startVarreduraScheduler } from "./lib/varredura-scheduler";
 import { sondarModelosNoBoot } from "./lib/sonda-modelo";
 
 const rawPort = process.env["PORT"];
@@ -33,4 +34,7 @@ app.listen(port, (err) => {
   startFollowUpScheduler();
   // Começa desligado: só dispara com OUTREACH_ENABLED=true no ambiente.
   startOutreachScheduler();
+  // Também começa desligada: só varre com APIFY_SWEEP_ENABLED=true. Deploy não
+  // pode sair gastando crédito do Apify sozinho.
+  startVarreduraScheduler();
 });

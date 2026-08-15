@@ -32,6 +32,8 @@ export const wa = {
   sondas: [],
   /** Alertas de número não entregável (Rodada 51). */
   naoEntregaveis: [],
+  /** Alertas da varredura Apify (Etapa 2): orçamento, falhou, fila vazia. */
+  varreduras: [],
   /**
    * Consulta de existência no WhatsApp (Etapa 1.5).
    *
@@ -57,6 +59,7 @@ export const wa = {
     this.atencoes = [];
     this.sondas = [];
     this.naoEntregaveis = [];
+    this.varreduras = [];
     // Só o registro: `responder` é comportamento configurado pelo teste, como
     // `entrega` e `media`, e não pode ser zerado no meio de um cenário.
     this.numeros.blocos = [];
@@ -109,6 +112,9 @@ export async function sendTelegramSondaModelo(modelo, papeis, detalhe) {
 }
 export async function sendTelegramNaoEntregavel(alert) {
   wa.naoEntregaveis.push(alert);
+}
+export async function sendTelegramVarredura(alerta) {
+  wa.varreduras.push(alerta);
 }
 export function linkDoWhatsApp(phone) {
   return `https://wa.me/${String(phone).replace(/\D/g, "")}`;

@@ -601,6 +601,52 @@ export async function sendTelegramNaoEntregavel(alert: NaoEntregavelAlert): Prom
   await enviarAoTelegram(linhas.join("\n"), "nao-entregavel");
 }
 
+/**
+ * Alertas da VARREDURA APIFY (Etapa 2). Três gatilhos, e só três: orçamento
+ * bloqueou, uma combinação desistiu depois de três tentativas, e a fila
+ * acabou. Não existe alerta de sucesso — alerta que chega sempre é alerta que
+ * ninguém lê, e aí o que importa passa batido junto.
+ */
+export type VarreduraAlert =
+  | { tipo: "orcamento"; comprometido: number; teto: number }
+  | {
+      tipo: "falhou";
+      termo: string;
+      cidade: string;
+      uf: string;
+      tentativas: number;
+      erro: string | null;
+    }
+  | { tipo: "fila_vazia"; concluidas: number; gastoNoMes: number };
+
+export async function sendTelegramVarredura(alerta: VarreduraAlert): Promise<void> {
+  const dinheiro = (v: number) => `US$ ${v.toFixed(2)}`;
+
+  let linhas: string[];
+  if (alerta.tipo === "orcamento") {
+    linhas = [
+      `💸 *Varredura pausada — teto de crédito do mês*`,
+      `Comprometido: ${dinheiro(alerta.comprometido)} de ${dinheiro(alerta.teto)}.`,
+      `_A fila NÃO se perdeu: as rodadas que faltam voltam sozinhas quando o crédito do mês virar. Parar aqui é o comportamento desejado._`,
+    ];
+  } else if (alerta.tipo === "falhou") {
+    linhas = [
+      `🔴 *Varredura desistiu depois de ${alerta.tentativas} tentativas*`,
+      `Busca: ${alerta.termo} — ${alerta.cidade}/${alerta.uf}`,
+      alerta.erro ? `Erro: ${alerta.erro}` : `Sem mensagem de erro do Apify.`,
+      `_As outras rodadas seguem normalmente; só esta combinação saiu da fila._`,
+    ];
+  } else {
+    linhas = [
+      `✅ *Fila de varredura vazia — a Onda 1 acabou*`,
+      `Rodadas concluídas: ${alerta.concluidas}. Gasto no mês: ${dinheiro(alerta.gastoNoMes)}.`,
+      `_Nada mais será disparado até a fila receber novas combinações._`,
+    ];
+  }
+
+  await enviarAoTelegram(linhas.join("\n"), "varredura");
+}
+
 /** Avisa que a Júlia se calou porque alguém assumiu a conversa pelo celular. */
 export async function sendTelegramPausa(alert: PausaAlert): Promise<void> {
   const { lead, ate } = alert;

@@ -65,6 +65,10 @@ const plugin = {
       // Evolution de verdade — o teste falhava com "não entregue" enquanto o
       // stub ficava zerado, que é um sintoma bem difícil de ler.
       [/(^|\/)integrations$/, "integrations.mjs"],
+      // A borda do Apify, pelo mesmo motivo: o teste exercita as REGRAS da
+      // varredura (orçamento, cota, ingestão) sem tocar na API nem gastar
+      // crédito. lib/varredura.ts e o agendador são o código de verdade.
+      [/(^|\/)apify$/, "apify.mjs"],
       // O pino de verdade carrega workers e usa `__dirname`, que não existe
       // no bundle ESM do teste.
       [/(^|\/)logger$/, "logger.mjs"],

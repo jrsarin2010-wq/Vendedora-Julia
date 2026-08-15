@@ -80,6 +80,18 @@ export const clinicasProspectTable = pgTable(
     uf: char("uf", { length: 2 }),
     cep: text("cep"),
     categoria: text("categoria"),
+    // O Maps ancora a busca num ponto e varre o entorno: os 5 resultados da
+    // calibração saíram todos do extremo sul de São Paulo. Sem esta coluna,
+    // essa concentração fica invisível e a gente acha que varreu "a capital"
+    // quando varreu um punhado de bairros. É o dado que torna a distorção
+    // mensurável — e que vai dizer se a Onda 2 precisa buscar por bairro.
+    bairro: text("bairro"),
+    // `claimThisBusiness: true` no Maps significa que NINGUÉM assumiu a ficha
+    // do Google. Guardamos invertido, como pergunta positiva: ficha assumida
+    // por alguém é sinal de clínica que cuida da presença digital.
+    //
+    // Nulo quando o ator não informou: "não sei" não pode virar "não tem".
+    perfilReivindicado: boolean("perfil_reivindicado"),
     nota: numeric("nota", { precision: 2, scale: 1 }),
     // Sinal de clínica ativa: zero avaliações costuma ser cadastro morto.
     totalAvaliacoes: integer("total_avaliacoes"),

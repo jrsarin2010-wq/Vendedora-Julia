@@ -61,9 +61,41 @@ export const apifyVarredurasTable = {
   maxResultados: "maxResultados",
   prioridade: "prioridade",
   status: "status",
+  apifyRunId: "apifyRunId",
+  apifyDatasetId: "apifyDatasetId",
+  resultadosRecebidos: "resultadosRecebidos",
   custoRealUsd: "custoRealUsd",
+  tentativas: "tentativas",
+  erroMensagem: "erroMensagem",
   disparadaEm: "disparadaEm",
   concluidaEm: "concluidaEm",
+  criadaEm: "criadaEm",
+};
+
+export const clinicasProspectTable = {
+  __t: "clinicas",
+  id: "id",
+  placeId: "placeId",
+  nome: "nome",
+  telefoneRaw: "telefoneRaw",
+  telefoneWhatsapp: "telefoneWhatsapp",
+  temWhatsapp: "temWhatsapp",
+  website: "website",
+  instagram: "instagram",
+  endereco: "endereco",
+  cidade: "cidade",
+  uf: "uf",
+  bairro: "bairro",
+  cep: "cep",
+  categoria: "categoria",
+  nota: "nota",
+  totalAvaliacoes: "totalAvaliacoes",
+  latitude: "latitude",
+  longitude: "longitude",
+  perfilReivindicado: "perfilReivindicado",
+  varreduraId: "varreduraId",
+  leadId: "leadId",
+  statusProspeccao: "statusProspeccao",
 };
 
 export const state = {
@@ -71,12 +103,14 @@ export const state = {
   messages: [],
   followUps: [],
   varreduras: [],
+  clinicas: [],
   nextId: 1,
   reset() {
     this.leads = [];
     this.messages = [];
     this.followUps = [];
     this.varreduras = [];
+    this.clinicas = [];
     this.nextId = 1;
   },
 };
@@ -85,6 +119,7 @@ function linhasDe(tabela) {
   if (tabela.__t === "leads") return state.leads;
   if (tabela.__t === "messages") return state.messages;
   if (tabela.__t === "varreduras") return state.varreduras;
+  if (tabela.__t === "clinicas") return state.clinicas;
   return state.followUps;
 }
 
@@ -143,7 +178,9 @@ function thenable(executar) {
     // Como nas tabelas do stub cada coluna é a string do próprio nome, o
     // `target` já chega como a lista de chaves a comparar.
     onConflictDoNothing(opts) {
-      b._conflito = opts?.target ?? null;
+      const alvo = opts?.target ?? null;
+      // O drizzle aceita uma coluna só ou uma lista; aqui vira sempre lista.
+      b._conflito = alvo === null ? null : Array.isArray(alvo) ? alvo : [alvo];
       return b;
     },
     then(res, rej) {

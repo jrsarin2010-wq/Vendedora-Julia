@@ -41,9 +41,10 @@ export const apifyVarredurasTable = pgTable(
     termoBusca: text("termo_busca").notNull(),
     cidade: text("cidade").notNull(),
     uf: char("uf", { length: 2 }).notNull(),
-    // 20 não é preferência, é consequência do crédito Free do Apify. Se migrar
-    // de plano, sobe aqui (é dado, não código).
-    maxResultados: integer("max_resultados").notNull().default(20),
+    // 15 não é preferência, é consequência do crédito Free do Apify: medido na
+    // calibração, o lugar custa US$ 0,005, e 54 × 15 × 0,005 = US$ 4,05, que
+    // cabe no teto de 4,50. Se migrar de plano, sobe aqui (é dado, não código).
+    maxResultados: integer("max_resultados").notNull().default(15),
     // 1 = os 10 maiores mercados, disparados primeiro.
     prioridade: integer("prioridade").notNull().default(2),
     status: varreduraStatusEnum("status").notNull().default("pendente"),
