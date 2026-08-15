@@ -654,6 +654,25 @@ export async function sendTelegramVarredura(alerta: VarreduraAlert): Promise<voi
   await enviarAoTelegram(linhas.join("\n"), "varredura");
 }
 
+/**
+ * Alerta da verificação de WhatsApp (Etapa 3A). UM tipo só, de propósito: o
+ * único desfecho que exige alguém é a pausa por lotes mudos, e ela significa
+ * que a Evolution não está respondendo — o que também afeta as conversas de
+ * verdade. Contagem de lote é log, não alerta.
+ */
+export type VerificacaoAlert = { tipo: "pausada"; motivo: string; lotes: number };
+
+export async function sendTelegramVerificacao(alerta: VerificacaoAlert): Promise<void> {
+  const texto = [
+    `⏸️ *Verificação de WhatsApp PAUSADA*`,
+    `${alerta.lotes} lotes seguidos voltaram sem nenhum veredito. Isso não são dezenas de números ruins ao mesmo tempo — é a Evolution fora do ar ou credencial ruim.`,
+    `Motivo: ${alerta.motivo}`,
+    `_Nenhuma clínica foi descartada: as do lote continuam como "novo" e voltam para a fila. Confira a Evolution (a mesma instância que fala com os dentistas) e reinicie o serviço para retomar._`,
+  ].join("\n");
+
+  await enviarAoTelegram(texto, "verificacao");
+}
+
 /** Avisa que a Júlia se calou porque alguém assumiu a conversa pelo celular. */
 export async function sendTelegramPausa(alert: PausaAlert): Promise<void> {
   const { lead, ate } = alert;

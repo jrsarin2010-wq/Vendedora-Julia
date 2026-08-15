@@ -10,6 +10,7 @@ import prospectsRouter from "./prospects";
 import statsRouter from "./stats";
 import varredurasRouter from "./varreduras";
 import varredurasSeedRouter from "./varreduras-seed";
+import verificacaoRouter from "./verificacao";
 import webhookRouter from "./webhook";
 import { requireAuth } from "../lib/auth";
 
@@ -41,6 +42,8 @@ router.use(requireAuth, varredurasSeedRouter); // fila de varreduras Apify
 // clínicas captadas. Todas as rotas são literais (nenhuma tem `:id`), então
 // não há ordem a preservar aqui.
 router.use(requireAuth, varredurasRouter);
+// Etapa 3A — o controle da verificação de WhatsApp, na mesma tela.
+router.use(requireAuth, verificacaoRouter);
 router.use(requireAuth, prospectsRouter);
 
 export default router;

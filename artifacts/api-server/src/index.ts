@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { startFollowUpScheduler } from "./lib/follow-up-scheduler";
 import { startOutreachScheduler } from "./lib/outreach-scheduler";
 import { startVarreduraScheduler } from "./lib/varredura-scheduler";
+import { startVerificacaoScheduler } from "./lib/verificacao-scheduler";
 import { sondarModelosNoBoot } from "./lib/sonda-modelo";
 
 const rawPort = process.env["PORT"];
@@ -37,4 +38,8 @@ app.listen(port, (err) => {
   // Também começa desligada: só varre com APIFY_SWEEP_ENABLED=true. Deploy não
   // pode sair gastando crédito do Apify sozinho.
   startVarreduraScheduler();
+  // E também desligada: só consulta a Evolution com VERIFICACAO_ENABLED=true.
+  // A instância é a mesma que atende os dentistas — deploy não pode sair
+  // disputando a conexão com conversa de verdade.
+  startVerificacaoScheduler();
 });

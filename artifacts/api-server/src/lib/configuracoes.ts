@@ -1,16 +1,19 @@
 /**
  * LEITURA E ESCRITA DAS CHAVES OPERACIONAIS (tabela `configuracoes`).
  *
- * Só o suficiente para o botão da varredura. Nada de cache: a leitura acontece
+ * Só o suficiente para os botões do painel. Nada de cache: a leitura acontece
  * uma vez por ciclo de 60s, e um cache aqui só criaria a janela em que a tela
- * diz "desligado" e o worker ainda dispara — que é justamente o que este botão
- * existe para impedir.
+ * diz "desligado" e o worker ainda dispara — que é justamente o que estes
+ * botões existem para impedir.
  */
 import { db, configuracoesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 /** A chave do botão de liga/desliga da varredura. */
 export const CHAVE_VARREDURA_ATIVA = "varredura_ativa";
+
+/** A chave do botão de liga/desliga da verificação de WhatsApp (Etapa 3A). */
+export const CHAVE_VERIFICACAO_ATIVA = "verificacao_ativa";
 
 /** Lê uma chave. Ausente devolve null — quem chama decide o default. */
 export async function lerConfig(chave: string): Promise<string | null> {
@@ -54,4 +57,20 @@ export async function varreduraAtivaNoPainel(): Promise<boolean> {
 /** O que o botão da tela chama. */
 export async function definirVarreduraAtiva(ativa: boolean): Promise<void> {
   await gravarConfig(CHAVE_VARREDURA_ATIVA, ativa ? "true" : "false");
+}
+
+/**
+ * A verificação de WhatsApp está ligada NO PAINEL?
+ *
+ * Ausente = DESLIGADA, pelo mesmo princípio da varredura. Aqui o que se gasta
+ * não é crédito, é a instância da Evolution que atende os dentistas — e um
+ * banco recém-migrado não pode começar a competir com conversa real porque
+ * ninguém escreveu a linha ainda.
+ */
+export async function verificacaoAtivaNoPainel(): Promise<boolean> {
+  return (await lerConfig(CHAVE_VERIFICACAO_ATIVA)) === "true";
+}
+
+export async function definirVerificacaoAtiva(ativa: boolean): Promise<void> {
+  await gravarConfig(CHAVE_VERIFICACAO_ATIVA, ativa ? "true" : "false");
 }

@@ -76,8 +76,13 @@ router.get("/prospects/resumo", async (req, res) => {
       .sort((a, b) => b.total - a.total || a.bairro.localeCompare(b.bairro));
 
     // "Verificado" é ter veredito, não ser positivo: enquanto NINGUÉM foi
-    // verificado (a Etapa 3A ainda não existe), devolver 0 leria como
-    // "conferimos e nenhuma tem WhatsApp", que é mentira. Nulo diz "não sei".
+    // verificado, devolver 0 leria como "conferimos e nenhuma tem WhatsApp",
+    // que é mentira. Nulo diz "não sei".
+    //
+    // A Etapa 3A não elimina essa janela — ela a encurta. Entre o deploy e o
+    // primeiro lote (que só sai depois de alguém ligar a env E o botão) a
+    // tabela continua com `tem_whatsapp` nulo em todas as linhas, e é
+    // exatamente aí que um "0 com WhatsApp" mentiria com mais convicção.
     const algumVerificado = todas.some((c) => c.temWhatsapp !== null);
 
     res.json({
@@ -96,9 +101,26 @@ router.get("/prospects/resumo", async (req, res) => {
       // exatamente assim que passou: a tela dizia "0 com telefone" com 13 das
       // 15 clínicas tendo telefone.
       comTelefone: todas.filter((c) => c.telefoneRaw !== null).length,
+      // Os três números da TAXA DE APROVEITAMENTO da varredura — o que decide
+      // se vale gastar o crédito restante do Apify.
+      //
+      // Os dois primeiros são medidos em `tem_whatsapp`, e NÃO no status, de
+      // propósito: status é onde a clínica está no funil (uma `apto` vira
+      // `promovido`, uma `sem_whatsapp` pode virar `descartado`), enquanto
+      // `tem_whatsapp` é o fato apurado sobre aquele telefone e não se mexe
+      // mais. Contar por status faria o aproveitamento encolher sozinho à
+      // medida que a 3C andasse.
       comWhatsapp: algumVerificado
         ? todas.filter((c) => c.temWhatsapp === true).length
         : null,
+      semWhatsapp: algumVerificado
+        ? todas.filter((c) => c.temWhatsapp === false).length
+        : null,
+      // Este é status mesmo, e não tem par em `tem_whatsapp`: a recusa é
+      // NOSSA (normalizarTelefone), decidida sem perguntar nada à Evolution.
+      // Por isso também não depende de ninguém ter sido verificado — o número
+      // é verdadeiro desde o primeiro lote.
+      telefoneInvalido: porStatus.telefone_invalido,
       total: todas.length,
     });
   } catch (err) {

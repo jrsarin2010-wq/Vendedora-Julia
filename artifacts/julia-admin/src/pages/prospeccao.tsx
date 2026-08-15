@@ -8,6 +8,7 @@ import {
   Search,
   Star,
   BadgeCheck,
+  ShieldCheck,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,14 +37,18 @@ import { rotuloProspeccao, PROSPECCAO_PT } from "@/lib/rotulos";
 import {
   obterStatusDaVarredura,
   definirVarreduraAtiva,
+  obterStatusDaVerificacao,
+  definirVerificacaoAtiva,
   listarProspects,
   obterResumoDeProspects,
   type StatusDaVarredura,
+  type StatusDaVerificacao,
   type StatusProspeccao,
   type ClinicaProspect,
 } from "@/lib/varredura-api";
 
 const CHAVE_STATUS = ["varredura-status"] as const;
+const CHAVE_VERIFICACAO = ["verificacao-status"] as const;
 const CHAVE_RESUMO = ["prospects-resumo"] as const;
 
 /** Quantas clínicas por página. */
@@ -284,8 +289,144 @@ function ControleDaVarredura() {
               : ""}
           </p>
         )}
+
+        {/* A verificação mora no MESMO card de propósito: as duas coisas são o
+            mesmo trabalho visto em dois momentos — a varredura traz a clínica,
+            a verificação diz se dá para falar com ela. Separar em dois cards
+            faria parecer que uma anda sem a outra. */}
+        <SecaoDeVerificacao />
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Etapa 3A — o segundo interruptor.
+ *
+ * Consulta própria, e não um campo a mais no status da varredura: são dois
+ * workers independentes, e um erro ao ler o estado de um não pode apagar a
+ * tela do outro.
+ */
+function SecaoDeVerificacao() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: CHAVE_VERIFICACAO,
+    queryFn: obterStatusDaVerificacao,
+    refetchInterval: 30_000,
+  });
+
+  const alternar = useMutation({
+    mutationFn: definirVerificacaoAtiva,
+    onSuccess: (novo: StatusDaVerificacao) => {
+      queryClient.setQueryData(CHAVE_VERIFICACAO, novo);
+      toast({
+        title: novo.ativa ? "Verificação ligada" : "Verificação desligada",
+        description: novo.ativa
+          ? `Até ${novo.tamanhoDoLote} clínicas por lote, com 15 minutos entre um lote e outro.`
+          : "Nenhuma consulta nova à Evolution. As clínicas ficam esperando em 'novo'.",
+      });
+    },
+    onError: (e: unknown) => {
+      toast({
+        title: "Não deu para mudar",
+        description: e instanceof Error ? e.message : "Tente de novo.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <div className="space-y-4 border-t border-border pt-5" data-testid="secao-verificacao">
+      <div className="flex items-center gap-2">
+        <ShieldCheck size={16} className="text-primary" />
+        <h3 className="text-sm font-semibold font-mono">Verificação de WhatsApp</h3>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+      ) : isError || !data ? (
+        <p className="text-sm text-muted-foreground">
+          Não consegui carregar o estado da verificação.
+        </p>
+      ) : (
+        <>
+          {!data.interruptorGeral && (
+            <div
+              className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+              data-testid="aviso-verificacao-interruptor"
+            >
+              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+              <div>
+                <p className="font-medium text-foreground">
+                  O interruptor geral está desligado.
+                </p>
+                <p className="text-muted-foreground">
+                  A variável <code className="font-mono">VERIFICACAO_ENABLED</code> precisa
+                  estar como <code className="font-mono">true</code> no Railway. Enquanto
+                  não estiver, este botão não faz nada.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {data.pausadaPorErro && (
+            <div
+              className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm"
+              data-testid="aviso-verificacao-pausada"
+            >
+              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-destructive" />
+              <div>
+                <p className="font-medium text-foreground">
+                  Verificação pausada: a Evolution não respondeu.
+                </p>
+                <p className="text-muted-foreground">{data.motivoPausa ?? "Sem detalhe."}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Nenhuma clínica foi descartada — todas voltam para a fila. Confira a
+                  instância (é a mesma que fala com os dentistas); o reinício do serviço
+                  retoma sozinho.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-muted/20 p-3">
+            <div>
+              <p className="text-sm font-medium">{data.ativa ? "Ligada" : "Desligada"}</p>
+              <p className="text-xs text-muted-foreground">
+                {data.ativa
+                  ? "Descobre sozinha quem tem WhatsApp e deixa a clínica em 'apto'."
+                  : "As clínicas captadas ficam esperando em 'novo'."}
+              </p>
+            </div>
+            <Switch
+              checked={data.ativa}
+              disabled={!data.interruptorGeral || data.pausadaPorErro || alternar.isPending}
+              onCheckedChange={(v) => alternar.mutate(v)}
+              data-testid="switch-verificacao-ativa"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Numero rotulo="A verificar" valor={data.aVerificar} testId="verificacao-a-verificar" />
+            <Numero
+              rotulo="Verificados em 24h"
+              valor={`${data.verificadosNa24h} / ${data.tetoDiario}`}
+              testId="verificacao-cota"
+            />
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Verificar é só uma consulta. Promover a clínica a dentista na lista continua
+            sendo feito à mão.
+          </p>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -389,7 +530,35 @@ function ConcentracaoPorBairro() {
                 com WhatsApp
                 {data.comWhatsapp === null && " (ninguém verificado ainda)"}
               </span>
+              <span data-testid="resumo-sem-whatsapp">
+                <strong className="font-mono text-foreground">
+                  {data.semWhatsapp === null ? "—" : data.semWhatsapp}
+                </strong>{" "}
+                sem WhatsApp
+              </span>
+              <span data-testid="resumo-telefone-invalido">
+                <strong className="font-mono text-foreground">{data.telefoneInvalido}</strong>{" "}
+                com telefone inválido
+              </span>
             </div>
+
+            {/*
+              A TAXA DE APROVEITAMENTO — o número que decide se vale gastar o
+              crédito que sobrou do Apify.
+
+              A base é quem TINHA telefone, e não o total captado: clínica sem
+              telefone no Maps é buraco do dado do Google, não da verificação, e
+              misturar os dois faria a varredura parecer pior do que é.
+            */}
+            {data.comWhatsapp !== null && data.comTelefone > 0 && (
+              <p className="mt-3 text-xs text-muted-foreground" data-testid="taxa-aproveitamento">
+                Aproveitamento:{" "}
+                <strong className="font-mono text-foreground">
+                  {Math.round((data.comWhatsapp / data.comTelefone) * 100)}%
+                </strong>{" "}
+                dos telefones captados têm WhatsApp.
+              </p>
+            )}
           </>
         )}
       </CardContent>

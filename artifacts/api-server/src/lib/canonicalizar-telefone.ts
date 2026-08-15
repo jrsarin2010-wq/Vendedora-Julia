@@ -114,6 +114,19 @@ export async function canonicalizarTelefones(
         // exists true com jid ilegível não vira veredito: sem forma canônica
         // não há o que gravar, e chutar a forma enviada traria de volta
         // exatamente o bug que este módulo existe para fechar.
+        //
+        // O warn existe para essa recusa ser VISÍVEL. Sem ele, um jid fora do
+        // padrão (`@g.us`, `@lid`, sufixo novo de uma versão futura da
+        // Evolution) vira só mais um "não sei" na contagem, e o número volta à
+        // fila para sempre sem ninguém entender por quê. O sufixo entra no log
+        // e os dígitos NÃO: é ele que diz o que mudou, e telefone completo não
+        // entra em log neste repo.
+        if (!canonico) {
+          logger.warn(
+            { sufixo: typeof item.jid === "string" ? item.jid.split("@")[1] ?? "sem @" : "sem jid" },
+            "Evolution disse exists:true com jid que não dá para aproveitar — tratado como indeterminado",
+          );
+        }
         mapa.set(
           enviado,
           canonico ? { canonico, existe: true } : { canonico: null, existe: null },

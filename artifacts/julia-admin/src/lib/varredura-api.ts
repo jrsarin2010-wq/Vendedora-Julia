@@ -82,6 +82,53 @@ export async function definirVarreduraAtiva(
 }
 
 // ---------------------------------------------------------------------------
+// Verificação de WhatsApp (Etapa 3A)
+// ---------------------------------------------------------------------------
+
+export interface StatusDaVerificacao {
+  /** O botão do painel (chave `verificacao_ativa` no banco). */
+  ativa: boolean;
+  /**
+   * A variável `VERIFICACAO_ENABLED` do Railway. Falsa aqui significa que o
+   * botão não adianta: o worker nem chega a olhar o banco.
+   */
+  interruptorGeral: boolean;
+  /** O worker parou sozinho: a Evolution não deu veredito nenhum. */
+  pausadaPorErro: boolean;
+  motivoPausa: string | null;
+  /** Em `novo` COM telefone do Maps — exatamente quem o worker pegaria. */
+  aVerificar: number;
+  /**
+   * Janela DESLIZANTE de 24h, não "desde a meia-noite". É a mesma conta que
+   * trava o worker — por isso a tela diz "em 24h" e não "hoje".
+   */
+  verificadosNa24h: number;
+  tetoDiario: number;
+  tamanhoDoLote: number;
+}
+
+export async function obterStatusDaVerificacao(): Promise<StatusDaVerificacao> {
+  const res = await fetch("/api/verificacao/status", { credentials: "include" });
+  return lerJson<StatusDaVerificacao>(res, "carregar o status da verificação");
+}
+
+/** O botão. Devolve o status já atualizado, como o da varredura. */
+export async function definirVerificacaoAtiva(
+  ativa: boolean,
+): Promise<StatusDaVerificacao> {
+  const res = await fetch("/api/verificacao/ativa", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ ativa }),
+  });
+  return lerJson<StatusDaVerificacao>(
+    res,
+    ativa ? "ligar a verificação" : "desligar a verificação",
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Clínicas captadas
 // ---------------------------------------------------------------------------
 
@@ -173,8 +220,17 @@ export interface ResumoDeProspects {
   /** Do bairro mais concentrado para o menos. */
   porBairro: BairroContado[];
   comTelefone: number;
-  /** Nulo enquanto NINGUÉM foi verificado — 0 leria como "nenhuma tem". */
+  /**
+   * Os três números da taxa de aproveitamento da varredura.
+   *
+   * Os dois primeiros são nulos enquanto NINGUÉM foi verificado — 0 ali leria
+   * como "conferimos e é isso". O terceiro é número desde o primeiro lote: a
+   * recusa por telefone inválido é nossa, decidida sem perguntar nada à
+   * Evolution.
+   */
   comWhatsapp: number | null;
+  semWhatsapp: number | null;
+  telefoneInvalido: number;
   total: number;
 }
 

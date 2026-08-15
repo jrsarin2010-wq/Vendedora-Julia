@@ -34,6 +34,8 @@ export const wa = {
   naoEntregaveis: [],
   /** Alertas da varredura Apify (Etapa 2): orçamento, falhou, fila vazia. */
   varreduras: [],
+  /** Alertas da verificação de WhatsApp (Etapa 3A): só a pausa por lotes mudos. */
+  verificacoes: [],
   /**
    * Consulta de existência no WhatsApp (Etapa 1.5).
    *
@@ -60,6 +62,7 @@ export const wa = {
     this.sondas = [];
     this.naoEntregaveis = [];
     this.varreduras = [];
+    this.verificacoes = [];
     // Só o registro: `responder` é comportamento configurado pelo teste, como
     // `entrega` e `media`, e não pode ser zerado no meio de um cenário.
     this.numeros.blocos = [];
@@ -115,6 +118,9 @@ export async function sendTelegramNaoEntregavel(alert) {
 }
 export async function sendTelegramVarredura(alerta) {
   wa.varreduras.push(alerta);
+}
+export async function sendTelegramVerificacao(alerta) {
+  wa.verificacoes.push(alerta);
 }
 export function linkDoWhatsApp(phone) {
   return `https://wa.me/${String(phone).replace(/\D/g, "")}`;

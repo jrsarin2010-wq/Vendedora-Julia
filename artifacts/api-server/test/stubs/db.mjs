@@ -80,6 +80,7 @@ export const clinicasProspectTable = {
   telefoneRaw: "telefoneRaw",
   telefoneWhatsapp: "telefoneWhatsapp",
   temWhatsapp: "temWhatsapp",
+  verificadoWhatsappEm: "verificadoWhatsappEm",
   website: "website",
   instagram: "instagram",
   endereco: "endereco",
@@ -96,6 +97,8 @@ export const clinicasProspectTable = {
   varreduraId: "varreduraId",
   leadId: "leadId",
   statusProspeccao: "statusProspeccao",
+  criadoEm: "criadoEm",
+  atualizadoEm: "atualizadoEm",
 };
 
 export const configuracoesTable = {
