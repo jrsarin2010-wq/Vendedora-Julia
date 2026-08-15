@@ -287,11 +287,168 @@ secao("um toque frio por rodada (vinte textos idênticos no mesmo segundo é ass
   ok("saiu UM, não cinco", wa.enviadas.length === 1, JSON.stringify(wa.enviadas.map((e: any) => e.phone)));
   ok("os outros quatro seguem pendentes", pendentes().length === 4);
 
-  // As rodadas seguintes escoam a fila, uma a uma.
-  await rodarCicloDeFollowUp(depois(72));
-  await rodarCicloDeFollowUp(depois(72));
+  // As rodadas seguintes escoam a fila, uma a uma — cada uma 5 minutos depois,
+  // como na vida real. Desde a Rodada 51 os toques dividem o intervalo mínimo
+  // com o resto do ritmo frio, então rodada no MESMO instante não escoa nada
+  // (é o comportamento certo: dois toques no mesmo segundo é o bloco que este
+  // teste existe para impedir).
+  const MIN = 60 * 1000;
+  await rodarCicloDeFollowUp(new Date(depois(72).getTime() + 5 * MIN));
+  await rodarCicloDeFollowUp(new Date(depois(72).getTime() + 10 * MIN));
   ok("duas rodadas depois, três saíram", wa.enviadas.length === 3);
   ok("e dois seguem na fila", pendentes().length === 2);
+
+  // A prova do intervalo: uma rodada extra no MESMO instante da anterior não
+  // solta o quarto toque — ainda não passou o mínimo desde o terceiro.
+  await rodarCicloDeFollowUp(new Date(depois(72).getTime() + 10 * MIN));
+  ok("no mesmo instante, o quarto não sai", wa.enviadas.length === 3);
+  ok("mas segue pendente, não perdido", pendentes().length === 2);
+}
+
+secao("toque frio CONSOME a cota do dia (Rodada 51 — antes saía por fora)");
+{
+  // Um toque vencido… num dia em que as 40 aberturas já saíram. Antes da
+  // Rodada 51 ele sairia assim mesmo, e o número mandaria 41+; agora o balde é
+  // um só e o toque espera amanhã.
+  state.reset();
+  wa.reset();
+  const id = state.nextId++;
+  state.leads.push({
+    id,
+    phone: NUMERO,
+    name: "Marina",
+    status: "cold",
+    funnelStage: "contacted",
+    outreachStatus: "sent",
+    createdAt: new Date(),
+  });
+  state.followUps.push({
+    id: state.nextId++,
+    leadId: id,
+    status: "pending",
+    touchNumber: 1,
+    kind: "abordagem",
+    scheduledAt: new Date(TERCA_14H.getTime() - 1000),
+    messageTemplate: ABORDAGEM_TOQUES[1]("Marina"),
+  });
+  // 40 aberturas hoje, duas horas atrás (12h SP — mesmo dia, fora da última hora).
+  for (let i = 0; i < 40; i++) {
+    state.leads.push({
+      id: state.nextId++,
+      phone: `55859996${String(i).padStart(4, "0")}`,
+      status: "cold",
+      outreachStatus: "sent",
+      outreachSentAt: new Date(TERCA_14H.getTime() - 2 * HORA),
+    });
+  }
+  await rodarCicloDeFollowUp(TERCA_14H);
+  ok("com a cota do dia cheia, o toque não sai", wa.enviadas.length === 0, JSON.stringify(wa.enviadas));
+  ok("e segue pendente para amanhã", pendentes().length === 1);
+}
+
+secao("toque frio espera o intervalo mínimo desde a ÚLTIMA mensagem fria — de qualquer agendador");
+{
+  state.reset();
+  wa.reset();
+  const id = state.nextId++;
+  state.leads.push({
+    id,
+    phone: NUMERO,
+    name: "Marina",
+    status: "cold",
+    funnelStage: "contacted",
+    outreachStatus: "sent",
+    createdAt: new Date(),
+  });
+  state.followUps.push({
+    id: state.nextId++,
+    leadId: id,
+    status: "pending",
+    touchNumber: 1,
+    kind: "abordagem",
+    scheduledAt: new Date(TERCA_14H.getTime() - 1000),
+    messageTemplate: ABORDAGEM_TOQUES[1]("Marina"),
+  });
+  // Uma ABERTURA (do outro agendador) saiu 30 segundos atrás.
+  state.leads.push({
+    id: state.nextId++,
+    phone: "5585999990001",
+    status: "cold",
+    outreachStatus: "sent",
+    outreachSentAt: new Date(TERCA_14H.getTime() - 30 * 1000),
+  });
+  await rodarCicloDeFollowUp(TERCA_14H);
+  ok("30s depois de uma abertura, o toque espera", wa.enviadas.length === 0, JSON.stringify(wa.enviadas));
+  ok("segue pendente", pendentes().length === 1);
+
+  // Cinco minutos depois (o ciclo seguinte de verdade), sai.
+  await rodarCicloDeFollowUp(new Date(TERCA_14H.getTime() + 5 * 60 * 1000));
+  ok("no ciclo seguinte, sai", wa.enviadas.length === 1, JSON.stringify(wa.enviadas));
+}
+
+secao("número que rejeita 3 envios: a cadência inteira morre e o Telegram avisa");
+{
+  // O lead recebeu a abordagem, mas o número morreu (ou nunca existiu e a
+  // Evolution demorou a dizer). O toque 1 vence e a Evolution rejeita — três
+  // rodadas seguidas. Na terceira, desiste-se do número: TODOS os pendentes
+  // dele morrem (o toque 2 incluso, que nem venceu) e o alerta sai.
+  state.reset();
+  wa.reset();
+  const id = state.nextId++;
+  state.leads.push({
+    id,
+    phone: NUMERO,
+    name: "Marina",
+    status: "cold",
+    funnelStage: "contacted",
+    outreachStatus: "sent",
+    createdAt: new Date(),
+  });
+  state.followUps.push({
+    id: state.nextId++,
+    leadId: id,
+    status: "pending",
+    touchNumber: 1,
+    kind: "abordagem",
+    scheduledAt: new Date(TERCA_14H.getTime() - 1000),
+    messageTemplate: ABORDAGEM_TOQUES[1]("Marina"),
+  });
+  state.followUps.push({
+    id: state.nextId++,
+    leadId: id,
+    status: "pending",
+    touchNumber: 2,
+    kind: "abordagem",
+    scheduledAt: depois(200), // ainda no futuro
+    messageTemplate: ABORDAGEM_TOQUES[2]("Marina"),
+  });
+
+  wa.entrega = false;
+  wa.falhaPermanente = true;
+  await rodarCicloDeFollowUp(TERCA_14H);
+  ok("1ª rejeição: segue pendente", pendentes().length === 2);
+  await rodarCicloDeFollowUp(TERCA_14H);
+  ok("2ª rejeição: ainda pendente", pendentes().length === 2);
+  ok("ainda sem alerta", wa.naoEntregaveis.length === 0);
+  await rodarCicloDeFollowUp(TERCA_14H);
+  ok(
+    "3ª rejeição: TODOS os pendentes cancelados (o toque 2 incluso)",
+    pendentes().length === 0 && toques().every((f: any) => f.status === "cancelled"),
+    JSON.stringify(toques().map((f: any) => f.status)),
+  );
+  ok("o Telegram foi avisado, uma vez só", wa.naoEntregaveis.length === 1, JSON.stringify(wa.naoEntregaveis));
+  ok(
+    "com o número no alerta, para conferir na planilha",
+    wa.naoEntregaveis[0].lead.phone === NUMERO,
+  );
+  ok("a contagem ficou no lead", state.leads[0].falhasDeEnvio === 3, String(state.leads[0].falhasDeEnvio));
+
+  // E nada volta: rodadas futuras não ressuscitam a cadência.
+  wa.entrega = true;
+  wa.falhaPermanente = false;
+  const antesDeTudo = wa.enviadas.length;
+  await rodarCicloDeFollowUp(depois(300));
+  ok("nada mais sai para este número", wa.enviadas.length === antesDeTudo);
 }
 
 secao("follow-up de conversa NÃO é freado pela janela (ele já respondeu)");

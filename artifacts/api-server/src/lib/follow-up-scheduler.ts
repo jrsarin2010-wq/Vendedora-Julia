@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
 import { followUpsTable, leadsTable, leadMessagesTable } from "@workspace/db";
 import { eq, lte, and, desc } from "drizzle-orm";
-import { sendWhatsAppMessage } from "./integrations";
+import { enviarWhatsAppComDiagnostico } from "./integrations";
 import { logger } from "./logger";
 import { saudacao } from "./tratamento";
 import {
@@ -9,7 +9,14 @@ import {
   marcarAtencao,
   pareceMensagemComPromessa,
 } from "./atencao";
-import { lerConfig, podeDispararAgora, EXPLICACAO_BLOQUEIO } from "./outreach";
+import {
+  lerConfig,
+  podeDispararAgora,
+  contarEnvios,
+  EXPLICACAO_BLOQUEIO,
+} from "./outreach";
+import { datasDeEnviosFrios } from "./ritmo-frio";
+import { registrarFalhaPermanente, limparFalhasDeEnvio } from "./nao-entregavel";
 import {
   ABORDAGEM_TOQUES,
   ABORDAGEM_DELAYS_HOURS,
@@ -24,6 +31,17 @@ import {
   lerNovidade,
   contarReativacoesDeHoje,
 } from "./reativacao";
+
+/**
+ * O ritmo frio deste ciclo: quanto já saiu (de QUALQUER agendador) e quando
+ * foi o último. Carregado do banco uma vez por ciclo, na primeira vez que um
+ * toque frio vence, e atualizado em memória a cada envio do próprio ciclo.
+ */
+interface RitmoFrio {
+  naUltimaHora: number;
+  hoje: number;
+  ultimo: Date | null;
+}
 
 /**
  * Um toque de ABORDAGEM (ou de REATIVAÇÃO) pode sair NESTE instante?
@@ -41,17 +59,25 @@ import {
  * domingo: "passei por aqui de novo" no domingo é exatamente o que faz um
  * dentista denunciar o número.
  *
- * Os contadores de volume vão zerados de propósito — ver `TOQUES_FRIOS_POR_CICLO`
- * logo abaixo para o que isso significa e o que fica de fora.
+ * Os contadores vão CHEIOS (Rodada 51): o toque bebe do mesmo balde de
+ * OUTREACH_PER_HOUR/PER_DAY que as aberturas — antes ele saía por fora da
+ * cota, e um dia de pico somava as aberturas MAIS os toques vencidos, o dobro
+ * do volume calibrado. O intervalo mínimo vai CRAVADO, sem sorteio: o ciclo de
+ * 5 minutos já espaça mais que o dobro do mínimo, então o sorteio não mudaria
+ * o comportamento — só tornaria a decisão irreproduzível num teste.
  */
-function toqueFrioPodeSair(agora: Date): { pode: boolean; motivo?: string } {
+function toqueFrioPodeSair(
+  agora: Date,
+  ritmo: RitmoFrio,
+): { pode: boolean; motivo?: string } {
+  const config = lerConfig();
   const decisao = podeDispararAgora({
-    config: lerConfig(),
+    config,
     agora,
-    enviadosNaUltimaHora: 0,
-    enviadosHoje: 0,
-    ultimoEnvio: null,
-    intervaloExigidoSegundos: 0,
+    enviadosNaUltimaHora: ritmo.naUltimaHora,
+    enviadosHoje: ritmo.hoje,
+    ultimoEnvio: ritmo.ultimo,
+    intervaloExigidoSegundos: config.intervaloMinimoSegundos,
   });
   return { pode: decisao.pode, motivo: decisao.motivo };
 }
@@ -64,12 +90,6 @@ function toqueFrioPodeSair(agora: Date): { pode: boolean; motivo?: string } {
  * mensagens de texto IDÊNTICO saindo no mesmo segundo para vinte números é a
  * assinatura de robô mais óbvia que existe. Um por rodada espalha os envios
  * pela janela do dia, do mesmo jeito que o agendador de abordagem faz.
- *
- * LIMITAÇÃO CONHECIDA, registrada de propósito: os toques NÃO consomem a cota
- * diária de OUTREACH_PER_DAY, que conta só primeiras mensagens. Num dia cheio,
- * o número pode mandar até `porDia` abordagens MAIS os toques que vencerem
- * naquele dia. Quem for calibrar o volume precisa dimensionar OUTREACH_PER_DAY
- * contando com isso.
  */
 const TOQUES_FRIOS_POR_CICLO = 1;
 
@@ -99,6 +119,22 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
     // restart — mesma decisão do agendador de abordagem. Preguiçoso: só
     // consulta quando uma reativação de fato vence neste ciclo.
     let reativacoesDeHoje: number | null = null;
+    // O balde compartilhado do ritmo frio (Rodada 51) — também preguiçoso, e
+    // atualizado em memória a cada envio frio DESTE ciclo, para o segundo
+    // toque da mesma rodada já enxergar o primeiro.
+    let ritmoFrio: RitmoFrio | null = null;
+    const ritmoFrioAtual = async (): Promise<RitmoFrio> => {
+      if (ritmoFrio === null) {
+        ritmoFrio = contarEnvios(await datasDeEnviosFrios(now), now);
+      }
+      return ritmoFrio;
+    };
+    const contabilizarEnvioFrio = () => {
+      if (ritmoFrio === null) return; // impossível: o envio passou pela checagem
+      ritmoFrio.naUltimaHora++;
+      ritmoFrio.hoje++;
+      ritmoFrio.ultimo = now;
+    };
 
     // Find pending follow-ups that are due
     const due = await db
@@ -210,11 +246,11 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       if (ehReativacao) {
         if (reativacoesNesteCiclo >= REATIVACOES_POR_CICLO) continue;
 
-        // Mesma janela, dias úteis e trava mestra da prospecção. Fora dela o
-        // toque ADIA (segue pendente) — inclusive com OUTREACH_ENABLED
+        // Mesma janela, dias úteis, trava mestra E cota da prospecção. Fora
+        // dela o toque ADIA (segue pendente) — inclusive com OUTREACH_ENABLED
         // desligado: é a mesma trava de emergência, e emergência para a fila
         // sem destruí-la.
-        const janela = toqueFrioPodeSair(now);
+        const janela = toqueFrioPodeSair(now, await ritmoFrioAtual());
         if (!janela.pode) {
           logger.debug(
             { leadId: lead.id, touchNumber: followUp.touchNumber, motivo: janela.motivo },
@@ -289,7 +325,7 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       if (ehAbordagem) {
         if (toquesFriosNesteCiclo >= TOQUES_FRIOS_POR_CICLO) continue;
 
-        const janela = toqueFrioPodeSair(now);
+        const janela = toqueFrioPodeSair(now, await ritmoFrioAtual());
         if (!janela.pode) {
           logger.debug(
             { leadId: lead.id, touchNumber: followUp.touchNumber, motivo: janela.motivo },
@@ -319,18 +355,34 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
           ? ABORDAGEM_TOQUES[followUp.touchNumber >= 2 ? 2 : 1](lead.name)
           : `${saudacao(lead.name)}aqui é a Júlia do CaptaClin 😊 Passando pra saber se o WhatsApp da sua clínica ainda te incomoda. Se quiser dar uma olhada por conta: https://www.captaclin.com.br`);
 
-      const delivered = await sendWhatsAppMessage(lead.phone, message);
+      const envio = await enviarWhatsAppComDiagnostico(lead.phone, message);
 
       // Se não entregou, NÃO grava no histórico e NÃO marca como enviado: o
       // follow-up fica "pending" e a próxima rodada (5 min) tenta de novo.
       // Sem isso, o painel mostraria um toque que o dentista nunca recebeu.
-      if (!delivered) {
+      //
+      // Falha PERMANENTE (a Evolution rejeitou o número) conta para desistir
+      // (Rodada 51): na terceira, lib/nao-entregavel.ts cancela TODOS os
+      // pendentes deste lead — este toque incluso — e avisa o Telegram. Vale
+      // para qualquer cadência: se o número não recebe, adiar não conserta.
+      if (!envio.entregue) {
+        if (envio.falhaPermanente) {
+          const { desistiu } = await registrarFalhaPermanente(
+            lead,
+            `toque de ${followUp.kind}`,
+          );
+          if (desistiu) continue;
+        }
         logger.error(
           { leadId: lead.id, touchNumber: followUp.touchNumber },
           "Follow-up NÃO entregue — segue pendente para nova tentativa",
         );
         continue;
       }
+
+      // Entregou: zera a contagem de falhas permanentes, que precisa ser de
+      // falhas SEGUIDAS para condenar um número (só escreve se havia o quê).
+      await limparFalhasDeEnvio(lead);
 
       // Save outbound follow-up message
       await db.insert(leadMessagesTable).values({
@@ -341,15 +393,17 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       });
 
       // Mark as sent. O carimbo de quando saiu alimenta o limite diário da
-      // reativação — e não custa nada gravar para os outros tipos também.
+      // reativação e o balde do ritmo frio (lib/ritmo-frio.ts) — é o `now` do
+      // ciclo, o mesmo relógio das decisões, para a contagem ser reproduzível.
       await db
         .update(followUpsTable)
-        .set({ status: "sent", sentAt: new Date() })
+        .set({ status: "sent", sentAt: now })
         .where(eq(followUpsTable.id, followUp.id));
 
       if (ehReativacao) {
         reativacoesNesteCiclo++;
         if (reativacoesDeHoje !== null) reativacoesDeHoje++;
+        contabilizarEnvioFrio();
       }
 
       // FIM DA CADÊNCIA DE CONVERSA → arma a fila longa (Rodada 41).
@@ -400,6 +454,7 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
 
       if (ehAbordagem) {
         toquesFriosNesteCiclo++;
+        contabilizarEnvioFrio();
 
         // Último toque da cadência: acabou, e para sempre. Marcar o lead aqui,
         // em vez de deduzir depois "não tem follow-up pendente", é o que dá ao

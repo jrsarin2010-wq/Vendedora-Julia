@@ -16,7 +16,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { leadsTable } from "@workspace/db";
-import { eq, and, isNotNull, gte } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   lerConfig,
   leadElegivel,
@@ -27,10 +27,9 @@ import {
   EXPLICACAO_INELEGIVEL,
 } from "../lib/outreach";
 import { gerarMensagemDeAbordagem } from "../lib/outreach-message";
+import { datasDeEnviosFrios } from "../lib/ritmo-frio";
 
 const router: IRouter = Router();
-
-const JANELA_DE_CONTAGEM_MS = 26 * 60 * 60 * 1000;
 
 router.get("/leads/:id/outreach-preview", async (req, res) => {
   try {
@@ -52,20 +51,13 @@ router.get("/leads/:id/outreach-preview", async (req, res) => {
 
     // Por que o ritmo não deixaria sair agora (se for o caso). Usa intervalo
     // mínimo cravado, e não sorteado: numa conferência interessa o cenário
-    // previsível, não um número diferente a cada F5.
-    const recentes = await db
-      .select({ outreachSentAt: leadsTable.outreachSentAt })
-      .from(leadsTable)
-      .where(
-        and(
-          isNotNull(leadsTable.outreachSentAt),
-          gte(leadsTable.outreachSentAt, new Date(agora.getTime() - JANELA_DE_CONTAGEM_MS)),
-        ),
-      );
-    const datas = recentes
-      .map((r) => r.outreachSentAt)
-      .filter((d): d is Date => d instanceof Date);
-    const { naUltimaHora, hoje, ultimo } = contarEnvios(datas, agora);
+    // previsível, não um número diferente a cada F5. A contagem é a mesma dos
+    // agendadores (aberturas + toques, lib/ritmo-frio.ts) — os contadores da
+    // tela têm que bater com o que o número de fato mandou.
+    const { naUltimaHora, hoje, ultimo } = contarEnvios(
+      await datasDeEnviosFrios(agora),
+      agora,
+    );
 
     const ritmo = podeDispararAgora({
       config,

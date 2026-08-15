@@ -170,6 +170,10 @@ ok(
   'lead que chegou pelo WhatsApp (outreachStatus "none") não é abordado',
   leadElegivel({ status: "warm", outreachStatus: "none", phone: "x" }).motivo === "nao_e_de_prospeccao",
 );
+ok(
+  "número que rejeitou 3 envios não volta — e com motivo próprio, para o painel mandar conferir o telefone",
+  leadElegivel({ status: "cold", outreachStatus: "nao_entregavel", phone: "x" }).motivo === "nao_entregavel",
+);
 
 secao("contagem de envios usa o dia de São Paulo");
 const envios = [
@@ -288,6 +292,99 @@ for (let i = 0; i < 8; i++) {
 r = await rodarCicloDeAbordagem(TERCA_14H);
 ok("bloqueado pelo limite da hora", r.enviou === false && r.motivo === "limite_hora", JSON.stringify(r));
 ok("nada saiu", wa.enviadas.length === 0);
+
+secao("ciclo completo — toques e reativações CONTAM na cota (Rodada 51)");
+// 8 toques de abordagem saíram na última hora, nenhuma abertura. Antes da
+// Rodada 51 a abertura sairia assim mesmo (a contagem só via aberturas);
+// agora o balde é um só.
+filaCom([{ name: "Carlos" }]);
+for (let i = 0; i < 8; i++) {
+  state.followUps.push({
+    id: state.nextId++,
+    leadId: 900 + i,
+    kind: "abordagem",
+    status: "sent",
+    touchNumber: 1,
+    scheduledAt: new Date(TERCA_14H.getTime() - 60 * 60 * 1000),
+    sentAt: new Date(TERCA_14H.getTime() - 10 * 60 * 1000),
+  });
+}
+r = await rodarCicloDeAbordagem(TERCA_14H);
+ok("bloqueado pelo limite da hora", r.enviou === false && r.motivo === "limite_hora", JSON.stringify(r));
+ok("nada saiu", wa.enviadas.length === 0);
+
+secao("ciclo completo — o intervalo mínimo vale depois de QUALQUER mensagem fria");
+filaCom([{ name: "Carlos" }]);
+// Uma reativação (do outro agendador) saiu 30 segundos atrás. O sorteio do
+// intervalo nunca fica abaixo do mínimo (180s), então 30s bloqueia sempre.
+state.followUps.push({
+  id: state.nextId++,
+  leadId: 901,
+  kind: "reativacao",
+  status: "sent",
+  touchNumber: 1,
+  scheduledAt: new Date(TERCA_14H.getTime() - 60 * 60 * 1000),
+  sentAt: new Date(TERCA_14H.getTime() - 30 * 1000),
+});
+r = await rodarCicloDeAbordagem(TERCA_14H);
+ok(
+  "abertura espera o intervalo desde o toque do outro agendador",
+  r.enviou === false && r.motivo === "intervalo_minimo",
+  JSON.stringify(r),
+);
+
+secao("ciclo completo — número rejeitado 3 vezes sai da fila e DESTRAVA os outros");
+{
+  // O buraco que a Rodada 51 fecha: o mais antigo da fila com número morto era
+  // escolhido de novo a cada ciclo, para sempre — e a Marina, atrás dele,
+  // nunca recebia nada.
+  filaCom([
+    { name: "Carlos", phone: "5585999990111" },
+    { name: "Marina", phone: "5585999990222" },
+  ]);
+  wa.entrega = false;
+  wa.falhaPermanente = true;
+
+  r = await rodarCicloDeAbordagem(TERCA_14H);
+  ok("1ª rejeição: reporta não entregue", r.motivo === "nao_entregue", JSON.stringify(r));
+  ok("e anota a falha no lead", state.leads[0].falhasDeEnvio === 1, String(state.leads[0].falhasDeEnvio));
+  ok("continua pending (ainda vai tentar)", state.leads[0].outreachStatus === "pending");
+
+  r = await rodarCicloDeAbordagem(TERCA_14H);
+  ok("2ª rejeição: ainda pending", state.leads[0].outreachStatus === "pending" && state.leads[0].falhasDeEnvio === 2);
+  ok("sem alerta até aqui", wa.naoEntregaveis.length === 0);
+
+  r = await rodarCicloDeAbordagem(TERCA_14H);
+  ok("3ª rejeição: desiste", r.motivo === "nao_entregavel", JSON.stringify(r));
+  ok("o lead sai da fila", state.leads[0].outreachStatus === "nao_entregavel", state.leads[0].outreachStatus);
+  ok("o Telegram foi avisado uma vez", wa.naoEntregaveis.length === 1, JSON.stringify(wa.naoEntregaveis));
+  ok("nada entrou no histórico", state.messages.length === 0);
+
+  // A fila anda: com a Evolution de volta, o próximo ciclo alcança a Marina.
+  wa.entrega = true;
+  wa.falhaPermanente = false;
+  r = await rodarCicloDeAbordagem(TERCA_14H);
+  ok("o ciclo seguinte envia para o PRÓXIMO da fila", r.enviou === true && r.leadId === state.leads[1].id, JSON.stringify(r));
+  ok("para o número da Marina", wa.enviadas[wa.enviadas.length - 1].phone === "5585999990222");
+}
+
+secao("ciclo completo — Evolution fora do ar NÃO condena o lead");
+{
+  // Falha transitória (timeout, 5xx): pode se repetir cem vezes que o lead
+  // não perde nada — quando a Evolution voltar, ele ainda é o primeiro.
+  filaCom([{ name: "Carlos" }]);
+  wa.entrega = false;
+  wa.falhaPermanente = false;
+  for (let i = 0; i < 4; i++) {
+    r = await rodarCicloDeAbordagem(TERCA_14H);
+  }
+  ok("4 quedas depois, segue pending", state.leads[0].outreachStatus === "pending");
+  ok("sem contar falha nenhuma", !state.leads[0].falhasDeEnvio, String(state.leads[0].falhasDeEnvio));
+  ok("sem alerta de número morto", wa.naoEntregaveis.length === 0);
+  wa.entrega = true;
+  r = await rodarCicloDeAbordagem(TERCA_14H);
+  ok("Evolution voltou: o mesmo lead recebe", r.enviou === true && r.leadId === state.leads[0].id, JSON.stringify(r));
+}
 
 secao("ciclo completo — modelo devolveu vazio: lead segue na fila");
 ctrl.reply = "";

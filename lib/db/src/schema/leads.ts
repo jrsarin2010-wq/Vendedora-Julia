@@ -44,6 +44,11 @@ export const outreachStatusEnum = pgEnum("outreach_status", [
   // motivo de atenção `sem_resposta` (lib/atencao.ts), que significa quase o
   // OPOSTO: lá é o dentista que falou e ficou sem resposta NOSSA.
   "nao_respondeu",
+  // A Evolution rejeitou o número três vezes seguidas (sem WhatsApp, fixo,
+  // digitado errado). Sem este estado, o lead mais antigo da fila com número
+  // morto era escolhido de novo a CADA ciclo — nenhum outro lead recebia nada
+  // e cada tentativa gastava uma chamada de modelo. Ver lib/nao-entregavel.ts.
+  "nao_entregavel",
 ]);
 
 export const leadsTable = pgTable("leads", {
@@ -68,6 +73,12 @@ export const leadsTable = pgTable("leads", {
   city: text("city"),
   outreachStatus: outreachStatusEnum("outreach_status").notNull().default("none"),
   outreachSentAt: timestamp("outreach_sent_at"),
+  // Falhas PERMANENTES de envio seguidas (a Evolution rejeitou o destinatário
+  // — HTTP 400). Só conta o que repetir não conserta: queda ou timeout da
+  // Evolution não incrementa, senão uma hora fora do ar condenaria leads bons.
+  // Zera no primeiro envio entregue; ao chegar em MAX_FALHAS_DE_ENVIO
+  // (lib/nao-entregavel.ts) o lead vira "nao_entregavel" e sai da fila.
+  falhasDeEnvio: integer("falhas_de_envio").notNull().default(0),
   funnelStage: funnelStageEnum("funnel_stage").notNull().default("new"),
   painPoints: text("pain_points"),
   mainObjection: text("main_objection"),

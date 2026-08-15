@@ -49,6 +49,7 @@ export const followUpsTable = {
   touchNumber: "touchNumber",
   kind: "kind",
   messageTemplate: "messageTemplate",
+  sentAt: "sentAt",
 };
 
 export const state = {

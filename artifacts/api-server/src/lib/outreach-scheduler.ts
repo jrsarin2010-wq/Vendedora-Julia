@@ -11,9 +11,11 @@
  */
 import { db } from "@workspace/db";
 import { leadsTable, leadMessagesTable, followUpsTable } from "@workspace/db";
-import { eq, and, isNotNull, gte, asc } from "drizzle-orm";
-import { sendWhatsAppMessage } from "./integrations";
+import { eq, asc } from "drizzle-orm";
+import { enviarWhatsAppComDiagnostico } from "./integrations";
 import { logger } from "./logger";
+import { datasDeEnviosFrios } from "./ritmo-frio";
+import { registrarFalhaPermanente } from "./nao-entregavel";
 import {
   lerConfig,
   podeDispararAgora,
@@ -28,16 +30,6 @@ import { ABORDAGEM_TOQUES, ABORDAGEM_DELAYS_HOURS } from "../julia-persona";
 
 /** De quanto em quanto tempo o ciclo roda. */
 const INTERVALO_DO_CICLO_MS = 60 * 1000;
-
-/**
- * Janela de envios que buscamos no banco para contar o ritmo. 26 horas cobre
- * o dia inteiro de São Paulo com folga, em qualquer fuso do servidor.
- *
- * Contar pelo BANCO, e não por um contador em memória, é o que faz o limite
- * sobreviver a um restart: sem isso, um deploy no meio da tarde zeraria a
- * conta e a Júlia poderia mandar 40 mensagens de novo no mesmo dia.
- */
-const JANELA_DE_CONTAGEM_MS = 26 * 60 * 60 * 1000;
 
 export interface ResultadoDoCiclo {
   enviou: boolean;
@@ -60,20 +52,11 @@ export async function rodarCicloDeAbordagem(
     return { enviou: false, motivo: "desligado" };
   }
 
-  // Envios recentes, para contar o ritmo.
-  const recentes = await db
-    .select({ outreachSentAt: leadsTable.outreachSentAt })
-    .from(leadsTable)
-    .where(
-      and(
-        isNotNull(leadsTable.outreachSentAt),
-        gte(leadsTable.outreachSentAt, new Date(agora.getTime() - JANELA_DE_CONTAGEM_MS)),
-      ),
-    );
-
-  const datas = recentes
-    .map((r) => r.outreachSentAt)
-    .filter((d): d is Date => d instanceof Date);
+  // Envios FRIOS recentes — aberturas E toques (Rodada 51, lib/ritmo-frio.ts).
+  // É o que faz a cota do dia valer para o total que o número manda, e o
+  // intervalo mínimo valer também entre uma abertura e o toque que outro
+  // agendador acabou de soltar.
+  const datas = await datasDeEnviosFrios(agora);
 
   const { naUltimaHora, hoje, ultimo } = contarEnvios(datas, agora);
 
@@ -157,12 +140,24 @@ export async function rodarCicloDeAbordagem(
     return { enviou: false, motivo: "mensagem_vazia", leadId: lead.id };
   }
 
-  const entregue = await sendWhatsAppMessage(lead.phone, mensagem);
+  const envio = await enviarWhatsAppComDiagnostico(lead.phone, mensagem);
 
   // Mesma regra da Rodada 21: só entra no histórico o que realmente chegou.
   // E o lead só sai da fila se a mensagem saiu — se o envio falhou, ele
   // continua "pending" e a próxima rodada tenta de novo.
-  if (!entregue) {
+  //
+  // Com uma exceção (Rodada 51): a falha PERMANENTE conta. Sem contar, um
+  // número morto na frente da fila seria o escolhido de novo a cada ciclo,
+  // para sempre — nenhum outro lead receberia nada e cada tentativa gastaria
+  // uma chamada de modelo. Na terceira, desiste-se do número (ver
+  // lib/nao-entregavel.ts) e a fila anda.
+  if (!envio.entregue) {
+    if (envio.falhaPermanente) {
+      const { desistiu } = await registrarFalhaPermanente(lead, "abordagem");
+      if (desistiu) {
+        return { enviou: false, motivo: "nao_entregavel", leadId: lead.id };
+      }
+    }
     logger.error(
       { leadId: lead.id, phone: lead.phone },
       "Abordagem NÃO entregue — lead segue na fila",
@@ -186,6 +181,9 @@ export async function rodarCicloDeAbordagem(
       outreachSentAt: agora,
       funnelStage: "contacted",
       lastMessageAt: agora,
+      // Entregou: as falhas têm que ser SEGUIDAS para descartar um número, e
+      // esta entrega prova que o número funciona.
+      falhasDeEnvio: 0,
       updatedAt: new Date(),
     })
     .where(eq(leadsTable.id, lead.id));

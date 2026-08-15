@@ -151,10 +151,46 @@ export async function sendWhatsAppMessage(
   message: string,
   primeiraResposta = false,
 ): Promise<boolean> {
+  return (await enviarWhatsAppComDiagnostico(phone, message, primeiraResposta)).entregue;
+}
+
+/** O resultado de um envio, com o diagnóstico que decide o que fazer da falha. */
+export interface EnvioWhatsApp {
+  entregue: boolean;
+  /**
+   * A Evolution rejeitou ESTE destinatário — número sem WhatsApp, fixo,
+   * digitado errado. Tentar de novo não muda nada. É a diferença entre "o
+   * número é ruim" e "a Evolution está fora do ar" (timeout, 5xx, queda de
+   * rede), que se resolve sozinha esperando. Quem conta tentativas para
+   * desistir de um lead (lib/nao-entregavel.ts) só pode contar as permanentes:
+   * contar as transitórias condenaria leads bons durante uma hora de
+   * instabilidade.
+   */
+  falhaPermanente: boolean;
+}
+
+/**
+ * O mesmo envio de `sendWhatsAppMessage`, devolvendo também SE a falha é do
+ * número ou do caminho até ele. Os agendadores de mensagem fria usam esta
+ * versão; o webhook continua com a booleana — para responder uma conversa em
+ * andamento o diagnóstico não muda a decisão (fica gravado no log dos dois
+ * jeitos).
+ *
+ * O critério de "permanente" é o HTTP 400: é o status que a Evolution devolve
+ * quando o destinatário não existe no WhatsApp ou o número é malformado —
+ * problemas que são DESTE número. 401/403/404 são configuração NOSSA errada e
+ * 5xx/timeout são infra; nos dois casos o lead não tem culpa, então contam
+ * como transitórias.
+ */
+export async function enviarWhatsAppComDiagnostico(
+  phone: string,
+  message: string,
+  primeiraResposta = false,
+): Promise<EnvioWhatsApp> {
   const { base, chave } = configEvolution();
   if (!base || !chave) {
     logger.warn({ phone }, "Evolution API not configured — skipping WhatsApp send");
-    return false;
+    return { entregue: false, falhaPermanente: false };
   }
 
   const atraso = tempoDeDigitacao(message, primeiraResposta);
@@ -179,13 +215,13 @@ export async function sendWhatsAppMessage(
     if (!response.ok) {
       const body = await response.text();
       logger.error({ phone, status: response.status, body }, "Evolution API error");
-      return false;
+      return { entregue: false, falhaPermanente: response.status === 400 };
     }
     await anotarIdEnviado(response, phone);
-    return true;
+    return { entregue: true, falhaPermanente: false };
   } catch (err) {
     logger.error({ err, phone }, "Failed to send WhatsApp message");
-    return false;
+    return { entregue: false, falhaPermanente: false };
   }
 }
 
@@ -436,6 +472,36 @@ export async function sendTelegramAtencao(alert: AtencaoAlert): Promise<void> {
   linhas.push(`👉 ${linkDoWhatsApp(lead.phone)}`);
 
   await enviarAoTelegram(linhas.join("\n"), "atencao");
+}
+
+/**
+ * Alerta de NÚMERO NÃO ENTREGÁVEL (Rodada 51): a Evolution rejeitou o mesmo
+ * destinatário três vezes seguidas e a Júlia desistiu dele.
+ *
+ * Sem este aviso, a desistência seria silenciosa — e um número digitado errado
+ * na planilha é consertável: o Dr. Sarinho corrige e reimporta. O alerta diz o
+ * que aconteceu E o que fazer, porque é lido no celular, longe do painel.
+ */
+interface NaoEntregavelAlert {
+  lead: Pick<Lead, "name" | "phone" | "clinicName">;
+  tentativas: number;
+  /** O que estava sendo enviado ("abordagem", "toque de abordagem"...). */
+  contexto: string;
+}
+
+export async function sendTelegramNaoEntregavel(alert: NaoEntregavelAlert): Promise<void> {
+  const { lead, tentativas, contexto } = alert;
+  const quem = [lead.name, lead.clinicName].filter(Boolean).join(" — ") || lead.phone;
+
+  const linhas = [
+    `📵 *Número não recebe WhatsApp — desisti de enviar*`,
+    `Lead: ${quem}`,
+    `Número: \`${lead.phone}\``,
+    `A Evolution rejeitou ${tentativas} envios seguidos (${contexto}). O lead saiu da fila e os toques pendentes foram cancelados.`,
+    `_Se o número estiver errado na planilha, corrija e importe de novo; se estiver certo, é fixo ou não tem WhatsApp._`,
+  ];
+
+  await enviarAoTelegram(linhas.join("\n"), "nao-entregavel");
 }
 
 /** Avisa que a Júlia se calou porque alguém assumiu a conversa pelo celular. */

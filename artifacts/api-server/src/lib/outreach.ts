@@ -180,6 +180,7 @@ export type MotivoInelegivel =
   | "ja_cliente"
   | "ja_abordado"
   | "cadencia_esgotada"
+  | "nao_entregavel"
   | "nao_e_de_prospeccao";
 
 export const EXPLICACAO_INELEGIVEL: Record<MotivoInelegivel, string> = {
@@ -188,6 +189,8 @@ export const EXPLICACAO_INELEGIVEL: Record<MotivoInelegivel, string> = {
   ja_abordado: "Este lead já recebeu a primeira mensagem.",
   cadencia_esgotada:
     "Recebeu a abordagem e os dois toques, e não respondeu nenhum. Não se procura mais.",
+  nao_entregavel:
+    "O número rejeitou três envios seguidos: sem WhatsApp, fixo ou digitado errado. Confira o telefone.",
   nao_e_de_prospeccao: "Lead não está na fila de prospecção (outreachStatus ≠ pending).",
 };
 
@@ -213,6 +216,12 @@ export function leadElegivel(lead: LeadParaAbordar): Elegibilidade {
   // painel diria só "não está na fila".
   if (lead.outreachStatus === "nao_respondeu") {
     return { elegivel: false, motivo: "cadencia_esgotada" };
+  }
+  // Número que rejeitou três envios seguidos (lib/nao-entregavel.ts). Motivo
+  // próprio porque a ação do painel é diferente: aqui não é "deixa quieto",
+  // é "confira o telefone na planilha".
+  if (lead.outreachStatus === "nao_entregavel") {
+    return { elegivel: false, motivo: "nao_entregavel" };
   }
   if (lead.outreachStatus === "sent") return { elegivel: false, motivo: "ja_abordado" };
   if (lead.outreachStatus !== "pending") {

@@ -6,6 +6,12 @@
 export const wa = {
   /** sendWhatsAppMessage entregou? */
   entrega: true,
+  /**
+   * Quando a entrega falha (entrega=false), a falha é PERMANENTE (a Evolution
+   * rejeitou o número, HTTP 400) ou transitória (fora do ar)? Só faz efeito
+   * com entrega=false — ver enviarWhatsAppComDiagnostico.
+   */
+  falhaPermanente: false,
   /** sendWhatsAppAudio entregou? */
   entregaAudio: true,
   /** base64 devolvido por fetchWhatsAppMediaBase64 (null = não conseguiu). */
@@ -24,6 +30,8 @@ export const wa = {
   atencoes: [],
   /** Alertas da sonda de modelo (boot). */
   sondas: [],
+  /** Alertas de número não entregável (Rodada 51). */
+  naoEntregaveis: [],
   /**
    * Limpa só o que foi REGISTRADO. Os flags de comportamento (entrega, media)
    * são configurados pelo teste e não devem ser zerados entre chamadas.
@@ -34,12 +42,18 @@ export const wa = {
     this.pausas = [];
     this.atencoes = [];
     this.sondas = [];
+    this.naoEntregaveis = [];
   },
 };
 
 export async function sendWhatsAppMessage(phone, message, primeiraResposta = false) {
   wa.enviadas.push({ tipo: "text", phone, message, primeiraResposta });
   return wa.entrega;
+}
+
+export async function enviarWhatsAppComDiagnostico(phone, message, primeiraResposta = false) {
+  wa.enviadas.push({ tipo: "text", phone, message, primeiraResposta });
+  return { entregue: wa.entrega, falhaPermanente: !wa.entrega && wa.falhaPermanente };
 }
 export async function sendWhatsAppAudio(phone) {
   wa.enviadas.push({ tipo: "audio", phone });
@@ -59,6 +73,9 @@ export async function sendTelegramAtencao(alert) {
 }
 export async function sendTelegramSondaModelo(modelo, papeis, detalhe) {
   wa.sondas.push({ modelo, papeis, detalhe });
+}
+export async function sendTelegramNaoEntregavel(alert) {
+  wa.naoEntregaveis.push(alert);
 }
 export function linkDoWhatsApp(phone) {
   return `https://wa.me/${String(phone).replace(/\D/g, "")}`;
