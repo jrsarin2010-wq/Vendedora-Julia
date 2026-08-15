@@ -39,6 +39,11 @@ function limpar() {
   esquecerAlertasDeVarredura();
   retomarVarredura();
   process.env.APIFY_SWEEP_ENABLED = "true";
+  // Etapa 3B: a trava virou híbrida (env + banco). `state.reset()` acabou de
+  // esvaziar a tabela de configurações, e chave ausente significa DESLIGADA —
+  // então cada cenário precisa religar o botão do painel, senão o ciclo para
+  // antes de chegar no que está sendo testado.
+  state.configuracoes.push({ chave: "varredura_ativa", valor: "true" });
   apify.inicio = { ok: true, runId: "run-1", datasetId: "ds-1" };
   apify.estado = {
     ok: true,

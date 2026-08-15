@@ -6,7 +6,9 @@ import leadsRouter from "./leads";
 import leadsCanonicalizarRouter from "./leads-canonicalizar";
 import leadsImportRouter from "./leads-import";
 import outreachRouter from "./outreach";
+import prospectsRouter from "./prospects";
 import statsRouter from "./stats";
+import varredurasRouter from "./varreduras";
 import varredurasSeedRouter from "./varreduras-seed";
 import webhookRouter from "./webhook";
 import { requireAuth } from "../lib/auth";
@@ -35,5 +37,10 @@ router.use(requireAuth, atencaoRouter);
 router.use(requireAuth, leadsRouter);
 router.use(requireAuth, statsRouter);
 router.use(requireAuth, varredurasSeedRouter); // fila de varreduras Apify
+// Etapa 3B — a tela de prospecção: controle da varredura e leitura das
+// clínicas captadas. Todas as rotas são literais (nenhuma tem `:id`), então
+// não há ordem a preservar aqui.
+router.use(requireAuth, varredurasRouter);
+router.use(requireAuth, prospectsRouter);
 
 export default router;

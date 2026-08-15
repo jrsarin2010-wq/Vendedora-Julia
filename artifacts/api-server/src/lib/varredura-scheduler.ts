@@ -36,17 +36,18 @@ import {
   runPendurada,
   telefoneAproveitavel,
   arredondarUsd,
+  gastoDoMes,
+  disparadasNas24h,
   USD_POR_LUGAR,
   TETO_MENSAL_USD,
   MAXIMO_RODADAS_POR_DIA,
   LIMITE_DE_TENTATIVAS,
   type ItemDoMaps,
 } from "./varredura";
+import { varreduraAtivaNoPainel } from "./configuracoes";
 
 /** De quanto em quanto tempo o ciclo roda. */
 const INTERVALO_DO_CICLO_MS = 60 * 1000;
-
-const VINTE_E_QUATRO_HORAS_MS = 24 * 60 * 60 * 1000;
 
 export interface ResultadoDoCicloDeVarredura {
   acao: "nada" | "verificou" | "disparou";
@@ -99,6 +100,17 @@ export function retomarVarredura(): void {
   pausa = null;
 }
 
+/**
+ * A pausa, para o painel poder EXPLICAR por que nada está andando.
+ *
+ * Sem isto a tela mostraria o botão ligado e a fila parada, sem dizer que o
+ * motivo é uma credencial errada — que é exatamente o incidente de 15/08 visto
+ * pelo lado de quem olha o painel.
+ */
+export function estadoDaPausa(): { pausada: boolean; motivo: string | null } {
+  return { pausada: pausa !== null, motivo: pausa?.motivo ?? null };
+}
+
 async function pausarVarredura(motivo: string): Promise<void> {
   pausa = { motivo };
   logger.error(
@@ -106,18 +118,6 @@ async function pausarVarredura(motivo: string): Promise<void> {
     "Varredura PAUSADA — problema nosso (credencial/infra). A fila não foi penalizada",
   );
   await sendTelegramVarredura({ tipo: "pausada", motivo });
-}
-
-/** Mesmo ano e mesmo mês — a janela do crédito do Apify. */
-function noMesmoMes(data: Date, agora: Date): boolean {
-  const d = new Date(data);
-  return d.getUTCFullYear() === agora.getUTCFullYear() && d.getUTCMonth() === agora.getUTCMonth();
-}
-
-function gastoDoMes(todas: ApifyVarredura[], agora: Date): number {
-  return todas
-    .filter((v) => v.status === "concluida" && v.concluidaEm && noMesmoMes(v.concluidaEm, agora))
-    .reduce((soma, v) => soma + Number(v.custoRealUsd ?? 0), 0);
 }
 
 /**
@@ -322,6 +322,17 @@ export async function rodarCicloDeVarredura(
     return { acao: "nada", motivo: "pausada" };
   }
 
+  // TRAVA HÍBRIDA (Etapa 3B): a env é o interruptor geral, esta é a chave do
+  // dia a dia, mexida pelo botão do painel. Exigir as DUAS é o que permite
+  // ligar e desligar sem reiniciar o serviço, sem perder a capacidade de
+  // derrubar tudo pelo Railway se algo der muito errado.
+  //
+  // Vem DEPOIS da env de propósito: com o interruptor geral desligado não há
+  // motivo para ir ao banco de minuto em minuto.
+  if (!(await varreduraAtivaNoPainel())) {
+    return { acao: "nada", motivo: "desligada_no_painel" };
+  }
+
   // A fila inteira são 54 linhas: buscar tudo e contar aqui sai mais barato
   // que três consultas com agregação, e mantém a decisão em código testável.
   const todas = await db.select().from(apifyVarredurasTable);
@@ -331,11 +342,7 @@ export async function rodarCicloDeVarredura(
     return verificar(emVoo[0], agora);
   }
 
-  const limite24h = agora.getTime() - VINTE_E_QUATRO_HORAS_MS;
-  const disparadasNas24h = todas.filter(
-    (v) => v.disparadaEm && new Date(v.disparadaEm).getTime() >= limite24h,
-  ).length;
-  if (disparadasNas24h >= MAXIMO_RODADAS_POR_DIA) {
+  if (disparadasNas24h(todas, agora) >= MAXIMO_RODADAS_POR_DIA) {
     return { acao: "nada", motivo: "cota_diaria" };
   }
 
@@ -427,15 +434,20 @@ export function startVarreduraScheduler(): void {
   logger.info(
     { habilitado: config.habilitado, teto: TETO_MENSAL_USD, porDia: MAXIMO_RODADAS_POR_DIA },
     config.habilitado
-      ? "Varredura Apify LIGADA"
+      ? "Varredura Apify: interruptor geral LIGADO (o botão do painel decide o resto)"
       : "Varredura Apify desligada (APIFY_SWEEP_ENABLED != true) — nada será gasto",
   );
 
   const rodar = async () => {
     try {
       const r = await rodarCicloDeVarredura();
-      // "desligado" e "fila_vazia" a cada minuto seriam só ruído.
-      if (r.acao === "nada" && r.motivo && !["desligado", "fila_vazia"].includes(r.motivo)) {
+      // "desligado", "desligada_no_painel" e "fila_vazia" a cada minuto seriam
+      // só ruído: são estados de repouso, não problemas.
+      if (
+        r.acao === "nada" &&
+        r.motivo &&
+        !["desligado", "desligada_no_painel", "fila_vazia"].includes(r.motivo)
+      ) {
         logger.debug({ motivo: r.motivo }, "Varredura não disparou");
       }
     } catch (err) {

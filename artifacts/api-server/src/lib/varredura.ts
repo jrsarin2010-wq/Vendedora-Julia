@@ -295,3 +295,51 @@ export function runPendurada(disparadaEm: Date | null, agora: Date): boolean {
 export function telefoneAproveitavel(telefoneRaw: string | null): boolean {
   return telefoneRaw !== null && normalizarTelefone(telefoneRaw) !== null;
 }
+
+// ---------------------------------------------------------------------------
+// Gasto e cota — as duas contas que a TELA e o WORKER precisam dar iguais
+// ---------------------------------------------------------------------------
+//
+// Vieram para cá na Etapa 3B. Antes moravam privadas no agendador, e o painel
+// teria de recalculá-las: duas implementações da mesma regra é como a tela
+// passa a dizer "gastou US$ 3,20" enquanto o worker acha que são 4,40 e se
+// recusa a disparar. Aqui é um código só, e é o mesmo que o teste exercita.
+
+/** Mesmo ano e mesmo mês — a janela do crédito do Apify. */
+export function noMesmoMes(data: Date, agora: Date): boolean {
+  const d = new Date(data);
+  return (
+    d.getUTCFullYear() === agora.getUTCFullYear() &&
+    d.getUTCMonth() === agora.getUTCMonth()
+  );
+}
+
+/**
+ * Quanto já saiu no mês corrente. Só conta rodada CONCLUÍDA: o custo real de
+ * uma run só existe quando ela termina.
+ */
+export function gastoDoMes(
+  todas: { status: string; concluidaEm: Date | null; custoRealUsd: string | number | null }[],
+  agora: Date,
+): number {
+  return todas
+    .filter((v) => v.status === "concluida" && v.concluidaEm && noMesmoMes(v.concluidaEm, agora))
+    .reduce((soma, v) => soma + Number(v.custoRealUsd ?? 0), 0);
+}
+
+/**
+ * Quantas rodadas foram disparadas nas últimas 24 horas.
+ *
+ * É janela DESLIZANTE, e não "hoje" no calendário — é assim que a cota do
+ * worker sempre funcionou, e a tela precisa mostrar o mesmo número que trava o
+ * disparo, não um parecido.
+ */
+export function disparadasNas24h(
+  todas: { disparadaEm: Date | null }[],
+  agora: Date,
+): number {
+  const limite = agora.getTime() - 24 * 60 * 60 * 1000;
+  return todas.filter(
+    (v) => v.disparadaEm && new Date(v.disparadaEm).getTime() >= limite,
+  ).length;
+}

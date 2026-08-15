@@ -11,6 +11,7 @@ import Dashboard from "@/pages/dashboard";
 import Leads from "@/pages/leads";
 import LeadDetail from "@/pages/lead-detail";
 import Import from "@/pages/import";
+import Prospeccao from "@/pages/prospeccao";
 import Settings from "@/pages/settings";
 import Login from "@/pages/login";
 import { checkAuth } from "@/lib/auth-api";
@@ -33,6 +34,7 @@ function Router() {
         {/* Antes de "/leads/:id", senão "import" seria lido como id. */}
         <Route path="/leads/import" component={Import} />
         <Route path="/leads/:id" component={LeadDetail} />
+        <Route path="/prospeccao" component={Prospeccao} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>

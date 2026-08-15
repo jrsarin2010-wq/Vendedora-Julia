@@ -76,6 +76,26 @@ export const MOTIVO_ATENCAO_CURTO_PT: Record<string, string> = {
   sem_resposta: "Sem resposta",
 };
 
+/**
+ * PROSPECÇÃO (Etapa 3B). Os 9 estados de `clinicas_prospect.status_prospeccao`
+ * — o caminho da clínica captada no Maps até virar (ou não) lead.
+ *
+ * "Sem telefone" e "Telefone inválido" são separados porque medem coisas
+ * diferentes: um é buraco no dado do Google, o outro é a nossa normalização
+ * recusando. Juntar os dois na tela apagaria justamente essa diferença.
+ */
+export const PROSPECCAO_PT: Record<string, string> = {
+  novo: "Novo",
+  sem_telefone: "Sem telefone",
+  telefone_invalido: "Telefone inválido",
+  sem_whatsapp: "Sem WhatsApp",
+  apto: "Apto",
+  na_fila: "Na fila",
+  promovido: "Promovido",
+  ja_existente: "Já é lead",
+  descartado: "Descartado",
+};
+
 export const SITUACAO_FOLLOWUP_PT: Record<string, string> = {
   pending: "Agendado",
   sent: "Enviado",
@@ -93,6 +113,9 @@ export const rotuloPlano = (v: string | null | undefined): string =>
 
 export const rotuloFollowUp = (v: string | null | undefined): string =>
   (v && SITUACAO_FOLLOWUP_PT[v]) || v || "—";
+
+export const rotuloProspeccao = (v: string | null | undefined): string =>
+  (v && PROSPECCAO_PT[v]) || v || "—";
 
 export const rotuloAtencao = (v: string | null | undefined): string =>
   (v && MOTIVO_ATENCAO_PT[v]) || v || "—";

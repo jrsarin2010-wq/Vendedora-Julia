@@ -22,7 +22,17 @@ export interface LinhaDeLog {
 
 export async function chamarRota(
   handler: (req: unknown, res: unknown) => Promise<void>,
-  opcoes: { body?: unknown; params?: Record<string, string>; logs?: LinhaDeLog[] } = {},
+  opcoes: {
+    body?: unknown;
+    params?: Record<string, string>;
+    /**
+     * Querystring já desmontada, como o Express entrega. Os valores chegam
+     * como STRING de propósito — é assim que vêm da barra de endereço, e é
+     * exatamente por isso que a rota tem de convertê-los.
+     */
+    query?: Record<string, string>;
+    logs?: LinhaDeLog[];
+  } = {},
 ): Promise<RespostaFake> {
   // status 200 é o padrão do Express quando ninguém chama res.status().
   const resposta: RespostaFake = { status: 200, body: undefined };
@@ -44,7 +54,7 @@ export async function chamarRota(
 
   const req: any = {
     body: opcoes.body,
-    query: {},
+    query: opcoes.query ?? {},
     params: opcoes.params ?? {},
     header: () => undefined,
     log: { info: registrar("info"), warn: registrar("warn"), error: registrar("error") },

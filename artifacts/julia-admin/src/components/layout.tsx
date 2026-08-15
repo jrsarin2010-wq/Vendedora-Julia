@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Users, LayoutDashboard, Settings, Bot, Menu, Bell, Search, LogOut, Upload } from "lucide-react";
+import { Users, LayoutDashboard, Settings, Bot, Menu, Bell, Search, LogOut, Upload, Radar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -19,6 +19,7 @@ const navItems = [
   { href: "/", label: "Painel", testId: "dashboard", icon: LayoutDashboard },
   { href: "/leads", label: "Dentistas", testId: "leads", icon: Users },
   { href: "/leads/import", label: "Importar", testId: "import", icon: Upload },
+  { href: "/prospeccao", label: "Prospecção", testId: "prospeccao", icon: Radar },
   { href: "/settings", label: "Configurações", testId: "settings", icon: Settings },
 ];
 

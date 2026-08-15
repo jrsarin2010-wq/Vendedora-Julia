@@ -98,12 +98,20 @@ export const clinicasProspectTable = {
   statusProspeccao: "statusProspeccao",
 };
 
+export const configuracoesTable = {
+  __t: "configuracoes",
+  chave: "chave",
+  valor: "valor",
+  atualizadoEm: "atualizadoEm",
+};
+
 export const state = {
   leads: [],
   messages: [],
   followUps: [],
   varreduras: [],
   clinicas: [],
+  configuracoes: [],
   nextId: 1,
   reset() {
     this.leads = [];
@@ -111,6 +119,7 @@ export const state = {
     this.followUps = [];
     this.varreduras = [];
     this.clinicas = [];
+    this.configuracoes = [];
     this.nextId = 1;
   },
 };
@@ -120,6 +129,7 @@ function linhasDe(tabela) {
   if (tabela.__t === "messages") return state.messages;
   if (tabela.__t === "varreduras") return state.varreduras;
   if (tabela.__t === "clinicas") return state.clinicas;
+  if (tabela.__t === "configuracoes") return state.configuracoes;
   return state.followUps;
 }
 
@@ -137,7 +147,7 @@ function guardar(tabela, novas) {
  * ordenar de verdade exigiria interpretar o tipo da coluna.
  */
 function thenable(executar) {
-  const b = { _cond: null, _limite: null };
+  const b = { _cond: null, _limite: null, _offset: 0 };
   Object.assign(b, {
     from(t) {
       b._t = t;
@@ -149,6 +159,12 @@ function thenable(executar) {
     },
     limit(n) {
       b._limite = n;
+      return b;
+    },
+    // Paginação de verdade: a rota de prospects usa limit + offset, e sem isto
+    // o bundle do teste quebraria em "b.offset is not a function".
+    offset(n) {
+      b._offset = n ?? 0;
       return b;
     },
     orderBy() {
@@ -183,6 +199,14 @@ function thenable(executar) {
       b._conflito = alvo === null ? null : Array.isArray(alvo) ? alvo : [alvo];
       return b;
     },
+    // Upsert: a linha que já existe é ATUALIZADA com `set`, em vez de
+    // descartada. É o que a gravação de configuração usa.
+    onConflictDoUpdate(opts) {
+      const alvo = opts?.target ?? null;
+      b._conflito = alvo === null ? null : Array.isArray(alvo) ? alvo : [alvo];
+      b._atualizarNoConflito = opts?.set ?? {};
+      return b;
+    },
     then(res, rej) {
       return Promise.resolve()
         .then(() => executar(b))
@@ -192,10 +216,24 @@ function thenable(executar) {
   return b;
 }
 
-/** Aplica where e limit sobre uma lista de linhas. */
+/** Aplica where, offset e limit sobre uma lista de linhas — nesta ordem. */
 function filtrar(linhas, b) {
   const casadas = linhas.filter((l) => casa(l, b._cond));
-  return b._limite === null ? casadas : casadas.slice(0, b._limite);
+  const apos = b._offset ? casadas.slice(b._offset) : casadas;
+  return b._limite === null ? apos : apos.slice(0, b._limite);
+}
+
+/**
+ * A projeção é um `count(*)`? No stub do drizzle, `sql` devolve
+ * `{ tipo: "sql" }`, então é isso que distingue
+ * `select({ count: sql`count(*)` })` de `select({ phone: leadsTable.phone })`,
+ * que é projeção de colunas e continua devolvendo as linhas cruas.
+ */
+function projecaoDeContagem(projecao) {
+  if (!projecao) return null;
+  const chaves = Object.entries(projecao);
+  if (chaves.length === 0) return null;
+  return chaves.every(([, v]) => v?.tipo === "sql") ? chaves.map(([k]) => k) : null;
 }
 
 export const db = {
@@ -211,6 +249,14 @@ export const db = {
       // O webhook pede as mensagens em ordem decrescente e inverte depois.
       const base = b._t.__t === "messages" ? linhas.slice().reverse() : linhas.slice();
       const casadas = filtrar(base, b);
+
+      // count(*): devolve UMA linha com o total, como o Postgres. Sem isto,
+      // `total` na resposta paginada seria sempre 0 no teste — e o teste
+      // passaria enquanto a paginação real estivesse quebrada.
+      const contagem = projecaoDeContagem(projecao);
+      if (contagem) {
+        return [Object.fromEntries(contagem.map((k) => [k, casadas.length]))];
+      }
 
       if (!b._join || !projecao) return casadas;
 
@@ -240,10 +286,18 @@ export const db = {
       let novas = Array.isArray(b._v) ? b._v : [b._v];
       // ON CONFLICT DO NOTHING: linha cujo alvo já existe é descartada em
       // silêncio, e `returning` devolve só o que entrou — igual ao Postgres.
+      // Com DO UPDATE, a que já existe é atualizada antes de sair da lista.
       if (b._conflito) {
-        novas = novas.filter(
-          (r) => !existentes.some((e) => b._conflito.every((c) => e[c] === r[c])),
-        );
+        novas = novas.filter((r) => {
+          const conflitante = existentes.find((e) =>
+            b._conflito.every((c) => e[c] === r[c]),
+          );
+          if (!conflitante) return true;
+          if (b._atualizarNoConflito) {
+            Object.assign(conflitante, b._atualizarNoConflito);
+          }
+          return false;
+        });
       }
       const salvas = novas.map((r) => ({
         id: state.nextId++,
