@@ -53,9 +53,9 @@ O `push:ci` (`push-ci.mjs`) roda o mesmo comando, lê a saída e só sai 0 se
 encontrar prova de que aplicou — `Changes applied` ou `No changes detected` —
 e nenhum `Error:` no caminho.
 
-## A constraint fantasma (aberto)
+## A constraint fantasma (resolvida em 15/08/2026)
 
-O `drizzle-kit 0.31.10` repropõe a unique composta de `apify_varreduras` a
+O `drizzle-kit 0.31.10` repropunha a unique composta de `apify_varreduras` a
 cada push, mesmo ela existindo no banco. Medido com três declarações
 diferentes, contra o banco real:
 
@@ -69,5 +69,25 @@ Ou seja: o problema é a **unique composta declarada como constraint**, não o
 nome customizado. Enquanto a tabela estava vazia isso passava batido (aplicava
 em silêncio); com linhas, virou a pergunta do truncate.
 
-Trocar para `uniqueIndex` resolveria de vez, ao custo de uma conversão única
-no banco. Ainda não foi feito.
+O schema passou a declarar `uniqueIndex("uq_varredura")`, e o banco foi
+convertido numa **transação única**:
+
+```sql
+BEGIN;
+ALTER TABLE "apify_varreduras" DROP CONSTRAINT "uq_varredura";
+CREATE UNIQUE INDEX "uq_varredura" ON "apify_varreduras"
+  USING btree ("termo_busca","cidade","uf");
+COMMIT;
+```
+
+A conversão foi feita à mão, e não pelo deploy, por um motivo verificado no
+código do drizzle-kit: ele aplica os statements num laço simples
+(`for (const dStmnt of statementsToExecute) await db.query(dStmnt)`), **sem
+transação**. Pelo deploy, existiria um instante entre o `DROP` e o `CREATE`
+sem nenhuma garantia de unicidade.
+
+Depois da conversão, o push com o schema novo responde `No changes detected`.
+
+Esse mesmo trecho do drizzle-kit termina em `catch (e4) { console.error(e4) }`
+— o erro é impresso e engolido, sem afetar o código de saída. É a causa exata
+do "verde mentiroso" que o `push:ci` cobre.
