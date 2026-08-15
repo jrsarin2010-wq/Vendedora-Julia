@@ -434,7 +434,19 @@ function TabelaDeClinicas() {
   const temProxima = (pagina + 1) * POR_PAGINA < total;
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+    /*
+     * Altura PRÓPRIA, não `flex-1`.
+     *
+     *   min-h → o piso que garante que ela nunca some, aconteça o que
+     *           acontecer acima dela. É o conserto do bug.
+     *   max-h → mantém a rolagem DENTRO da tabela, que é o que faz o cabeçalho
+     *           `sticky` servir para alguma coisa. Sem teto, o card cresceria
+     *           até caber as 50 linhas e o sticky não grudaria em nada.
+     *
+     * Em janela baixa o `min-h` vence o `max-h` (é assim que o CSS resolve o
+     * conflito), a tabela fica nos 32rem e a página rola. Nunca zero.
+     */
+    <div className="flex max-h-[calc(100vh-12rem)] min-h-[32rem] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
       <div className="flex shrink-0 flex-col items-center justify-between gap-4 border-b border-border bg-muted/20 p-4 sm:flex-row">
         <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -665,8 +677,23 @@ function TabelaDeClinicas() {
 
 export default function Prospeccao() {
   return (
-    <div className="animate-in fade-in mx-auto flex h-[calc(100vh-8rem)] max-w-7xl flex-col gap-6 pb-10 duration-300">
-      <div className="shrink-0">
+    /*
+     * SEM altura fixa aqui, de propósito.
+     *
+     * A versão anterior era `flex h-[calc(100vh-8rem)] flex-col` com os dois
+     * cards em `shrink-0`. Numa tela que é SÓ tabela (a lista de dentistas)
+     * isso funciona, porque o único irmão é um cabeçalho de uma linha e sempre
+     * sobra espaço. Aqui, com dois cards em cima, a sobra chegava a zero — e
+     * como a raiz da tabela tem `overflow-hidden`, o mínimo automático do
+     * flexbox deixa de valer e ela COLAPSAVA para 0px: sem linhas, sem
+     * skeleton, sem estado vazio. Some inteira, sem erro nenhum.
+     *
+     * Agora a página cresce com o conteúdo e quem rola é o <main> do layout,
+     * que já tem overflow-auto. A tabela ganha altura própria (ver
+     * TabelaDeClinicas) em vez de disputar o que sobrou.
+     */
+    <div className="animate-in fade-in mx-auto flex max-w-7xl flex-col gap-6 pb-10 duration-300">
+      <div>
         <h1 className="font-mono text-2xl font-bold tracking-tight text-foreground">
           Prospecção
         </h1>
@@ -676,7 +703,7 @@ export default function Prospeccao() {
         </p>
       </div>
 
-      <div className="grid shrink-0 grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ControleDaVarredura />
         <ConcentracaoPorBairro />
       </div>
