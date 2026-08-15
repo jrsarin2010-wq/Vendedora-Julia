@@ -83,7 +83,19 @@ router.get("/prospects/resumo", async (req, res) => {
     res.json({
       porStatus,
       porBairro,
-      comTelefone: todas.filter((c) => c.telefoneWhatsapp !== null).length,
+      // É `telefoneRaw`, e NÃO `telefoneWhatsapp`. As duas colunas parecem
+      // intercambiáveis e não são:
+      //
+      //   telefone_raw       → como veio do Maps. É o que a varredura grava.
+      //   telefone_whatsapp  → a forma canônica que o WhatsApp devolve no jid,
+      //                        preenchida só na Etapa 3A (prepararItem grava
+      //                        `telefoneWhatsapp: null` de propósito).
+      //
+      // Contando a segunda, este número era ZERO por construção enquanto a 3A
+      // não existisse — e zero aqui não parece bug, parece varredura ruim. Foi
+      // exatamente assim que passou: a tela dizia "0 com telefone" com 13 das
+      // 15 clínicas tendo telefone.
+      comTelefone: todas.filter((c) => c.telefoneRaw !== null).length,
       comWhatsapp: algumVerificado
         ? todas.filter((c) => c.temWhatsapp === true).length
         : null,

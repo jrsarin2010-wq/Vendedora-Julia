@@ -31,13 +31,23 @@ interface Resumo {
   total: number;
 }
 
+/**
+ * O padrão imita o que a varredura REALMENTE grava (ver prepararItem em
+ * lib/varredura.ts): `telefone_raw` como veio do Maps e `telefone_whatsapp`
+ * NULO — quem preenche a forma canônica é a Etapa 3A, que ainda não existe.
+ *
+ * Antes este fixture preenchia as duas colunas, o que não acontece em
+ * produção nenhuma. Foi essa mentira que deixou passar o bug do `comTelefone`
+ * contando a coluna errada: com as duas cheias, contar qualquer uma dava o
+ * mesmo número, e o teste passava enquanto a tela mostrava zero.
+ */
 function clinica(campos: Record<string, unknown>) {
   state.clinicas.push({
     id: state.nextId++,
     placeId: `place-${state.nextId}`,
     nome: "Clínica Teste",
     telefoneRaw: "(11) 99999-8888",
-    telefoneWhatsapp: "5511999998888",
+    telefoneWhatsapp: null,
     temWhatsapp: null,
     bairro: null,
     cidade: "São Paulo",
@@ -156,7 +166,7 @@ state.reset();
 clinica({ nome: "A", statusProspeccao: "novo", bairro: "Parelheiros" });
 clinica({ nome: "B", statusProspeccao: "novo", bairro: "Parelheiros" });
 clinica({ nome: "C", statusProspeccao: "novo", bairro: "Parelheiros" });
-clinica({ nome: "D", statusProspeccao: "sem_telefone", telefoneWhatsapp: null, bairro: "Santana" });
+clinica({ nome: "D", statusProspeccao: "sem_telefone", telefoneRaw: null, bairro: "Santana" });
 clinica({ nome: "E", statusProspeccao: "apto", bairro: "Santana" });
 clinica({ nome: "F", statusProspeccao: "apto", bairro: null });
 
@@ -175,8 +185,43 @@ ok("2 bairros (o nulo não vira 'null')", resumo.porBairro.length === 2, JSON.st
 ok("Parelheiros primeiro com 3", resumo.porBairro[0].bairro === "Parelheiros" && resumo.porBairro[0].total === 3, JSON.stringify(resumo.porBairro));
 ok("Santana depois com 2", resumo.porBairro[1].bairro === "Santana" && resumo.porBairro[1].total === 2);
 
-secao("resumo — comTelefone conta o normalizado");
-ok("5 com telefone (a sem_telefone tem null)", resumo.comTelefone === 5, String(resumo.comTelefone));
+secao("resumo — comTelefone conta telefone_raw, NÃO telefone_whatsapp");
+// A regressão: no cenário acima as 6 clínicas estão como a varredura grava —
+// `telefone_whatsapp` nulo em TODAS. Contando aquela coluna, este número seria
+// 0 mesmo com 5 clínicas tendo telefone, que foi o bug visto na tela.
+ok(
+  "5 com telefone (só a sem_telefone tem raw nulo)",
+  resumo.comTelefone === 5,
+  String(resumo.comTelefone),
+);
+ok(
+  "e nenhuma delas tem telefone_whatsapp — é a coluna errada de propósito",
+  (state.clinicas as { telefoneWhatsapp: string | null }[]).every(
+    (c) => c.telefoneWhatsapp === null,
+  ),
+);
+
+secao("resumo — a 3A preenchendo telefone_whatsapp NÃO muda o comTelefone");
+// Quando a Etapa 3A chegar, `telefone_whatsapp` começa a ser preenchido. Isso
+// não pode mexer neste número: ele mede cobertura do dado do Maps, não do
+// nosso trabalho de verificação.
+state.reset();
+clinica({ nome: "Só raw", telefoneRaw: "(11) 90000-0001" });
+clinica({ nome: "Raw + canônico", telefoneRaw: "(11) 90000-0002", telefoneWhatsapp: "5511900000002" });
+clinica({ nome: "Sem telefone", telefoneRaw: null, statusProspeccao: "sem_telefone" });
+resumo = (await chamarRota(resumoHandler, {})).body as Resumo;
+ok("2 com telefone", resumo.comTelefone === 2, String(resumo.comTelefone));
+
+secao("resumo — telefone que o Maps deu mas a normalização recusou ainda conta");
+// `telefone_invalido` significa que HAVIA telefone: o buraco é da nossa
+// normalização, não do Google. Separar isso é o motivo de os dois status
+// existirem — somá-los aqui apagaria a diferença que eles medem.
+state.reset();
+clinica({ nome: "Inválido", telefoneRaw: "0800 111 2222", statusProspeccao: "telefone_invalido" });
+clinica({ nome: "Bom", telefoneRaw: "(11) 90000-0003" });
+resumo = (await chamarRota(resumoHandler, {})).body as Resumo;
+ok("2 com telefone", resumo.comTelefone === 2, String(resumo.comTelefone));
+ok("1 marcado como inválido", resumo.porStatus.telefone_invalido === 1);
 
 secao("resumo — comWhatsapp é NULO enquanto ninguém foi verificado");
 ok(
