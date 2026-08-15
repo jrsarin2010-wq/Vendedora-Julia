@@ -45,12 +45,14 @@ ok("nenhuma combinação repetida", combos.size === 54);
 const termos = new Set(varreduras().map((v) => v.termoBusca));
 ok(
   "exatamente os 2 termos decididos",
-  termos.size === 2 && termos.has("dentista") && termos.has("clínica odontológica"),
+  termos.size === 2 &&
+    termos.has("consultório odontológico") &&
+    termos.has("clínica odontológica"),
   [...termos].join(", "),
 );
 ok(
   "27 cidades por termo",
-  varreduras().filter((v) => v.termoBusca === "dentista").length === 27,
+  varreduras().filter((v) => v.termoBusca === "consultório odontológico").length === 27,
 );
 ok(
   "20 com prioridade 1 (10 maiores mercados × 2 termos)",
@@ -87,7 +89,7 @@ state.reset();
 // mexer nela.
 state.varreduras.push({
   id: state.nextId++,
-  termoBusca: "dentista",
+  termoBusca: "consultório odontológico",
   cidade: "São Paulo",
   uf: "SP",
   prioridade: 1,
@@ -99,7 +101,7 @@ ok("53 inseridas", resumo.inseridas === 53, JSON.stringify(resumo));
 ok("1 já existia", resumo.jaExistiam === 1, JSON.stringify(resumo));
 ok("54 no banco", varreduras().length === 54);
 const preExistente = varreduras().find(
-  (v) => v.termoBusca === "dentista" && v.cidade === "São Paulo",
+  (v) => v.termoBusca === "consultório odontológico" && v.cidade === "São Paulo",
 ) as Varredura & { status?: string };
 ok("a concluída NÃO foi tocada", preExistente?.status === "concluida");
 

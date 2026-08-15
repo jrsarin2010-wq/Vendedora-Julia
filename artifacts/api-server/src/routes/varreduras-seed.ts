@@ -12,13 +12,18 @@
  * ON CONFLICT DO NOTHING fazem a segunda chamada ser inofensiva. O resumo
  * devolve quantas entraram e quantas já existiam, para quem chamou saber a
  * diferença entre "populou" e "já estava populado".
+ *
+ * CUIDADO ao mexer em TERMOS: a idempotência é por (termo, cidade, uf), então
+ * trocar um termo NÃO corrige a fila — cria 27 linhas novas e deixa as antigas
+ * onde estão. Se o termo mudar depois de um seed já rodado, as linhas velhas
+ * têm de ser apagadas à mão.
  */
 import { Router, type IRouter } from "express";
 import { db, apifyVarredurasTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
-const TERMOS = ["clínica odontológica", "dentista"] as const;
+const TERMOS = ["clínica odontológica", "consultório odontológico"] as const;
 
 /**
  * As 27 capitais. Prioridade 1 = os 10 maiores mercados, que o worker dispara
