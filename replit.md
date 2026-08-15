@@ -10,6 +10,8 @@ An AI WhatsApp sales agent that sells CaptaClin SaaS to dentists, plus an admin 
 - `pnpm run typecheck:libs` — build lib declarations (run before leaf typechecks when libs change)
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `pnpm --filter @workspace/db run push:ci` — the same push with an honest exit code (use this in deploys; plain `push` can fail and still exit 0)
+- ⛔ **never** use `push-force` in a deploy: `--force` answers "yes" to the truncate prompt and would wipe a table that has rows — see `lib/db/README.md`
 - Required env: `DATABASE_URL` — Postgres connection string (Replit-managed)
 
 ## Stack
