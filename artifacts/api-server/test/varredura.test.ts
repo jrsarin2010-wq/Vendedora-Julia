@@ -9,6 +9,7 @@ import { ok, secao, fim } from "./assert";
 import {
   rodarCicloDeVarredura,
   esquecerAlertasDeVarredura,
+  retomarVarredura,
 } from "../src/lib/varredura-scheduler";
 import {
   calcularOrcamento,
@@ -36,6 +37,7 @@ function limpar() {
   wa.reset();
   apify.reset();
   esquecerAlertasDeVarredura();
+  retomarVarredura();
   process.env.APIFY_SWEEP_ENABLED = "true";
   apify.inicio = { ok: true, runId: "run-1", datasetId: "ds-1" };
   apify.estado = {
@@ -320,15 +322,78 @@ ok("dataset gravado", doBanco(2).apifyDatasetId === "ds-77");
 ok("disparada_em = agora", doBanco(2).disparadaEm === AGORA);
 ok("a outra segue intacta", doBanco(1).status === "pendente");
 
-secao("falha ao INICIAR a run conta tentativa e não deixa fantasma em voo");
+secao("400 no disparo — o pedido é que estava errado, então CONTA tentativa");
 limpar();
 varredura({ id: 1, status: "pendente" });
-apify.inicio = { ok: false, erro: "HTTP 402: payment required" };
+// 400 é o único status que fala do pedido em si (termo, cidade, limites
+// desta linha). O resto é configuração ou infra nossa — ver a seção seguinte.
+apify.inicio = { ok: false, erro: "HTTP 400: input inválido", culpaNossa: false };
 r = await rodarCicloDeVarredura(AGORA);
 ok("não disparou", r.acao === "nada" && r.motivo === "falha_ao_disparar", JSON.stringify(r));
 ok("continua pendente (não ficou 'executando')", doBanco(1).status === "pendente");
 ok("tentativa contada", doBanco(1).tentativas === 1);
-ok("erro gravado", String(doBanco(1).erroMensagem).includes("402"), doBanco(1).erroMensagem);
+ok("erro gravado", String(doBanco(1).erroMensagem).includes("400"), doBanco(1).erroMensagem);
+ok("e a varredura NÃO foi pausada", (await rodarCicloDeVarredura(AGORA)).motivo !== "pausada");
+
+secao("401 no disparo — culpa NOSSA: pausa, alerta, e a fila sai ilesa");
+// A regressão do incidente de 15/08: token inválido marcava a fila inteira
+// como 'falhou', uma linha a cada três minutos.
+limpar();
+varredura({ id: 1, status: "pendente" });
+varredura({ id: 2, status: "pendente", prioridade: 2 });
+apify.inicio = {
+  ok: false,
+  erro: 'HTTP 401: {"error":{"type":"user-or-token-not-found"}}',
+  culpaNossa: true,
+};
+r = await rodarCicloDeVarredura(AGORA);
+ok("ciclo devolve 'pausada'", r.acao === "nada" && r.motivo === "pausada", JSON.stringify(r));
+ok("NÃO contou tentativa", doBanco(1).tentativas === 0, JSON.stringify(doBanco(1)));
+ok("a linha continua pendente", doBanco(1).status === "pendente");
+ok("não virou 'falhou'", doBanco(1).status !== "falhou");
+ok("alertou uma vez", wa.varreduras.length === 1, JSON.stringify(wa.varreduras));
+ok("o alerta é o de pausa", wa.varreduras[0].tipo === "pausada", JSON.stringify(wa.varreduras[0]));
+ok("com o motivo real dentro", String(wa.varreduras[0].motivo).includes("401"));
+// O ponto todo: os ciclos seguintes não insistem contra a credencial errada.
+r = await rodarCicloDeVarredura(new Date(AGORA.getTime() + minutos(1)));
+ok("o ciclo seguinte não tenta de novo", r.motivo === "pausada", JSON.stringify(r));
+r = await rodarCicloDeVarredura(new Date(AGORA.getTime() + minutos(2)));
+ok("nem o terceiro", r.motivo === "pausada");
+ok("UM disparo tentado no total, não três", apify.disparos.length === 1, String(apify.disparos.length));
+ok("nenhum alerta repetido", wa.varreduras.length === 1);
+ok("a segunda linha da fila nem foi tocada", doBanco(2).tentativas === 0 && doBanco(2).status === "pendente");
+// E consertar a causa (reiniciar o serviço) retoma de onde parou.
+retomarVarredura();
+apify.inicio = { ok: true, runId: "run-ok", datasetId: "ds-ok" };
+r = await rodarCicloDeVarredura(new Date(AGORA.getTime() + minutos(3)));
+ok("depois do reinício, dispara normalmente", r.acao === "disparou", JSON.stringify(r));
+ok("e a linha que sobrou intacta é a que sai primeiro", r.varreduraId === 1);
+
+secao("erro de REDE no disparo também pausa, sem queimar tentativa");
+limpar();
+varredura({ id: 1, status: "pendente" });
+apify.inicio = { ok: false, erro: "fetch failed", culpaNossa: true };
+r = await rodarCicloDeVarredura(AGORA);
+ok("pausou", r.motivo === "pausada", JSON.stringify(r));
+ok("sem tentativa contada", doBanco(1).tentativas === 0);
+ok("alerta de pausa", wa.varreduras.length === 1 && wa.varreduras[0].tipo === "pausada");
+
+secao("consulta que falha por culpa nossa pausa em vez de condenar a run");
+limpar();
+varredura({
+  id: 1,
+  status: "executando",
+  apifyRunId: "run-z",
+  // Já passou dos 30 min: sem o conserto, esta run seria dada como pendurada
+  // e a linha levaria a tentativa por um problema que é da nossa credencial.
+  disparadaEm: new Date(AGORA.getTime() - minutos(45)),
+});
+apify.estado = { ok: false, custoUsd: null, campoDoCusto: null, erro: "HTTP 401", culpaNossa: true };
+r = await rodarCicloDeVarredura(AGORA);
+ok("pausou", r.motivo === "pausada", JSON.stringify(r));
+ok("NÃO contou tentativa mesmo passando dos 30 min", doBanco(1).tentativas === 0, JSON.stringify(doBanco(1)));
+ok("a run continua 'executando' para ser retomada", doBanco(1).status === "executando");
+ok("alerta de pausa", wa.varreduras.length === 1 && wa.varreduras[0].tipo === "pausada");
 
 secao("run com sucesso — ingere, grava custo real e SÓ ENTÃO conclui");
 limpar();

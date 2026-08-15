@@ -609,6 +609,7 @@ export async function sendTelegramNaoEntregavel(alert: NaoEntregavelAlert): Prom
  */
 export type VarreduraAlert =
   | { tipo: "orcamento"; comprometido: number; teto: number }
+  | { tipo: "pausada"; motivo: string }
   | {
       tipo: "falhou";
       termo: string;
@@ -628,6 +629,12 @@ export async function sendTelegramVarredura(alerta: VarreduraAlert): Promise<voi
       `💸 *Varredura pausada — teto de crédito do mês*`,
       `Comprometido: ${dinheiro(alerta.comprometido)} de ${dinheiro(alerta.teto)}.`,
       `_A fila NÃO se perdeu: as rodadas que faltam voltam sozinhas quando o crédito do mês virar. Parar aqui é o comportamento desejado._`,
+    ];
+  } else if (alerta.tipo === "pausada") {
+    linhas = [
+      `⏸️ *Varredura PAUSADA — problema de configuração nosso*`,
+      `Motivo: ${alerta.motivo}`,
+      `_A fila NÃO foi penalizada: nenhuma rodada foi marcada como falhou e nenhuma tentativa foi contada. Conserte a causa (token, rede) e reinicie o serviço para retomar._`,
     ];
   } else if (alerta.tipo === "falhou") {
     linhas = [

@@ -74,6 +74,40 @@ export function esquecerAlertasDeVarredura(): void {
   ultimoAlerta.clear();
 }
 
+/**
+ * PAUSA DA VARREDURA — quando o problema é NOSSO, a fila não paga a conta.
+ *
+ * Nasceu do incidente de 15/08/2026: um `APIFY_TOKEN` inválido devolvia 401 em
+ * todo disparo, e cada 401 era contado como tentativa DA VARREDURA. Em três
+ * minutos a primeira combinação foi marcada `falhou`; em ~2h45 a fila inteira
+ * teria sido condenada por um erro de configuração que não tinha nada a ver
+ * com São Paulo nem com Recife. E a cota de 10/dia não segurava nada, porque
+ * disparo que falha não grava `disparada_em`.
+ *
+ * A regra agora é a mesma que o repo já aplica à Evolution: falha que é da
+ * infra ou da nossa configuração não condena o item da fila. Ela para tudo,
+ * avisa uma vez, e espera conserto.
+ *
+ * A pausa vive em memória de propósito: consertar a causa (trocar a variável
+ * no Railway) reinicia o serviço, e o reinício é exatamente o gesto que deve
+ * retomar a varredura. Não há estado morto para alguém esquecer de limpar.
+ */
+let pausa: { motivo: string } | null = null;
+
+/** Só para o teste: em produção quem retoma é o reinício do processo. */
+export function retomarVarredura(): void {
+  pausa = null;
+}
+
+async function pausarVarredura(motivo: string): Promise<void> {
+  pausa = { motivo };
+  logger.error(
+    { motivo },
+    "Varredura PAUSADA — problema nosso (credencial/infra). A fila não foi penalizada",
+  );
+  await sendTelegramVarredura({ tipo: "pausada", motivo });
+}
+
 /** Mesmo ano e mesmo mês — a janela do crédito do Apify. */
 function noMesmoMes(data: Date, agora: Date): boolean {
   const d = new Date(data);
@@ -237,6 +271,15 @@ async function verificar(
   const estado = await consultarRun(varredura.apifyRunId);
 
   if (!estado.ok) {
+    // Credencial/infra nossa também aqui: sem conseguir perguntar, o certo é
+    // pausar. Sem isto, um token errado levaria a run a "pendurada" 30 minutos
+    // depois e condenaria a linha por um problema que nunca foi dela.
+    if (estado.culpaNossa) {
+      await pausarVarredura(
+        `não consegui consultar a run ${varredura.apifyRunId}: ${estado.erro ?? "sem detalhe"}`,
+      );
+      return { acao: "nada", motivo: "pausada", varreduraId: varredura.id };
+    }
     // A consulta falhou: a run pode estar ótima, só não sabemos. Espera —
     // a não ser que já tenha passado do tempo em que ela poderia terminar.
     if (runPendurada(varredura.disparadaEm, agora)) {
@@ -271,6 +314,12 @@ export async function rodarCicloDeVarredura(
   // Trava mestra antes de qualquer consulta: desligado é desligado.
   if (!config.habilitado) {
     return { acao: "nada", motivo: "desligado" };
+  }
+
+  // Pausado por problema nosso: não adianta insistir a cada minuto contra uma
+  // credencial errada — e insistir é justamente o que destruía a fila.
+  if (pausa) {
+    return { acao: "nada", motivo: "pausada" };
   }
 
   // A fila inteira são 54 linhas: buscar tudo e contar aqui sai mais barato
@@ -330,6 +379,12 @@ export async function rodarCicloDeVarredura(
 
   const inicio = await iniciarRun(inputDoAtor(proxima));
   if (!inicio.ok) {
+    // Credencial errada, ator inexistente, Apify fora do ar: a linha da fila
+    // não tem nada com isso. Pausa tudo, avisa, e NÃO conta tentativa.
+    if (inicio.culpaNossa) {
+      await pausarVarredura(inicio.erro ?? "falha ao iniciar a run");
+      return { acao: "nada", motivo: "pausada", varreduraId: proxima.id };
+    }
     const { desistiu } = await registrarFalha(
       proxima,
       inicio.erro ?? "falha ao iniciar a run",

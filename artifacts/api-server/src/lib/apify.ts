@@ -44,13 +44,40 @@ export interface InicioDeRun {
   datasetId?: string;
   /** Descrição curta do que impediu, para gravar em `erro_mensagem`. */
   erro?: string;
+  /**
+   * A falha é NOSSA (credencial errada, ator inexistente, Apify fora do ar),
+   * e não desta combinação de busca.
+   *
+   * Existe por causa do incidente de 15/08/2026: um `APIFY_TOKEN` inválido
+   * fazia cada disparo voltar 401, e o 401 era contado como tentativa DA
+   * VARREDURA — na terceira, a linha era marcada `falhou`. Como disparo que
+   * falha não grava `disparada_em`, a cota de 10/dia também não segurava o
+   * laço: em ~2h45 a fila inteira teria sido condenada por um erro de
+   * configuração que não tinha nada a ver com São Paulo nem com Recife.
+   */
+  culpaNossa?: boolean;
+}
+
+/**
+ * O status HTTP fala do NOSSO pedido ou desta combinação de busca?
+ *
+ * Só o 400 fala do pedido em si (termo, cidade, limites da linha). Todo o
+ * resto — credencial (401/403), ator errado (404), cota da conta (429),
+ * servidor do Apify (5xx) — é configuração ou infraestrutura nossa. Condenar
+ * uma linha da fila por qualquer um deles é repetir o bug que isto fecha.
+ *
+ * Mesma distinção que o repo já faz com a Evolution em
+ * `enviarWhatsAppComDiagnostico`: lá o 400 é do número, o resto é da infra.
+ */
+export function culpaNossaNoStatus(status: number): boolean {
+  return status !== 400;
 }
 
 /** Dispara uma run do ator. Nunca lança. */
 export async function iniciarRun(input: unknown): Promise<InicioDeRun> {
   if (!tokenDoApify()) {
     logger.warn("APIFY_TOKEN não configurado — varredura não disparada");
-    return { ok: false, erro: "APIFY_TOKEN ausente" };
+    return { ok: false, erro: "APIFY_TOKEN ausente", culpaNossa: true };
   }
 
   try {
@@ -64,7 +91,11 @@ export async function iniciarRun(input: unknown): Promise<InicioDeRun> {
     if (!resposta.ok) {
       const corpo = await resposta.text();
       logger.error({ status: resposta.status, corpo }, "Apify recusou o início da run");
-      return { ok: false, erro: `HTTP ${resposta.status}: ${corpo.slice(0, 300)}` };
+      return {
+        ok: false,
+        erro: `HTTP ${resposta.status}: ${corpo.slice(0, 300)}`,
+        culpaNossa: culpaNossaNoStatus(resposta.status),
+      };
     }
 
     const dados = (await resposta.json()) as {
@@ -73,12 +104,18 @@ export async function iniciarRun(input: unknown): Promise<InicioDeRun> {
     const runId = dados?.data?.id;
     if (!runId) {
       logger.error("Apify aceitou a run mas não devolveu id");
-      return { ok: false, erro: "resposta sem id de run" };
+      return { ok: false, erro: "resposta sem id de run", culpaNossa: true };
     }
     return { ok: true, runId, datasetId: dados.data?.defaultDatasetId };
   } catch (err) {
+    // Rede, DNS, timeout: o Apify nem chegou a responder. Isso é infra, e
+    // infra não é culpa da combinação de busca.
     logger.error({ err }, "Falha ao iniciar run no Apify");
-    return { ok: false, erro: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      erro: err instanceof Error ? err.message : String(err),
+      culpaNossa: true,
+    };
   }
 }
 
@@ -97,6 +134,8 @@ export interface EstadoDaRun {
   campoDoCusto: string | null;
   datasetId?: string;
   erro?: string;
+  /** Ver `InicioDeRun.culpaNossa`: credencial/infra nossa, não desta linha. */
+  culpaNossa?: boolean;
 }
 
 /**
@@ -143,7 +182,13 @@ function situacaoDe(status: string): SituacaoDaRun {
 /** Pergunta ao Apify como está uma run. Nunca lança. */
 export async function consultarRun(runId: string): Promise<EstadoDaRun> {
   if (!tokenDoApify()) {
-    return { ok: false, custoUsd: null, campoDoCusto: null, erro: "APIFY_TOKEN ausente" };
+    return {
+      ok: false,
+      custoUsd: null,
+      campoDoCusto: null,
+      erro: "APIFY_TOKEN ausente",
+      culpaNossa: true,
+    };
   }
 
   try {
@@ -164,6 +209,7 @@ export async function consultarRun(runId: string): Promise<EstadoDaRun> {
         custoUsd: null,
         campoDoCusto: null,
         erro: `HTTP ${resposta.status}`,
+        culpaNossa: culpaNossaNoStatus(resposta.status),
       };
     }
 
@@ -177,6 +223,7 @@ export async function consultarRun(runId: string): Promise<EstadoDaRun> {
         custoUsd: null,
         campoDoCusto: null,
         erro: "resposta sem status",
+        culpaNossa: true,
       };
     }
 
@@ -196,6 +243,7 @@ export async function consultarRun(runId: string): Promise<EstadoDaRun> {
       custoUsd: null,
       campoDoCusto: null,
       erro: err instanceof Error ? err.message : String(err),
+      culpaNossa: true,
     };
   }
 }
