@@ -16,6 +16,8 @@ export interface Lead {
   phone: string;
   /** @nullable */
   origin?: string | null;
+  /** @nullable */
+  clinicName?: string | null;
   funnelStage: LeadFunnelStage;
   /** @nullable */
   painPoints?: string | null;

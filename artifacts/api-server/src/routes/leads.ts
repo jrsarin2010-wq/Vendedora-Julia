@@ -13,7 +13,20 @@ import {
 
 const router: IRouter = Router();
 
-// GET /api/leads
+/**
+ * GET /api/leads
+ *
+ * PENDÊNCIA CONHECIDA: `limit`/`offset` funcionam aqui, mas o painel NUNCA os
+ * usa — a lista de dentistas não tem paginação na tela (o rodapé é placeholder
+ * desde sempre). Na prática isto responde só os 50 primeiros, e passando disso
+ * o excedente fica inalcançável pela interface. Adiado de propósito na rodada
+ * da 3C; a tela de Prospecção já pagina de verdade e serve de molde.
+ *
+ * A ORDENAÇÃO importa para quem for mexer nisso: `last_message_at DESC` no
+ * Postgres é NULLS FIRST, então dentista que nunca conversou — todo lead recém
+ * promovido pela 3C — fica no TOPO, não no fim. É de propósito: o que acabou de
+ * entrar na fila é o que precisa ser conferido.
+ */
 router.get("/leads", async (req, res) => {
   try {
     const query = ListLeadsQueryParams.parse(req.query);

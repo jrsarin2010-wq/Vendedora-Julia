@@ -310,7 +310,18 @@ export default function Leads() {
                         <div className="flex items-center gap-3">
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium text-foreground">{lead.name || "Dentista sem nome"}</span>
+                              {/*
+                                A CLÍNICA ENTRA NA IDENTIDADE (Etapa 3C).
+                                Antes era só `lead.name`, e o dentista promovido
+                                do Maps nasce com `name` NULO de propósito — não
+                                sabemos o nome dele, a Júlia pergunta na
+                                abertura. O resultado eram várias linhas
+                                idênticas "Dentista sem nome", indistinguíveis
+                                entre si: os 3 primeiros promovidos ficaram no
+                                topo da lista e mesmo assim passaram
+                                despercebidos.
+                              */}
+                              <span className="font-medium text-foreground">{lead.name || lead.clinicName || "Dentista sem nome"}</span>
                               {/* Marcado pela central: o selo diz o motivo. Quando
                                   não há marcação, o triângulo do handoff continua
                                   valendo — ele é o registro histórico de que o
@@ -332,6 +343,22 @@ export default function Leads() {
                                 )
                               )}
                             </div>
+                            {/*
+                              A clínica como linha secundária — só quando ela
+                              JÁ não é o que está na linha de cima. A partir da
+                              3C saber de qual clínica é o dentista passa a
+                              importar: é o que liga a conversa à ficha que a
+                              varredura captou, e o que dá contexto quando ele
+                              responde alguma coisa estranha.
+                            */}
+                            {lead.name && lead.clinicName && (
+                              <span
+                                className="text-xs text-muted-foreground"
+                                data-testid={`lead-clinica-${lead.id}`}
+                              >
+                                {lead.clinicName}
+                              </span>
+                            )}
                             <span className="text-xs text-muted-foreground font-mono">{lead.phone}</span>
                           </div>
                         </div>
@@ -411,13 +438,29 @@ export default function Leads() {
           </Table>
         </div>
 
-        {/* Simple Pagination Footer Placeholder */}
+        {/*
+          PENDÊNCIA CONHECIDA — a paginação desta lista nunca foi implementada.
+          Este rodapé é placeholder desde sempre: o servidor devolve no máximo
+          `limit` (padrão 50, ver routes/leads.ts) e aqui não há como pedir a
+          página 2. Passando de 50 dentistas, o excedente fica INALCANÇÁVEL pela
+          tela — dá para chegar nele só por busca.
+          A conta "Mostrando X de Y" abaixo é o único aviso que existe hoje:
+          quando X < Y, tem gente fora da tela. Adiado de propósito na rodada da
+          3C (a correção ali foi a exibição da clínica); a tela de Prospecção já
+          tem a paginação de verdade e serve de molde.
+        */}
         <div className="p-3 border-t border-border bg-muted/20 flex items-center justify-between shrink-0 text-xs text-muted-foreground">
           <div>
             {soAtencao
               ? `Mostrando ${leadsVisiveis.length} que precisam de você`
               : `Mostrando ${leadsVisiveis.length} de ${data?.total || 0} dentistas`}
           </div>
+          {/* O aviso explícito: sem ele, "Mostrando 50 de 137" parece normal. */}
+          {!soAtencao && (data?.total ?? 0) > leadsVisiveis.length && (
+            <div className="text-amber-600 dark:text-amber-500" data-testid="aviso-sem-paginacao">
+              Esta tela ainda não pagina — use a busca para chegar no resto.
+            </div>
+          )}
         </div>
       </div>
     </div>

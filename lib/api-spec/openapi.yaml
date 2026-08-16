@@ -279,6 +279,13 @@ components:
           type: string
         origin:
           type: ["string", "null"]
+        # A clínica do dentista. Entrou no contrato na Etapa 3C: a promoção de
+        # clínica captada cria o lead com `name` NULO de propósito (não sabemos
+        # o nome do dentista — a Júlia pergunta na abertura), e sem este campo
+        # os leads vindos do Maps chegam ao painel como três linhas idênticas
+        # "Dentista sem nome", impossíveis de reconhecer.
+        clinicName:
+          type: ["string", "null"]
         funnelStage:
           type: string
           enum: [new, contacted, qualified, interested, objection, closing, closed, lost]
