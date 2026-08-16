@@ -606,11 +606,43 @@ ok(
 ok("mais de uma pergunta está proibido", JULIA_OUTREACH_PROMPT.includes("Mais de UMA pergunta"));
 
 secao("Rodada 34 — o que entra, e a licença");
+// A SEGUNDA METADE DA REPETIÇÃO DO LEAD 33. Tirar a âncora do exemplo não
+// bastava: o item 3 entregava DUAS frases prontas de pedido de licença, e as 6
+// prévias alternaram exatamente entre elas — o modelo não estava variando,
+// estava escolhendo num cardápio de dois. Frase pronta no prompt vira frase
+// repetida na saída, e a instrução agora descreve o que é pedir licença sem
+// dar nenhum texto.
 ok(
-  "manda pedir licença de verdade, com as frases prontas",
-  JULIA_OUTREACH_PROMPT.includes("Um pedido de licença de verdade") &&
-    JULIA_OUTREACH_PROMPT.includes("posso te roubar um minuto?"),
+  "manda pedir licença de verdade, e explica o que é",
+  JULIA_OUTREACH_PROMPT.includes("Um pedido de licença DE VERDADE") &&
+    JULIA_OUTREACH_PROMPT.includes("esperando a permissão"),
 );
+ok(
+  "NÃO entrega frase pronta de licença — nem as duas que causaram a repetição",
+  !JULIA_OUTREACH_PROMPT.includes('"posso te roubar um minuto?"') &&
+    !JULIA_OUTREACH_PROMPT.includes('"posso te fazer uma pergunta rápida?"'),
+);
+ok(
+  "e diz explicitamente que não existe frase certa para isso",
+  JULIA_OUTREACH_PROMPT.includes("NÃO existe frase certa para isso") &&
+    JULIA_OUTREACH_PROMPT.includes("diferente a cada dentista"),
+);
+{
+  // Os quatro exemplos não podem pedir licença do mesmo jeito: três exemplos
+  // repetindo a mesma fórmula reintroduzem o cardápio pela porta dos fundos,
+  // mesmo sem nenhuma frase pronta na instrução.
+  const pedidos = JULIA_OUTREACH_PROMPT.split("\n")
+    .filter((l) => l.startsWith('- "Oi'))
+    .map((l) => {
+      const m = l.match(/(Posso[^?]*\?|Tem um minuto[^?]*\?|Uma pergunta[^:]*:)/);
+      return m ? m[1]!.toLowerCase() : l;
+    });
+  ok(
+    "os quatro exemplos pedem licença de quatro jeitos diferentes",
+    new Set(pedidos).size === 4,
+    pedidos.join(" | "),
+  );
+}
 ok(
   "manda dizer de onde viu a clínica, usando a ficha",
   JULIA_OUTREACH_PROMPT.includes("DE ONDE você viu a clínica — está na ficha do lead"),
