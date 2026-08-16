@@ -20,6 +20,7 @@ import { rodarCicloDeAbordagem } from "../src/lib/outreach-scheduler";
 import { state } from "./stubs/db.mjs";
 import { wa } from "./stubs/integrations.mjs";
 import { ctrl } from "./stubs/openai.mjs";
+import { abordagemNoPainel } from "./painel";
 
 /** Configuração base: tudo liberado, para cada teste travar UMA coisa. */
 const baseConfig: ConfigOutreach = {
@@ -194,6 +195,10 @@ ok("sem envios, último é null", contarEnvios([], TERCA_14H).ultimo === null);
 function filaCom(leads: Record<string, unknown>[]) {
   state.reset();
   wa.reset();
+  // Etapa 4: a trava virou híbrida. O `state.reset()` acabou de apagar a chave
+  // do painel, e chave ausente é DESLIGADA — sem esta linha, todo cenário
+  // abaixo pararia pelo motivo errado e os testes de ritmo não provariam nada.
+  abordagemNoPainel(true);
   for (const l of leads) {
     state.leads.push({
       id: state.nextId++,

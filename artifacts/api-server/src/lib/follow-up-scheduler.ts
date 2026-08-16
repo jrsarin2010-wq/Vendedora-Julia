@@ -16,6 +16,7 @@ import {
   EXPLICACAO_BLOQUEIO,
 } from "./outreach";
 import { datasDeEnviosFrios } from "./ritmo-frio";
+import { outreachAtivoNoPainel } from "./configuracoes";
 import { registrarFalhaPermanente, limparFalhasDeEnvio } from "./nao-entregavel";
 import {
   ABORDAGEM_TOQUES,
@@ -55,6 +56,14 @@ interface RitmoFrio {
  * falhar, os toques já agendados precisam parar junto; senão a trava de
  * emergência protege metade do problema e ele descobre isso do pior jeito.
  *
+ * O mesmo vale para o BOTÃO do painel (Etapa 4), e é por isso que ele chega
+ * aqui como parâmetro: desligar a abordagem e continuar mandando o toque 2 de
+ * quem nunca respondeu seria desligar pela metade. A reativação entra junto —
+ * toque frio depois de 30 dias de silêncio é abordagem, não continuidade.
+ *
+ * O que NÃO passa por esta função, de propósito: o follow-up de CONVERSA.
+ * Quem respondeu está falando com a gente, e o botão nunca governa isso.
+ *
  * Sem isto, um toque agendado para 3 dias depois de uma quinta-feira cairia num
  * domingo: "passei por aqui de novo" no domingo é exatamente o que faz um
  * dentista denunciar o número.
@@ -69,6 +78,7 @@ interface RitmoFrio {
 function toqueFrioPodeSair(
   agora: Date,
   ritmo: RitmoFrio,
+  ativoNoPainel: boolean,
 ): { pode: boolean; motivo?: string } {
   const config = lerConfig();
   const decisao = podeDispararAgora({
@@ -79,7 +89,10 @@ function toqueFrioPodeSair(
     ultimoEnvio: ritmo.ultimo,
     intervaloExigidoSegundos: config.intervaloMinimoSegundos,
   });
-  return { pode: decisao.pode, motivo: decisao.motivo };
+  if (!decisao.pode) return { pode: false, motivo: decisao.motivo };
+  // Depois da env, como nos outros dois agendadores.
+  if (!ativoNoPainel) return { pode: false, motivo: "desligado_no_painel" };
+  return { pode: true };
 }
 
 /**
@@ -134,6 +147,18 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       ritmoFrio.naUltimaHora++;
       ritmoFrio.hoje++;
       ritmoFrio.ultimo = now;
+    };
+
+    // O botão do painel (Etapa 4), lido no MÁXIMO uma vez por ciclo e só
+    // quando um toque frio de fato vence — mesmo desenho preguiçoso do ritmo
+    // acima. Uma consulta por toque vencido seria até 20 idas ao banco a cada
+    // 5 minutos para responder a mesma pergunta; e guardar entre ciclos criaria
+    // a janela em que a tela diz "pausada" e o toque ainda sai, que é
+    // exatamente o que o botão existe para impedir.
+    let ativoNoPainel: boolean | null = null;
+    const ativoNoPainelAtual = async (): Promise<boolean> => {
+      if (ativoNoPainel === null) ativoNoPainel = await outreachAtivoNoPainel();
+      return ativoNoPainel;
     };
 
     // Find pending follow-ups that are due
@@ -246,11 +271,15 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       if (ehReativacao) {
         if (reativacoesNesteCiclo >= REATIVACOES_POR_CICLO) continue;
 
-        // Mesma janela, dias úteis, trava mestra E cota da prospecção. Fora
-        // dela o toque ADIA (segue pendente) — inclusive com OUTREACH_ENABLED
-        // desligado: é a mesma trava de emergência, e emergência para a fila
-        // sem destruí-la.
-        const janela = toqueFrioPodeSair(now, await ritmoFrioAtual());
+        // Mesma janela, dias úteis, trava mestra, BOTÃO DO PAINEL e cota da
+        // prospecção. Fora dela o toque ADIA (segue pendente) — inclusive com
+        // OUTREACH_ENABLED desligado ou a abordagem pausada no painel: é a
+        // mesma trava de emergência, e emergência para a fila sem destruí-la.
+        const janela = toqueFrioPodeSair(
+          now,
+          await ritmoFrioAtual(),
+          await ativoNoPainelAtual(),
+        );
         if (!janela.pode) {
           logger.debug(
             { leadId: lead.id, touchNumber: followUp.touchNumber, motivo: janela.motivo },
@@ -317,15 +346,19 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       }
 
       // Toque de ABORDAGEM: mensagem fria, para quem nunca respondeu. Só sai na
-      // janela da prospecção e com a trava mestra ligada; fora disso continua
-      // "pending" e sai na primeira rodada dentro da janela — mesmo tratamento
-      // da pausa humana logo acima, e pelo mesmo motivo (perder o toque é pior
-      // que atrasá-lo).
+      // janela da prospecção, com a trava mestra ligada E com a abordagem ativa
+      // no painel; fora disso continua "pending" e sai na primeira rodada
+      // liberada — mesmo tratamento da pausa humana logo acima, e pelo mesmo
+      // motivo (perder o toque é pior que atrasá-lo).
       const ehAbordagem = followUp.kind === "abordagem";
       if (ehAbordagem) {
         if (toquesFriosNesteCiclo >= TOQUES_FRIOS_POR_CICLO) continue;
 
-        const janela = toqueFrioPodeSair(now, await ritmoFrioAtual());
+        const janela = toqueFrioPodeSair(
+          now,
+          await ritmoFrioAtual(),
+          await ativoNoPainelAtual(),
+        );
         if (!janela.pode) {
           logger.debug(
             { leadId: lead.id, touchNumber: followUp.touchNumber, motivo: janela.motivo },

@@ -14,7 +14,7 @@
 import { Router, type IRouter } from "express";
 import { db, clinicasProspectTable } from "@workspace/db";
 import { eq, and, ilike, sql, desc } from "drizzle-orm";
-import { lerConfig } from "../lib/outreach";
+import { abordagemLigada } from "../lib/configuracoes";
 
 const router: IRouter = Router();
 
@@ -124,17 +124,20 @@ router.get("/prospects/resumo", async (req, res) => {
       telefoneInvalido: porStatus.telefone_invalido,
       total: todas.length,
       /**
-       * A TRAVA MESTRA da prospecção ativa (OUTREACH_ENABLED), na tela onde se
-       * clica em "Promover".
+       * A TRAVA DA PROSPECÇÃO ATIVA, na tela onde se clica em "Promover".
        *
        * Promover com ela desligada cria o dentista e mais nada. Promover com
        * ela ligada põe aquele dentista na fila de abordagem — a Júlia escreve
        * para ele. São duas ações com consequências completamente diferentes
-       * atrás do MESMO botão, e o painel não pode deixar isso implícito: sem
-       * este campo, a única forma de saber qual das duas está acontecendo seria
-       * abrir o Railway.
+       * atrás do MESMO botão, e o painel não pode deixar isso implícito.
+       *
+       * ESTADO COMBINADO desde a Etapa 4: são duas camadas (a env do Railway e
+       * o botão do Painel), e o aviso tem que refletir as DUAS. Ler só uma
+       * delas faria a tela dizer "a Júlia está ligada" com a abordagem pausada
+       * no botão — mentindo exatamente na frase que existe para dizer se o
+       * clique dispara mensagem.
        */
-      juliaLigada: lerConfig().habilitado,
+      juliaLigada: await abordagemLigada(),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to summarize prospects");

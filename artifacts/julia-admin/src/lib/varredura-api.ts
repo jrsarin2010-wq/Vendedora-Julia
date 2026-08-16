@@ -129,6 +129,56 @@ export async function definirVerificacaoAtiva(
 }
 
 // ---------------------------------------------------------------------------
+// Abordagem (Etapa 4) — o interruptor que fica no Painel
+// ---------------------------------------------------------------------------
+
+export interface StatusDaAbordagem {
+  /** O botão do painel (chave `outreach_ativo` no banco). */
+  ativo: boolean;
+  /**
+   * A variável `OUTREACH_ENABLED` do Railway. Falsa aqui significa que o botão
+   * não adianta: o agendador nem chega a olhar o banco.
+   */
+  interruptorGeral: boolean;
+  /** Dia útil E dentro do horário comercial, no fuso de São Paulo. */
+  dentroDaJanela: boolean;
+  janela: { inicio: number; fim: number };
+  /** Esperando a primeira mensagem — já descontado quem virou opt-out. */
+  naFila: number;
+  /** Janela DESLIZANTE de 24h, não "desde a meia-noite". */
+  abordadosNas24h: number;
+  /** Recebeu a abordagem e nunca respondeu nada. */
+  aguardandoResposta: number;
+  /**
+   * Minutos até a próxima mensagem poder sair. `0` quer dizer "no próximo
+   * ciclo" (um minuto), não "agora". Nulo quando não há previsão honesta a
+   * dar: desligada, fila vazia, fora da janela ou cota estourada.
+   */
+  proximoEnvioEm: number | null;
+}
+
+export async function obterStatusDaAbordagem(): Promise<StatusDaAbordagem> {
+  const res = await fetch("/api/outreach/status", { credentials: "include" });
+  return lerJson<StatusDaAbordagem>(res, "carregar o estado da abordagem");
+}
+
+/** O botão. Devolve o status já atualizado, como os outros dois. */
+export async function definirAbordagemAtiva(
+  ativo: boolean,
+): Promise<StatusDaAbordagem> {
+  const res = await fetch("/api/outreach/ativo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ ativo }),
+  });
+  return lerJson<StatusDaAbordagem>(
+    res,
+    ativo ? "ligar a abordagem" : "pausar a abordagem",
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Clínicas captadas
 // ---------------------------------------------------------------------------
 
@@ -233,7 +283,8 @@ export interface ResumoDeProspects {
   telefoneInvalido: number;
   total: number;
   /**
-   * A trava mestra da prospecção ativa (`OUTREACH_ENABLED` no Railway).
+   * A trava da prospecção ativa, JÁ COMBINADA (Etapa 4): a `OUTREACH_ENABLED`
+   * do Railway E o botão da abordagem no Painel. Verdadeira só com as duas.
    *
    * Está aqui porque é ao lado do botão "Promover" que ela decide o significado
    * do clique: desligada, promover só cria o dentista; ligada, põe ele na fila

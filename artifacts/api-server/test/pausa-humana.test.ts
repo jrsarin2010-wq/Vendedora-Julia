@@ -19,6 +19,7 @@ import {
 } from "../src/lib/enviadas-por-nos";
 import { rodarCicloDeFollowUp } from "../src/lib/follow-up-scheduler";
 import { rodarCicloDeAbordagem } from "../src/lib/outreach-scheduler";
+import { abordagemNoPainel } from "./painel";
 
 const NUMERO = "5585999998888";
 const pausaDoLead = () => state.leads[0]?.pausedUntil ?? null;
@@ -211,6 +212,10 @@ secao("abordagem fria não cai por cima de quem o humano já chamou");
   state.reset();
   wa.reset();
   process.env.OUTREACH_ENABLED = "true";
+  // As DUAS travas ligadas de propósito: sem isto o ciclo pararia na trava do
+  // painel e o teste passaria sem nunca exercitar a pausa humana, que é o que
+  // ele existe para provar.
+  abordagemNoPainel(true);
   state.leads.push({
     id: 1,
     phone: "5511777776666",

@@ -25,6 +25,7 @@ import {
   EXPLICACAO_BLOQUEIO,
   EXPLICACAO_INELEGIVEL,
 } from "./outreach";
+import { outreachAtivoNoPainel } from "./configuracoes";
 import { gerarMensagemDeAbordagem } from "./outreach-message";
 import { ABORDAGEM_TOQUES, ABORDAGEM_DELAYS_HOURS } from "../julia-persona";
 
@@ -50,6 +51,20 @@ export async function rodarCicloDeAbordagem(
   // é desligado, e nem chega a olhar quem está na fila.
   if (!config.habilitado) {
     return { enviou: false, motivo: "desligado" };
+  }
+
+  // TRAVA HÍBRIDA (Etapa 4), no mesmo desenho da varredura e da verificação: a
+  // env é o interruptor geral, esta chave é o botão do painel. Exigir as DUAS é
+  // o que permite parar a abordagem no susto, com um clique, sem esperar o
+  // serviço reiniciar.
+  //
+  // Vem DEPOIS da env pelo mesmo motivo das outras: com o interruptor geral
+  // desligado não há por que ir ao banco de minuto em minuto.
+  //
+  // Só a ABORDAGEM para. Quem já está conversando continua sendo respondido
+  // pelo webhook, que não consulta nada disto.
+  if (!(await outreachAtivoNoPainel())) {
+    return { enviou: false, motivo: "desligado_no_painel" };
   }
 
   // Envios FRIOS recentes — aberturas E toques (Rodada 51, lib/ritmo-frio.ts).
@@ -226,7 +241,10 @@ export function startOutreachScheduler(): void {
       soDiasUteis: config.soDiasUteis,
     },
     config.habilitado
-      ? "Prospecção ativa LIGADA"
+      ? // Não diz "LIGADA": desde a Etapa 4 a env é só metade da trava, e o
+        // botão do painel (banco) é a outra. Um boot anunciando "LIGADA" com o
+        // botão desligado seria a primeira linha do log a mentir.
+        "Prospecção ativa: interruptor geral LIGADO — quem decide se sai mensagem é o botão do painel"
       : "Prospecção ativa desligada (OUTREACH_ENABLED=false) — nada será enviado",
   );
 
@@ -234,7 +252,11 @@ export function startOutreachScheduler(): void {
     try {
       const r = await rodarCicloDeAbordagem();
       // Só registra o que é útil: "desligado" a cada minuto seria só ruído.
-      if (!r.enviou && r.motivo && !["desligado", "fila_vazia", "intervalo_minimo"].includes(r.motivo)) {
+      if (
+        !r.enviou &&
+        r.motivo &&
+        !["desligado", "desligado_no_painel", "fila_vazia", "intervalo_minimo"].includes(r.motivo)
+      ) {
         const explicacao =
           EXPLICACAO_BLOQUEIO[r.motivo as keyof typeof EXPLICACAO_BLOQUEIO] ?? r.motivo;
         logger.debug({ motivo: r.motivo }, `Abordagem não saiu: ${explicacao}`);

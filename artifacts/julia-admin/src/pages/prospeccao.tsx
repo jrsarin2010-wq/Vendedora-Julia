@@ -649,6 +649,10 @@ function TabelaDeClinicas() {
   // Mesma consulta da concentração por bairro — o react-query dedupe pela
   // chave, então não é uma segunda ida ao servidor. É de lá que vem o estado da
   // Júlia, que muda o SIGNIFICADO do botão logo abaixo.
+  //
+  // Desde a Etapa 4 esse estado é COMBINADO (a env do Railway e o botão da
+  // abordagem, no Painel). O servidor já entrega combinado; esta tela não
+  // recompõe nada, para não existir uma segunda opinião sobre a mesma coisa.
   const { data: resumo } = useQuery({
     queryKey: CHAVE_RESUMO,
     queryFn: obterResumoDeProspects,
@@ -832,7 +836,8 @@ function TabelaDeClinicas() {
               ) : (
                 <>
                   <strong className="text-foreground">A Júlia está desligada.</strong>{" "}
-                  Promover cria o dentista, mas nenhuma mensagem sai.
+                  Promover cria o dentista, mas nenhuma mensagem sai. Para ligar, use
+                  o interruptor no topo do Painel.
                 </>
               )}
             </p>

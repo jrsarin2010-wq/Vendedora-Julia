@@ -92,6 +92,7 @@ export function momentoEmSaoPaulo(instante: Date): MomentoSP {
 
 export type MotivoBloqueio =
   | "desligado"
+  | "desligado_no_painel"
   | "fim_de_semana"
   | "fora_da_janela"
   | "limite_hora"
@@ -100,6 +101,14 @@ export type MotivoBloqueio =
 
 export const EXPLICACAO_BLOQUEIO: Record<MotivoBloqueio, string> = {
   desligado: "OUTREACH_ENABLED está desligado — nada dispara.",
+  /**
+   * A segunda camada da trava (Etapa 4). `podeDispararAgora` NUNCA devolve
+   * este motivo — ele mora no banco, e este arquivo não fala com banco. Quem o
+   * produz é o agendador, depois de consultar a chave; a explicação está aqui
+   * para o log e a tela lerem todos os bloqueios do mesmo lugar.
+   */
+  desligado_no_painel:
+    "A abordagem está pausada no painel — ninguém novo é abordado. Conversas em andamento seguem normais.",
   fim_de_semana: "Fim de semana: a Júlia não aborda ninguém.",
   fora_da_janela: "Fora do horário comercial configurado.",
   limite_hora: "Limite de mensagens desta hora já foi atingido.",
@@ -123,27 +132,49 @@ export interface Decisao {
 }
 
 /**
+ * A janela está fechada agora, e por quê? `null` quando está aberta.
+ *
+ * Existe separada de `podeDispararAgora` porque o painel precisa da resposta
+ * SEM as outras travas no meio (Etapa 4): "ligada, mas fora do horário" é uma
+ * frase diferente de "ligada e no limite da hora", e as duas viram `pode:
+ * false` lá. Extraída em vez de reescrita na rota de propósito — duas contas
+ * de horário que pudessem divergir é exatamente o tipo de mentira que o painel
+ * não pode contar.
+ */
+export function janelaFechada(
+  config: ConfigOutreach,
+  agora: Date,
+): "fim_de_semana" | "fora_da_janela" | null {
+  const momento = momentoEmSaoPaulo(agora);
+
+  if (config.soDiasUteis && !momento.diaUtil) return "fim_de_semana";
+  // Janela fechada em baixo, aberta em cima: com 9 e 18, a última mensagem
+  // pode sair 18:59. Passou das 18:59, para.
+  if (momento.hora < config.horaInicio || momento.hora >= config.horaFim) {
+    return "fora_da_janela";
+  }
+  return null;
+}
+
+/**
  * Decide se uma mensagem de abordagem pode sair NESTE instante.
  *
  * A ordem das checagens importa para o diagnóstico: a primeira coisa
  * reportada deve ser a mais "de fora" possível, para o motivo mostrado no
  * painel ser o que o Dr. Sarinho precisa resolver primeiro.
+ *
+ * A trava do painel (`outreach_ativo`) NÃO entra aqui: ela mora no banco, e
+ * este arquivo é decisão pura. Quem a checa é o agendador, logo depois desta
+ * função — ver `desligado_no_painel` em EXPLICACAO_BLOQUEIO.
  */
 export function podeDispararAgora(estado: EstadoDeRitmo): Decisao {
   const { config } = estado;
 
   if (!config.habilitado) return { pode: false, motivo: "desligado" };
 
-  const momento = momentoEmSaoPaulo(estado.agora);
+  const fechada = janelaFechada(config, estado.agora);
+  if (fechada) return { pode: false, motivo: fechada };
 
-  if (config.soDiasUteis && !momento.diaUtil) {
-    return { pode: false, motivo: "fim_de_semana" };
-  }
-  // Janela fechada em baixo, aberta em cima: com 9 e 18, a última mensagem
-  // pode sair 18:59. Passou das 18:59, para.
-  if (momento.hora < config.horaInicio || momento.hora >= config.horaFim) {
-    return { pode: false, motivo: "fora_da_janela" };
-  }
   if (estado.enviadosNaUltimaHora >= config.porHora) {
     return { pode: false, motivo: "limite_hora" };
   }

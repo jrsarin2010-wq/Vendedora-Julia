@@ -24,6 +24,7 @@ import roteadorPrincipal from "../src/routes/index";
 import { requireAuth } from "../src/lib/auth";
 import { state } from "./stubs/db.mjs";
 import { wa } from "./stubs/integrations.mjs";
+import { abordagemNoPainel } from "./painel";
 
 const promover = handlerDe(promoverRouter);
 const resumoHandler = handlerDe(prospectsRouter, 0);
@@ -351,9 +352,10 @@ ok("1 promovido", corpo(r).promovidos.length === 1);
 ok("1 lead", state.leads.length === 1);
 
 // ---------------------------------------------------------------------------
-secao("/api/prospects/resumo expõe o estado da Júlia");
+secao("/api/prospects/resumo expõe o estado da Júlia — as DUAS camadas (Etapa 4)");
 limpar();
 clinica();
+abordagemNoPainel(true);
 delete process.env.OUTREACH_ENABLED;
 let resumo = (await chamarRota(resumoHandler, {})).body as { juliaLigada: boolean };
 ok("desligada quando a variável não existe", resumo.juliaLigada === false, JSON.stringify(resumo));
@@ -365,7 +367,17 @@ resumo = (await chamarRota(resumoHandler, {})).body as { juliaLigada: boolean };
 ok('"1" NÃO liga — a trava mestra erra para o lado seguro', resumo.juliaLigada === false);
 process.env.OUTREACH_ENABLED = "true";
 resumo = (await chamarRota(resumoHandler, {})).body as { juliaLigada: boolean };
-ok('ligada só com "true"', resumo.juliaLigada === true);
+ok('ligada com a env "true" E o botão ligado', resumo.juliaLigada === true);
+
+// O aviso ao lado do "Promover" é o que diz se o clique dispara mensagem. Ler
+// só a env faria ele prometer abordagem com a abordagem pausada no painel.
+abordagemNoPainel(false);
+resumo = (await chamarRota(resumoHandler, {})).body as { juliaLigada: boolean };
+ok("env ligada + botão do painel DESLIGADO → desligada", resumo.juliaLigada === false, JSON.stringify(resumo));
+
+state.configuracoes.length = 0;
+resumo = (await chamarRota(resumoHandler, {})).body as { juliaLigada: boolean };
+ok("env ligada + chave AUSENTE → desligada (ausente é desligada)", resumo.juliaLigada === false);
 delete process.env.OUTREACH_ENABLED;
 
 secao("promover NÃO liga nem desliga a Júlia");

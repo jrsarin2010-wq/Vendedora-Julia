@@ -1,9 +1,15 @@
 import { useGetDashboardStats, getGetDashboardStatsQueryKey, useGetFunnelStats, getGetFunnelStatsQueryKey, useGetRecentActivity, getGetRecentActivityQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, UserCheck, UserX, Target, AlertTriangle, Clock, ArrowRight, MessageCircle, Check, HelpCircle } from "lucide-react";
+import { Users, UserCheck, UserX, Target, AlertTriangle, Clock, ArrowRight, MessageCircle, Check, HelpCircle, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import {
+  obterStatusDaAbordagem,
+  definirAbordagemAtiva,
+  type StatusDaAbordagem,
+} from "@/lib/varredura-api";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { rotuloEtapa } from "@/lib/rotulos";
@@ -36,6 +42,13 @@ export default function Dashboard() {
           <p className="text-sm text-muted-foreground mt-1">Como está o trabalho da Júlia agora.</p>
         </div>
       </div>
+
+      {/* O interruptor vem ANTES da vigia, e é o único bloco que fura a ordem
+          "agir hoje primeiro". Não é hierarquia de importância: é que este é o
+          controle que se procura com PRESSA, quando a primeira conversa saiu
+          errada. Um item que se busca no susto não pode estar abaixo de uma
+          lista que pode ter dez linhas. */}
+      <ControleDaAbordagem />
 
       <PrecisamDeVoce />
 
@@ -196,6 +209,170 @@ export default function Dashboard() {
       <EmReativacao />
 
       <LandingNaoResponde />
+    </div>
+  );
+}
+
+/** Chave da consulta do interruptor, para invalidar de qualquer tela. */
+export const CHAVE_ABORDAGEM = ["abordagem-status"] as const;
+
+/**
+ * O INTERRUPTOR DA ABORDAGEM (Etapa 4).
+ *
+ * A frase mais importante desta tela é "Conversas em andamento continuam sendo
+ * respondidas", e ela aparece justamente quando está desligado. Sem ela, o Dr.
+ * Sarinho desliga no susto achando que abandonou os dentistas no meio da
+ * conversa — e o medo de abandonar alguém é exatamente o que faz um botão de
+ * emergência não ser usado na hora em que precisa.
+ */
+function ControleDaAbordagem() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: CHAVE_ABORDAGEM,
+    queryFn: obterStatusDaAbordagem,
+    // O agendador roda a cada minuto; 30s aqui mostra os contadores andando
+    // sem virar polling agressivo. Mesmo passo dos controles da prospecção.
+    refetchInterval: 30_000,
+  });
+
+  const alternar = useMutation({
+    mutationFn: definirAbordagemAtiva,
+    onSuccess: (novo: StatusDaAbordagem) => {
+      // O POST devolve o status inteiro: escrevemos direto no cache em vez de
+      // reconsultar, para o botão não piscar no estado antigo.
+      queryClient.setQueryData(CHAVE_ABORDAGEM, novo);
+      // O aviso ao lado do botão "Promover", na Prospecção, lê o mesmo estado.
+      void queryClient.invalidateQueries({ queryKey: ["prospects-resumo"] });
+      toast({
+        title: novo.ativo ? "Abordagem ativa" : "Abordagem pausada",
+        description: novo.ativo
+          ? "A Júlia volta a puxar conversa com quem está na fila, respeitando o ritmo."
+          : "Nenhuma abordagem nova. Conversas em andamento continuam sendo respondidas.",
+      });
+    },
+    onError: (e: unknown) => {
+      toast({
+        title: "Não deu para mudar",
+        description: e instanceof Error ? e.message : "Tente de novo.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (isLoading) return <Skeleton className="h-40 w-full rounded-md" />;
+
+  if (isError || !data) {
+    return (
+      <Card className="border-destructive/40">
+        <CardContent className="p-4 text-sm text-destructive">
+          Não consegui carregar o estado da abordagem. Atualize a página.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  /*
+   * O texto de estado. São três histórias diferentes, e trocar uma pela outra
+   * faz o painel mentir:
+   *   - pausada    → o que NÃO acontece, e o que continua acontecendo;
+   *   - fora da janela → está ligada, e mesmo assim nada sai hoje;
+   *   - abordando  → quando sai a próxima.
+   */
+  let estado: string;
+  if (!data.ativo) {
+    estado =
+      "Nenhuma abordagem nova. Conversas em andamento continuam sendo respondidas.";
+  } else if (!data.dentroDaJanela) {
+    estado = `Ligada, mas fora do horário (${data.janela.inicio}h–${data.janela.fim}h, dias úteis). Nada sai até amanhã.`;
+  } else if (data.naFila === 0) {
+    estado = "Ligada. Ninguém na fila para abordar agora.";
+  } else if (data.proximoEnvioEm === null) {
+    estado = "Ligada. A cota desta hora já foi usada — a próxima sai mais tarde.";
+  } else if (data.proximoEnvioEm === 0) {
+    estado = "Abordando. A próxima mensagem sai no próximo minuto.";
+  } else {
+    estado = `Abordando. Próxima mensagem em ${data.proximoEnvioEm} min.`;
+  }
+
+  return (
+    <Card className="shadow-sm border-border" data-testid="card-controle-abordagem">
+      <CardContent className="p-5 space-y-4">
+        {/* A faixa que explica por que o botão não obedece, em vez de deixar
+            o usuário clicando num controle morto. */}
+        {!data.interruptorGeral && (
+          <div
+            className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+            data-testid="aviso-outreach-interruptor-geral"
+          >
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-medium text-foreground">
+                O interruptor geral está desligado.
+              </p>
+              <p className="text-muted-foreground">
+                A variável <code className="font-mono">OUTREACH_ENABLED</code> precisa
+                estar como <code className="font-mono">true</code> no Railway. Enquanto
+                não estiver, este botão não faz nada.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-1">
+            <p className="text-base font-semibold font-mono flex items-center gap-2">
+              <Send size={16} className={data.ativo ? "text-primary" : "text-muted-foreground"} />
+              {data.ativo ? "Abordagem ativa" : "Abordagem pausada"}
+            </p>
+            <p className="text-sm text-muted-foreground" data-testid="texto-estado-abordagem">
+              {estado}
+            </p>
+          </div>
+          <Switch
+            checked={data.ativo}
+            disabled={!data.interruptorGeral || alternar.isPending}
+            onCheckedChange={(v) => alternar.mutate(v)}
+            aria-label="Abordagem ativa"
+            className="scale-125"
+            data-testid="switch-abordagem-ativa"
+          />
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 border-t border-border/50 pt-4">
+          <ContadorDaAbordagem rotulo="Na fila" valor={data.naFila} testId="abordagem-na-fila" />
+          <ContadorDaAbordagem
+            rotulo="Abordados em 24h"
+            valor={data.abordadosNas24h}
+            testId="abordagem-24h"
+          />
+          <ContadorDaAbordagem
+            rotulo="Aguardando resposta"
+            valor={data.aguardandoResposta}
+            testId="abordagem-aguardando"
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ContadorDaAbordagem({
+  rotulo,
+  valor,
+  testId,
+}: {
+  rotulo: string;
+  valor: number;
+  testId: string;
+}) {
+  return (
+    <div data-testid={testId}>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {rotulo}
+      </p>
+      <p className="text-2xl font-bold font-mono tracking-tight">{valor}</p>
     </div>
   );
 }

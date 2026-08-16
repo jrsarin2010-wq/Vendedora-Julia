@@ -10,6 +10,7 @@ import { ok, secao, fim } from "./assert";
 import { state } from "./stubs/db.mjs";
 import { wa } from "./stubs/integrations.mjs";
 import { linhas } from "./stubs/logger.mjs";
+import { abordagemNoPainel } from "./painel";
 import { rodarCicloDeFollowUp } from "../src/lib/follow-up-scheduler";
 import { TOQUES_REATIVACAO, REATIVACAO_DELAYS_DIAS } from "../src/julia-persona";
 import {
@@ -125,6 +126,9 @@ function fimDeCadencia(leadExtras: Record<string, unknown> = {}): void {
   state.reset();
   wa.reset();
   linhas.length = 0;
+  // Etapa 4: a reativação é toque FRIO e passa pelo botão do painel, como a
+  // abordagem. O reset apagou a chave, e ausente é desligada.
+  abordagemNoPainel(true);
   state.leads.push({
     id: 1,
     phone: NUMERO,
@@ -220,6 +224,7 @@ function toqueVencido(
   state.reset();
   wa.reset();
   linhas.length = 0;
+  abordagemNoPainel(true);
   state.leads.push({
     id: 1,
     phone: NUMERO,

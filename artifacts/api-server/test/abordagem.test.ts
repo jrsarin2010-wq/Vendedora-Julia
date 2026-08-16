@@ -24,6 +24,7 @@ import {
   FOLLOW_UP_TEMPLATES,
 } from "../src/julia-persona";
 import { leadElegivel, EXPLICACAO_INELEGIVEL } from "../src/lib/outreach";
+import { abordagemNoPainel } from "./painel";
 
 /** Uma terça-feira, 14h em São Paulo. Dentro da janela, como no outreach.test. */
 const TERCA_14H = new Date("2026-08-11T17:00:00.000Z");
@@ -40,6 +41,9 @@ function filaCom(extra: Record<string, unknown> = {}) {
   state.reset();
   wa.reset();
   ctrl.reset();
+  // Etapa 4: sem a chave do painel a abordagem nem começa, e a cadência que
+  // este arquivo testa nunca seria armada.
+  abordagemNoPainel(true);
   ctrl.reply = "Oi, Dra. Marina! Aqui é a Júlia, do CaptaClin. Posso te fazer uma pergunta?";
   state.leads.push({
     id: state.nextId++,
@@ -261,6 +265,7 @@ secao("um toque frio por rodada (vinte textos idênticos no mesmo segundo é ass
 {
   state.reset();
   wa.reset();
+  abordagemNoPainel(true);
   // Cinco leads já abordados, todos com o toque 1 vencido.
   for (let i = 0; i < 5; i++) {
     const id = state.nextId++;
@@ -312,6 +317,7 @@ secao("toque frio CONSOME a cota do dia (Rodada 51 — antes saía por fora)");
   // um só e o toque espera amanhã.
   state.reset();
   wa.reset();
+  abordagemNoPainel(true);
   const id = state.nextId++;
   state.leads.push({
     id,
@@ -350,6 +356,7 @@ secao("toque frio espera o intervalo mínimo desde a ÚLTIMA mensagem fria — d
 {
   state.reset();
   wa.reset();
+  abordagemNoPainel(true);
   const id = state.nextId++;
   state.leads.push({
     id,
@@ -394,6 +401,7 @@ secao("número que rejeita 3 envios: a cadência inteira morre e o Telegram avis
   // dele morrem (o toque 2 incluso, que nem venceu) e o alerta sai.
   state.reset();
   wa.reset();
+  abordagemNoPainel(true);
   const id = state.nextId++;
   state.leads.push({
     id,
@@ -455,6 +463,7 @@ secao("follow-up de conversa NÃO é freado pela janela (ele já respondeu)");
 {
   state.reset();
   wa.reset();
+  abordagemNoPainel(true);
   const id = state.nextId++;
   state.leads.push({
     id,
