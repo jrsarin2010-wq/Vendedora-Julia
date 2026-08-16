@@ -603,6 +603,26 @@ ok(
   "prova social está proibida porque não existe — e inventar já era proibido",
   JULIA_OUTREACH_PROMPT.includes("não existe prova social ainda, e inventar está proibido"),
 );
+// A REPUTAÇÃO ERA OFERECIDA E PROIBIDA AO MESMO TEMPO. A ficha entregava
+// "4.9 de 5, com 169 avaliações" com permissão de elogiar, e esta mesma lista
+// dizia "Qualquer número [...] DE JEITO NENHUM" — 5 prévias do lead 33 não
+// citaram nada, obedecendo (corretamente) à regra categórica em vez da
+// condicional. A proibição continua de pé; o que entrou foi uma exceção
+// nomeada e estreita.
+ok(
+  "a proibição de número agora é do número NOSSO",
+  JULIA_OUTREACH_PROMPT.includes("Qualquer número NOSSO"),
+);
+ok(
+  "com exceção nomeada para o número que é DELE e está na ficha",
+  JULIA_OUTREACH_PROMPT.includes("ÚNICA EXCEÇÃO") &&
+    JULIA_OUTREACH_PROMPT.includes("um número que é DELE e está na ficha") &&
+    JULIA_OUTREACH_PROMPT.includes("reputação da clínica no Google"),
+);
+ok(
+  "e a exceção se fecha atrás de si — nenhum outro número escapa",
+  JULIA_OUTREACH_PROMPT.includes("Nenhum outro número escapa desta regra"),
+);
 ok("mais de uma pergunta está proibido", JULIA_OUTREACH_PROMPT.includes("Mais de UMA pergunta"));
 
 secao("Rodada 34 — o que entra, e a licença");
@@ -673,6 +693,41 @@ ok(
   JULIA_OUTREACH_PROMPT.includes("ELOGIO: só se for verdade") &&
     JULIA_OUTREACH_PROMPT.includes("bajulação vazia"),
 );
+ok(
+  "e as bases legítimas do elogio são DUAS, as duas vindas da ficha",
+  JULIA_OUTREACH_PROMPT.includes("Existem DUAS\nbases legítimas") &&
+    JULIA_OUTREACH_PROMPT.includes("o Instagram da clínica, quando a ficha trouxer") &&
+    JULIA_OUTREACH_PROMPT.includes("a reputação dela no Google, quando a ficha trouxer"),
+);
+ok(
+  "a regra do elogio autoriza DIZER o número, fechando a contradição com a ficha",
+  JULIA_OUTREACH_PROMPT.includes("pode elogiar por ele, e pode dizer o número"),
+);
+ok(
+  "e continua fechada: fora dessas duas bases, não elogia",
+  JULIA_OUTREACH_PROMPT.includes("Fora dessas duas, não elogie"),
+);
+{
+  // O contrato entre a ficha e o prompt: a ficha diz "Reputação no Google", e
+  // a regra do elogio precisa apontar para ESSE rótulo. Se um dos dois for
+  // renomeado sozinho, a permissão deixa de encontrar o dado — que é
+  // exatamente o buraco que as 5 prévias mudas expuseram.
+  const fichaComReputacao = buildOutreachBriefing({
+    name: null,
+    clinicName: "Odonto Vida",
+    city: "Fortaleza",
+    instagram: null,
+    origin: "maps",
+    nota: "4.9",
+    totalAvaliacoes: 169,
+  });
+  ok(
+    "o rótulo citado no prompt é o mesmo que a ficha escreve",
+    fichaComReputacao.includes("- Reputação no Google:") &&
+      JULIA_OUTREACH_PROMPT.includes('"Reputação no\n  Google"'),
+    fichaComReputacao,
+  );
+}
 ok(
   "e ela sai na primeira negativa, sem insistir",
   JULIA_OUTREACH_PROMPT.includes("AGRADEÇA E SAIA") &&
