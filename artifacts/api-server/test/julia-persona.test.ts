@@ -119,6 +119,99 @@ secao('"que produto é esse?" — a pergunta do lead que nunca ouviu falar do Ca
   }
 }
 
+secao("recusa comercial no MODO B — a resposta mais provável de quem não pediu contato");
+{
+  // As 14 objeções mapeadas pressupõem alguém INTERESSADO: todas ensinam a
+  // reenquadrar e continuar. Um "não tenho interesse" lido como objeção comum
+  // faz a Júlia responder com trial ou comparação de custo — exatamente o
+  // comportamento que gera denúncia em quem nunca pediu esse contato. A regra
+  // do AGRADEÇA E SAIA existia só no prompt de ABORDAGEM, e faltava aqui, que
+  // é onde a conversa de verdade acontece.
+  const inicio = JULIA_SYSTEM_PROMPT.indexOf("## OBJEÇÕES");
+  const primeiraObjecao = JULIA_SYSTEM_PROMPT.indexOf('"Eu atendo convênio"');
+  const portao = JULIA_SYSTEM_PROMPT.slice(inicio, primeiraObjecao);
+
+  ok(
+    "o portão vem ANTES da primeira objeção da lista",
+    inicio > -1 && primeiraObjecao > inicio,
+  );
+  ok(
+    "separa objeção de recusa pelo critério certo",
+    portao.includes('OBJEÇÃO é "não vejo valor nisso"') &&
+      portao.includes('RECUSA é "não quero falar"') &&
+      portao.includes("Objeção se RESPONDE") &&
+      portao.includes("Recusa se RESPEITA"),
+    portao,
+  );
+  ok(
+    "nomeia as recusas típicas de quem não pediu contato",
+    ["não tenho interesse", "não quero", "não uso essas\ncoisas", "obrigado mas não"].every(
+      (r) => portao.includes(r),
+    ),
+    portao,
+  );
+  ok(
+    "a regra VENCE as 14 objeções, e diz isso",
+    portao.includes("esta regra vence TUDO abaixo") &&
+      portao.includes("Nenhuma objeção\nabaixo se aplica"),
+  );
+  ok(
+    "proíbe as quatro saídas que a lista abaixo ensinaria",
+    portao.includes("NÃO reenquadre") &&
+      portao.includes("NÃO ofereça o trial") &&
+      portao.includes("NÃO compare custo") &&
+      portao.includes("NÃO\nfaça mais uma pergunta"),
+    portao,
+  );
+  ok(
+    "e nem o link de consolação",
+    portao.includes('NÃO deixe o link "caso mude de ideia"'),
+  );
+  ok(
+    "é inegociável no MODO B, com o motivo (denúncia derruba o número inteiro)",
+    portao.includes("No MODO B é inegociável") &&
+      portao.includes("denúncia derruba o número inteiro"),
+  );
+  // A trava contrária: sair cedo demais de conversa viva também é erro.
+  ok(
+    "adiamento e 'tá caro' continuam sendo objeção, não recusa",
+    portao.includes("NÃO CONFUNDA COM ADIAMENTO") &&
+      ["vou pensar", "agora não", "me chama semana que\nvem", "tá caro"].every((a) =>
+        portao.includes(a),
+      ),
+    portao,
+  );
+  ok(
+    "o portão descreve comportamento, sem fala pronta para copiar",
+    portao.split("\n").filter((l) => l.trim().startsWith('"')).length === 0,
+    portao,
+  );
+}
+
+secao("FASE 2 no MODO B — descoberta não pode virar interrogatório");
+{
+  const inicio = JULIA_SYSTEM_PROMPT.indexOf("FASE 2 — DESCOBERTA");
+  const fim = JULIA_SYSTEM_PROMPT.indexOf("FASE 3 — FAZER SENTIR");
+  const fase2 = JULIA_SYSTEM_PROMPT.slice(inicio, fim);
+
+  ok("a ressalva do MODO B vem no começo da FASE 2", fase2.includes("NO MODO B, COMECE MAIS LEVE"));
+  ok(
+    "explica por quê: as perguntas pressupõem interesse que ele não demonstrou",
+    fase2.includes("pressupõem um interesse que ele ainda não demonstrou"),
+  );
+  ok(
+    "segura as perguntas de dinheiro e volume até ELE puxar o assunto",
+    fase2.includes("não entre em número de paciente, dinheiro perdido nem") &&
+      fase2.includes("enquanto ELE não puxar o assunto"),
+    fase2,
+  );
+  ok(
+    "e nomeia o que conta como ele puxar o assunto",
+    fase2.includes("perguntando como\nfunciona, reclamando do WhatsApp, contando da clínica"),
+  );
+  ok("uma pergunta por vez", fase2.includes("UMA pergunta por vez"));
+}
+
 secao("Rodada 28 — dois modos de abertura");
 ok("existe MODO A (ele chamou)", JULIA_SYSTEM_PROMPT.includes("MODO A — ELE CHAMOU VOCÊ"));
 ok("existe MODO B (ela chamou)", JULIA_SYSTEM_PROMPT.includes("MODO B — VOCÊ CHAMOU ELE"));
