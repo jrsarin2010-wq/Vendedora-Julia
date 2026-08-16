@@ -1772,9 +1772,12 @@ O QUE NÃO ENTRA, DE JEITO NENHUM:
 O QUE ENTRA, e por quê:
 1. Quem você é, em poucas palavras.
 2. DE ONDE você viu a clínica — está na ficha do lead. É o que prova que não é
-   disparo em massa, o que separa "alguém me achou" de "caí numa lista". Se a
-   ficha disser que a origem NÃO é citável, não invente: pule esta parte e use
-   que quem criou o CaptaClin é dentista.
+   disparo em massa, o que separa "alguém me achou" de "caí numa lista".
+   Isso se resolve em POUCAS PALAVRAS. Ele não precisa da logística da sua
+   busca — o que ela prova, prova em cinco palavras tanto quanto em quinze, e
+   quinze só fazem a mensagem inchar. A ficha te dá o FATO, não a frase: a
+   frase é sua, e é curta. Se a ficha disser que a origem NÃO é citável, não
+   invente: pule esta parte e use que quem criou o CaptaClin é dentista.
 3. Um pedido de licença DE VERDADE: você perguntando se pode ocupar um instante
    do tempo dele, e esperando a permissão — não um cumprimento seguido de
    pergunta, que é tomar o tempo e avisar depois. Pedir antes é o que um colega
@@ -1801,11 +1804,11 @@ modelos para copiar — escreva com as suas palavras a cada vez.
 - "Oi, Dra. Marina! Aqui é a Júlia, do CaptaClin. Vi a Odonto Vida aqui no Instagram. Posso te roubar um minuto com uma pergunta sobre o WhatsApp da clínica?"
 - "Oi, Dr. Carlos! Vi a Clínica Sorriso aqui no Instagram — bonito o trabalho de vocês 😊 Aqui é a Júlia, do CaptaClin. Uma pergunta rápida, se puder: quem responde o WhatsApp da clínica quando chega mensagem de noite?"
 - "Oi! Aqui é a Júlia, do CaptaClin — quem criou isso aqui é dentista, e a gente tá conversando com algumas clínicas antes de crescer. Posso te fazer uma pergunta rápida sobre o WhatsApp da sua clínica?"
-- "Oi! Aqui é a Júlia, do CaptaClin. Achei a Odonto Vida no Google Maps, procurando clínicas de odontologia em Fortaleza pra conversar. Tem um minuto pra uma pergunta sobre o WhatsApp de vocês?"
+- "Oi! Aqui é a Júlia, do CaptaClin. Vi a Odonto Vida no Google Maps aqui de Fortaleza. Tem um minuto pra uma pergunta sobre o WhatsApp de vocês?"
 
 QUAL DELES: use o exemplo da ORIGEM QUE A FICHA DECLAROU. Não existe formato
-preferido, e não existe exemplo por onde começar — o que manda é a linha "Onde
-você viu a clínica" da ficha.
+preferido, e não existe exemplo por onde começar — o que manda é a linha "Como
+você chegou nela" da ficha.
 - Ficha com Instagram: o primeiro. O segundo, que já entrega a pergunta e
   elogia, só quando a ficha trouxer Instagram de verdade e houver o que elogiar.
 - Ficha com Google Maps: o quarto — repare que ele não tem vocativo, porque
@@ -1941,22 +1944,35 @@ export function buildOutreachBriefing(params: {
   // Sem origem citável a mensagem não fica sem gancho: entra a credencial de
   // quem criou o CaptaClin ser dentista, que é verdadeira para todo lead.
   // "em {cidade}" cai fora quando a cidade é nula: a varredura sempre grava
-  // cidade, mas a ficha não pode depender disso — sem o cuidado a frase sairia
-  // "procurando clínicas de odontologia em pra conversar", e é o tipo de erro
-  // que só aparece no WhatsApp do dentista.
+  // cidade, mas a ficha não pode depender disso — sem o cuidado sobraria um
+  // "em " pendurado, e é o tipo de erro que só aparece no WhatsApp do dentista.
   const ondeNaCidade = params.city ? ` em ${params.city}` : "";
-  const ondeVi = params.instagram
-    ? "no Instagram da clínica"
+
+  // A ficha declara o FATO, nunca a frase.
+  //
+  // A versão anterior escrevia a origem já redigida ("no Google Maps,
+  // procurando clínicas de odontologia em Fortaleza pra conversar"), e o
+  // modelo transcrevia aquilo palavra por palavra: 7 prévias abriram com a
+  // MESMA sentença de 15 palavras. É a mesma armadilha das frases prontas de
+  // pedido de licença, e a mesma da âncora "comece pelo primeiro exemplo" —
+  // texto redigido dentro do prompt sai redigido igual do outro lado, por mais
+  // que outra linha mande variar.
+  //
+  // Por isso a linha agora descreve o que a Júlia FEZ, em terceira pessoa para
+  // ela, e vem com a proibição explícita de copiar. O que ela precisa saber é
+  // o fato; a frase é trabalho dela.
+  const comoChegou = params.instagram
+    ? "você viu o perfil da clínica no Instagram"
     : params.origin === "instagram"
-      ? "no Instagram"
+      ? "você viu a clínica no Instagram"
       : params.origin === "maps"
-        ? `no Google Maps, procurando clínicas de odontologia${ondeNaCidade} pra conversar`
+        ? `você estava vendo clínicas de odontologia${ondeNaCidade} no Google Maps`
         : null;
 
   linhas.push(
-    ondeVi
-      ? `- Onde você viu a clínica: ${ondeVi} (diga isso, é verdade)`
-      : `- Onde você viu a clínica: NÃO SABEMOS, e a ficha não tem como saber. NÃO diga de onde viu e não invente origem. Use no lugar que quem criou o CaptaClin é dentista.`,
+    comoChegou
+      ? `- Como você chegou nela: ${comoChegou}. É verdade, pode dizer. Diga com as SUAS palavras, curto — NÃO copie esta linha.`
+      : `- Como você chegou nela: NÃO SABEMOS, e a ficha não tem como saber. NÃO diga de onde viu e não invente origem. Use no lugar que quem criou o CaptaClin é dentista.`,
   );
 
   return `## FICHA DESTE DENTISTA (uso interno — NUNCA leia isto em voz alta)

@@ -649,7 +649,20 @@ ok(
 );
 ok(
   "e proíbe inventar quando a ficha não permitir citar",
-  JULIA_OUTREACH_PROMPT.includes("Se a\n   ficha disser que a origem NÃO é citável, não invente"),
+  JULIA_OUTREACH_PROMPT.includes("Se a ficha disser que a origem NÃO é citável, não\n   invente"),
+);
+// A TERCEIRA VEZ DO MESMO VÍCIO (7 prévias, mesma sentença de 15 palavras).
+// A origem virou roteiro porque a ficha entregava a frase pronta; agora ela
+// entrega o fato. O prompt precisa dizer que a origem cabe em poucas palavras,
+// senão a frase própria da Júlia nasce do mesmo tamanho da que ela copiava.
+ok(
+  "diz que a origem se resolve em POUCAS PALAVRAS",
+  JULIA_OUTREACH_PROMPT.includes("Isso se resolve em POUCAS PALAVRAS") &&
+    JULIA_OUTREACH_PROMPT.includes("não precisa da logística da sua"),
+);
+ok(
+  "e que a ficha dá o FATO, não a frase",
+  JULIA_OUTREACH_PROMPT.includes("A ficha te dá o FATO, não a frase"),
 );
 ok(
   "pede UMA pergunta fácil de responder",
@@ -773,21 +786,53 @@ ok(
 );
 ok(
   "com Instagram na ficha, pode dizer que viu no Instagram",
-  fichaFria({ instagram: "@odontovida" }).includes("no Instagram da clínica (diga isso, é verdade)"),
+  fichaFria({ instagram: "@odontovida" }).includes(
+    "você viu o perfil da clínica no Instagram",
+  ),
+  fichaFria({ instagram: "@odontovida" }),
 );
 ok(
-  'origin "maps" continua citável, agora dizendo a cidade e o motivo',
+  'origin "maps" continua citável, dizendo a cidade',
   fichaFria({ origin: "maps", city: "Fortaleza" }).includes(
-    "no Google Maps, procurando clínicas de odontologia em Fortaleza pra conversar (diga isso, é verdade)",
+    "você estava vendo clínicas de odontologia em Fortaleza no Google Maps",
   ),
   fichaFria({ origin: "maps", city: "Fortaleza" }),
 );
 ok(
-  'maps sem cidade não deixa buraco na frase ("odontologia em pra conversar")',
+  'maps sem cidade não deixa um "em " pendurado',
   fichaFria({ origin: "maps", city: null }).includes(
-    "procurando clínicas de odontologia pra conversar",
-  ) && !fichaFria({ origin: "maps", city: null }).includes(" em pra "),
+    "você estava vendo clínicas de odontologia no Google Maps",
+  ) && !fichaFria({ origin: "maps", city: null }).includes(" em  "),
   fichaFria({ origin: "maps", city: null }),
+);
+
+// A ficha declara o FATO e proíbe a cópia. Enquanto ela entregava a origem já
+// redigida, o modelo transcrevia: 7 prévias abriram com a MESMA sentença de 15
+// palavras. Vale para TODA origem citável, não só a do Maps.
+{
+  const citaveis = [
+    fichaFria({ origin: "maps", city: "Fortaleza" }),
+    fichaFria({ instagram: "@odontovida" }),
+    fichaFria({ origin: "instagram" }),
+  ];
+  ok(
+    "toda origem citável manda escrever com as próprias palavras, curto",
+    citaveis.every((f) => f.includes("Diga com as SUAS palavras, curto")),
+  );
+  ok(
+    "e proíbe copiar a linha da ficha, explicitamente",
+    citaveis.every((f) => f.includes("NÃO copie esta linha")),
+  );
+  ok(
+    "a linha descreve o que ela FEZ, não uma frase pronta para transcrever",
+    citaveis.every((f) => f.includes("- Como você chegou nela: você ")),
+    citaveis.join("\n---\n"),
+  );
+}
+ok(
+  "o quarto exemplo resolve a origem em poucas palavras, como manda a regra",
+  (JULIA_OUTREACH_PROMPT.split("\n").filter((l) => l.startsWith('- "Oi'))[3] as string)
+    .includes("no Google Maps aqui de Fortaleza"),
 );
 ok(
   "e quando é citável não vem o aviso de não inventar",
