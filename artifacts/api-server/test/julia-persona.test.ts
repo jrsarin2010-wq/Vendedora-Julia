@@ -71,6 +71,54 @@ ok(
     JULIA_SYSTEM_PROMPT.includes("Com quem eu tenho o prazer?"),
 );
 
+secao('"que produto é esse?" — a pergunta do lead que nunca ouviu falar do CaptaClin');
+{
+  const inicio = JULIA_SYSTEM_PROMPT.indexOf(
+    "## QUANDO A PERGUNTA É SOBRE O PRODUTO, NÃO SOBRE PLANO",
+  );
+  const fim = JULIA_SYSTEM_PROMPT.indexOf("## O CAPTACLIN NÃO TEM CONCORRENTE");
+  ok("a seção existe", inicio > -1 && fim > inicio);
+  const secaoProduto = JULIA_SYSTEM_PROMPT.slice(inicio, fim);
+
+  ok(
+    "explica no vocabulário de secretária digital, sem termo técnico",
+    secaoProduto.includes("uma secretária\n   digital que atende o WhatsApp da clínica") &&
+      secaoProduto.includes("nenhum termo técnico"),
+    secaoProduto,
+  );
+  ok(
+    "manda caber em uma ou duas frases",
+    secaoProduto.includes("em uma ou duas frases"),
+  );
+  ok(
+    "e devolver UMA pergunta que dimensione a situação dele",
+    secaoProduto.includes("UMA pergunta que dimensione a situação dele"),
+  );
+  ok(
+    "sem link, sem plano, sem valor — nada disso foi perguntado",
+    secaoProduto.includes("NÃO ENTRA NESTA RESPOSTA: link, nome de plano, valor"),
+  );
+  ok(
+    "e amarra na regra de preço como o passo anterior dela",
+    secaoProduto.includes("NUNCA DÊ PREÇO NA PRIMEIRA\nRESPOSTA SOBRE PLANO"),
+  );
+  // A lição das quatro rodadas da abordagem: frase pronta no prompt vira frase
+  // transcrita na saída. Esta seção descreve comportamento — se alguém um dia
+  // acrescentar uma fala de exemplo aqui, ela vira o roteiro de toda explicação
+  // do produto, que é o pior lugar possível para uma resposta decorada.
+  {
+    // A única linha entre aspas legítima é a de GATILHOS — as perguntas que o
+    // DENTISTA faz. Qualquer aspa a mais seria uma fala da Júlia, e aí a
+    // explicação do produto vira roteiro decorado.
+    const comAspas = secaoProduto.split("\n").filter((l) => l.trim().startsWith('"'));
+    ok(
+      "a única linha entre aspas é a das perguntas DELE, não uma fala pronta dela",
+      comAspas.length === 1 && comAspas[0]!.includes("Que negócio é esse?"),
+      comAspas.join(" | "),
+    );
+  }
+}
+
 secao("Rodada 28 — dois modos de abertura");
 ok("existe MODO A (ele chamou)", JULIA_SYSTEM_PROMPT.includes("MODO A — ELE CHAMOU VOCÊ"));
 ok("existe MODO B (ela chamou)", JULIA_SYSTEM_PROMPT.includes("MODO B — VOCÊ CHAMOU ELE"));
@@ -89,10 +137,36 @@ ok(
   "no MODO A a pergunta dele não é ignorada para pedir o nome",
   JULIA_SYSTEM_PROMPT.includes("ignorar a pergunta dele para pedir o nome irrita"),
 );
-ok("no MODO B ela pede licença", JULIA_SYSTEM_PROMPT.includes("PEÇA LICENÇA de verdade"));
+// O MODO B DESCREVIA A MENSAGEM ERRADA. Ele ensinava a escrever a PRIMEIRA
+// mensagem do lead frio — que hoje é do JULIA_OUTREACH_PROMPT e já saiu quando
+// este prompt roda. O webhook só é chamado quando o dentista RESPONDE, então
+// tudo que o MODO B governa acontece da segunda mensagem em diante.
 ok(
-  "no MODO B ela não vende na primeira mensagem",
-  JULIA_SYSTEM_PROMPT.includes("Não venda nada na primeira mensagem"),
+  "o MODO B governa a conversa DEPOIS que ele respondeu, não a abertura",
+  JULIA_SYSTEM_PROMPT.includes("MODO B — VOCÊ CHAMOU ELE, E ELE RESPONDEU") &&
+    JULIA_SYSTEM_PROMPT.includes("A primeira mensagem JÁ SAIU") &&
+    JULIA_SYSTEM_PROMPT.includes("conversa começa na sua segunda mensagem"),
+);
+ok(
+  "e a FASE 1 avisa que os dois modos escrevem mensagens diferentes",
+  JULIA_SYSTEM_PROMPT.includes("No MODO A você está escrevendo a PRIMEIRA mensagem"),
+);
+ok(
+  "não manda repetir a origem, que a abordagem fria já disse",
+  JULIA_SYSTEM_PROMPT.includes("Ele JÁ SABE de onde você viu a clínica"),
+);
+// As duas frases prontas de licença tinham sido removidas do prompt de
+// abordagem por causar transcrição literal, e sobreviveram AQUI porque ninguém
+// tinha auditado este arquivo. No MODO B elas eram duplamente erradas: frase
+// pronta, e frase para uma mensagem que este prompt nem escreve.
+ok(
+  "e as frases prontas de licença não sobrevivem em NENHUM dos dois prompts",
+  !JULIA_SYSTEM_PROMPT.includes("Posso te roubar um minuto?") &&
+    !JULIA_SYSTEM_PROMPT.includes("PEÇA LICENÇA de verdade"),
+);
+ok(
+  "no MODO B ela não emenda venda na primeira resposta dele",
+  JULIA_SYSTEM_PROMPT.includes("Não emende venda na primeira resposta dele"),
 );
 ok(
   "não pergunta o nome duas vezes",
