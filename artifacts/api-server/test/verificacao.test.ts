@@ -16,7 +16,7 @@
  */
 import { ok, secao, fim } from "./assert";
 import { handlerDe, chamarRota } from "./rota";
-import verificacaoRouter from "../src/routes/verificacao";
+import verificacaoRouter, { montarStatus } from "../src/routes/verificacao";
 import prospectsRouter from "../src/routes/prospects";
 import {
   rodarCicloDeVerificacao,
@@ -414,7 +414,13 @@ clinica({ nome: "Elegível 2" });
 clinica({ nome: "Sem telefone", telefoneRaw: null, statusProspeccao: "sem_telefone" });
 clinica({ nome: "Já apto", statusProspeccao: "apto", verificadoWhatsappEm: horasAtras(2) });
 clinica({ nome: "Antiga", statusProspeccao: "sem_whatsapp", verificadoWhatsappEm: horasAtras(30) });
-s = (await chamarRota(statusHandler, {})).body as Status;
+// Com o RELÓGIO INJETADO, e não pelo handler HTTP. As fixtures acima são
+// relativas a AGORA (uma data fixa); a rota, chamada pelo handler, mede a
+// janela de 24h a partir do relógio real. Os dois só coincidem no dia em que
+// o teste é escrito: este bloco passou em 15/08/2026 e falhou em 16/08, quando
+// o "2 horas atrás" virou "26 horas atrás" e saiu da janela. Mesmo desenho da
+// rota irmã em outreach-painel.test.ts.
+s = (await montarStatus(AGORA)) as Status;
 ok("2 a verificar — o sem_telefone e os já verificados ficam de fora", s.aVerificar === 2, String(s.aVerificar));
 ok(
   "1 verificado nas 24h — o de 30h atrás saiu da janela",

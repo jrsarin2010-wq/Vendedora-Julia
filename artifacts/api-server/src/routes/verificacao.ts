@@ -30,8 +30,16 @@ const router: IRouter = Router();
  * Monta o retrato completo. Existe como função porque o POST responde
  * EXATAMENTE o mesmo shape do GET — a tela troca o estado com a resposta do
  * clique, sem uma segunda ida ao servidor que poderia contar outra história.
+ *
+ * EXPORTADA por causa do relógio: `verificadosNa24h` é uma janela DESLIZANTE
+ * medida a partir de `agora`. Testada pelo handler HTTP, ela usa o relógio real
+ * contra fixtures de data fixa — e o teste passa no dia em que é escrito e
+ * falha em todos os seguintes, quando as fixtures saem da janela. Foi o que
+ * aconteceu: verde em 15/08/2026, vermelho em 16/08. Mesma solução da rota
+ * irmã (`montarStatusDaAbordagem`, routes/outreach.ts): quem testa janela
+ * chama esta função com a data injetada, não a rota.
  */
-async function montarStatus(agora: Date = new Date()) {
+export async function montarStatus(agora: Date = new Date()) {
   const desde = new Date(agora.getTime() - JANELA_DA_COTA_MS);
 
   // Duas contagens agregadas em vez de "traz tudo e conta aqui": esta é a
