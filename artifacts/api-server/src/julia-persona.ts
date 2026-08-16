@@ -1799,11 +1799,23 @@ modelos para copiar — escreva com as suas palavras a cada vez.
 - "Oi, Dra. Marina! Aqui é a Júlia, do CaptaClin. Vi a Odonto Vida aqui no Instagram. Posso te roubar um minuto com uma pergunta sobre o WhatsApp da clínica?"
 - "Oi, Dr. Carlos! Vi a Clínica Sorriso aqui no Instagram — bonito o trabalho de vocês 😊 Aqui é a Júlia, do CaptaClin. Uma pergunta rápida, se puder: quem responde o WhatsApp da clínica quando chega mensagem de noite?"
 - "Oi! Aqui é a Júlia, do CaptaClin — quem criou isso aqui é dentista, e a gente tá conversando com algumas clínicas antes de crescer. Posso te fazer uma pergunta rápida sobre o WhatsApp da sua clínica?"
+- "Oi! Aqui é a Júlia, do CaptaClin. Achei a Odonto Vida no Google Maps, procurando clínicas de odontologia em Fortaleza pra conversar. Posso fazer uma pergunta rápida sobre o WhatsApp de vocês?"
 
-QUAL DOS TRÊS: o PRIMEIRO é o formato preferido, porque é o mais curto e o mais
-seguro — comece por ele. O segundo, que já entrega a pergunta e elogia, só quando
-a ficha trouxer Instagram de verdade. O terceiro quando a ficha NÃO permitir
-dizer de onde você viu a clínica.
+QUAL DELES: use o exemplo da ORIGEM QUE A FICHA DECLAROU. Não existe formato
+preferido, e não existe exemplo por onde começar — o que manda é a linha "Onde
+você viu a clínica" da ficha.
+- Ficha com Instagram: o primeiro. O segundo, que já entrega a pergunta e
+  elogia, só quando a ficha trouxer Instagram de verdade e houver o que elogiar.
+- Ficha com Google Maps: o quarto — repare que ele não tem vocativo, porque
+  clínica captada no Maps quase nunca traz o nome do dentista.
+- Ficha sem origem citável: o terceiro, quando a ficha NÃO permitir dizer de onde
+  você viu a clínica.
+
+Escolhido o exemplo da origem certa, ESCREVA COM AS SUAS PALAVRAS. Ele mostra o
+tom e o tamanho, não a frase: se a sua mensagem puder ser confundida com o
+exemplo, ela está errada. Troque a ordem das partes, troque o jeito de pedir
+licença, troque a pergunta — a pergunta sobre o WhatsApp da clínica tem muitas
+formas, e você não é obrigada a usar as que aparecem aqui.
 
 SE ELE RESPONDER SECO ou perguntar quem é você: seja transparente na hora, sem
 drama. Diga que é do CaptaClin, de onde viu a clínica, e que queria entender como
@@ -1822,12 +1834,41 @@ Responda SOMENTE com o texto da mensagem, sem aspas e sem nenhum comentário.`;
  * chute do modelo — mesma decisão da Rodada 21, e aqui pesa ainda mais: errar
  * o gênero de alguém logo na primeira palavra é o fim da conversa.
  */
+/**
+ * A trava da reputação: só entra na ficha nota ALTA com volume que a sustente.
+ *
+ * Duas condições, e as duas precisam valer. Nota alta com 3 avaliações não é
+ * reputação, é acaso — e citar isso como elogio ("vi que vocês são muito bem
+ * avaliados") entrega na primeira frase que quem está falando não olhou nada,
+ * que é exatamente o "elogio sem base" que o prompt proíbe.
+ *
+ * O limite de baixo é mais importante que o de cima: uma clínica com 4.1 não
+ * quer ouvir de uma estranha que a nota dela foi conferida.
+ */
+const NOTA_MINIMA_PARA_CITAR = 4.5;
+const AVALIACOES_MINIMAS_PARA_CITAR = 20;
+
+/**
+ * `numeric` do Postgres volta como string no driver, e a ficha do prospect pode
+ * chegar já convertida. Aceita as duas formas e devolve null para qualquer
+ * coisa que não seja número de verdade — na dúvida, não cita.
+ */
+function comoNumero(valor: string | number | null | undefined): number | null {
+  if (typeof valor === "number") return Number.isFinite(valor) ? valor : null;
+  if (typeof valor !== "string") return null;
+  const n = Number(valor.trim());
+  return Number.isFinite(n) ? n : null;
+}
+
 export function buildOutreachBriefing(params: {
   name: string | null;
   clinicName: string | null;
   city: string | null;
   instagram: string | null;
   origin: string | null;
+  /** Reputação no Google. Opcionais: só lead vindo da varredura tem. */
+  nota?: string | number | null;
+  totalAvaliacoes?: number | null;
 }): string {
   const linhas: string[] = [];
 
@@ -1860,6 +1901,32 @@ export function buildOutreachBriefing(params: {
   if (params.city) linhas.push(`- Cidade: ${params.city}`);
   if (params.instagram) linhas.push(`- Instagram: ${params.instagram}`);
 
+  // REPUTAÇÃO — entra na ficha SÓ quando passa nas duas travas.
+  //
+  // Reprovado, a linha não existe: o modelo não pode citar o que não viu. É de
+  // propósito que aqui NÃO se repete o desenho do `ondeVi` abaixo, que escreve
+  // um aviso explícito de "não invente". Os dois casos são diferentes:
+  //
+  //  - Origem é um buraco ÓBVIO na ficha. Sem instrução, o modelo preenche com
+  //    algo plausível, porque toda mensagem de abordagem diz de onde veio. Ali
+  //    o aviso é necessário.
+  //  - Nota de Google ninguém inventa sozinho — não é parte obrigatória de uma
+  //    abertura. E escrever "a nota é 3.4, não cite" põe o 3.4 dentro do
+  //    contexto, de onde ele pode vazar para a mensagem. O silêncio é a trava
+  //    mais forte que existe.
+  const notaNumero = comoNumero(params.nota);
+  const avaliacoes = params.totalAvaliacoes ?? null;
+  if (
+    notaNumero !== null &&
+    avaliacoes !== null &&
+    notaNumero >= NOTA_MINIMA_PARA_CITAR &&
+    avaliacoes >= AVALIACOES_MINIMAS_PARA_CITAR
+  ) {
+    linhas.push(
+      `- Reputação no Google: ${notaNumero} de 5, com ${avaliacoes} avaliações (é verdade e você conferiu — pode elogiar por isso, se quiser)`,
+    );
+  }
+
   // De onde veio o contato. É o que prova que não é disparo em massa — então
   // precisa ser VERDADE.
   //
@@ -1871,12 +1938,17 @@ export function buildOutreachBriefing(params: {
   //
   // Sem origem citável a mensagem não fica sem gancho: entra a credencial de
   // quem criou o CaptaClin ser dentista, que é verdadeira para todo lead.
+  // "em {cidade}" cai fora quando a cidade é nula: a varredura sempre grava
+  // cidade, mas a ficha não pode depender disso — sem o cuidado a frase sairia
+  // "procurando clínicas de odontologia em pra conversar", e é o tipo de erro
+  // que só aparece no WhatsApp do dentista.
+  const ondeNaCidade = params.city ? ` em ${params.city}` : "";
   const ondeVi = params.instagram
     ? "no Instagram da clínica"
     : params.origin === "instagram"
       ? "no Instagram"
       : params.origin === "maps"
-        ? "no Google, procurando clínica na região"
+        ? `no Google Maps, procurando clínicas de odontologia${ondeNaCidade} pra conversar`
         : null;
 
   linhas.push(

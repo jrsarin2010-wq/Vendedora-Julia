@@ -174,6 +174,16 @@ router.post("/prospects/promover", async (req, res) => {
         // Júlia MENTIR sobre a origem do contato — sem ninguém pedir e sem
         // sintoma nenhum, porque a frase continuaria bem escrita.
         instagram: null,
+        // A reputação do Google é COPIADA, ao contrário do Instagram acima: aqui
+        // o dado é verdadeiro e é da mesma clínica que estamos abordando. É o
+        // único material que diferencia uma clínica da outra na abertura fria —
+        // sem ele a ficha de todo lead promovido fica igual (nome nulo,
+        // Instagram nulo, origem "maps"), e ficha igual gera mensagem igual.
+        //
+        // Quem decide se isso pode ser DITO é julia-persona.ts, que só cita
+        // reputação alta e com volume. Copiar aqui não autoriza citar.
+        nota: p.nota,
+        totalAvaliacoes: p.totalAvaliacoes,
       })),
       {
         // Faz a Júlia dizer "vi no Google, procurando clínica na região". É

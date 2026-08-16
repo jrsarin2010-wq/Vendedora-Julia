@@ -1,4 +1,13 @@
-import { pgTable, serial, text, boolean, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  serial,
+  text,
+  boolean,
+  integer,
+  numeric,
+  timestamp,
+  pgEnum,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -71,6 +80,19 @@ export const leadsTable = pgTable("leads", {
   clinicName: text("clinic_name"),
   instagram: text("instagram"),
   city: text("city"),
+  // Reputação no Google, copiada da ficha do Maps na promoção (Etapa 3C). Só
+  // existe para leads que vieram da varredura: quem chegou por planilha ou pelo
+  // WhatsApp nasce com os dois nulos, e nulo aqui significa "não sabemos", nunca
+  // "é ruim".
+  //
+  // Mesmo tipo de clinicas_prospect.nota — `numeric` volta como STRING no
+  // driver, e quem for comparar precisa converter antes. É a razão de
+  // buildOutreachBriefing aceitar string | number.
+  //
+  // A trava de quando isso pode ser DITO na abertura mora em julia-persona.ts,
+  // não aqui: a coluna guarda o fato, o prompt decide se o fato é citável.
+  nota: numeric("nota", { precision: 2, scale: 1 }),
+  totalAvaliacoes: integer("total_avaliacoes"),
   outreachStatus: outreachStatusEnum("outreach_status").notNull().default("none"),
   outreachSentAt: timestamp("outreach_sent_at"),
   // Falhas PERMANENTES de envio seguidas (a Evolution rejeitou o destinatário

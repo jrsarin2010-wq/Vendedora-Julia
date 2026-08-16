@@ -20,6 +20,13 @@ export interface DadosDoLead {
   city: string | null;
   instagram: string | null;
   origin: string | null;
+  /**
+   * Reputação no Google, para leads vindos da varredura. Opcionais porque o
+   * lead que chegou pelo WhatsApp não tem nenhuma das duas — e porque a trava
+   * de quando isso pode ser dito é da ficha (julia-persona.ts), não daqui.
+   */
+  nota?: string | number | null;
+  totalAvaliacoes?: number | null;
 }
 
 /**
@@ -35,6 +42,8 @@ export async function gerarMensagemDeAbordagem(
     city: lead.city,
     instagram: lead.instagram,
     origin: lead.origin,
+    nota: lead.nota,
+    totalAvaliacoes: lead.totalAvaliacoes,
   });
 
   // Repique CURTO (Rodada 43): aqui ninguém está esperando — se falhar de vez,

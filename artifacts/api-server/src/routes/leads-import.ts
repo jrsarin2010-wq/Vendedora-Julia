@@ -55,6 +55,14 @@ export interface LeadImportado {
   clinicName?: unknown;
   instagram?: unknown;
   city?: unknown;
+  /**
+   * Reputação no Google. Só a promoção da Etapa 3C preenche — planilha não
+   * traz isso, e a rota HTTP não expõe campo para isso de propósito: número de
+   * reputação digitado à mão não tem como ser conferido, e a Júlia cita esse
+   * número na abertura.
+   */
+  nota?: unknown;
+  totalAvaliacoes?: unknown;
 }
 
 /**
@@ -119,6 +127,31 @@ function texto(valor: unknown): string | null {
   return limpo.length > 0 ? limpo : null;
 }
 
+/**
+ * A nota do Google, do jeito que a coluna `numeric` quer: string ou null.
+ *
+ * Aceita number porque a ficha do prospect pode chegar já convertida, e recusa
+ * qualquer outra coisa — inclusive string não-numérica. Lixo aqui viraria erro
+ * de INSERT no meio de uma leva de 50, derrubando a promoção inteira por causa
+ * de uma clínica.
+ */
+function nota(valor: unknown): string | null {
+  if (typeof valor === "number") {
+    return Number.isFinite(valor) ? String(valor) : null;
+  }
+  if (typeof valor !== "string") return null;
+  const limpo = valor.trim();
+  if (!limpo || !Number.isFinite(Number(limpo))) return null;
+  return limpo;
+}
+
+/** Contagem de avaliações: inteiro não-negativo, ou null. */
+function contagem(valor: unknown): number | null {
+  const n = typeof valor === "string" ? Number(valor.trim()) : valor;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 0) return null;
+  return n;
+}
+
 interface Candidato {
   /** Posição na entrada — é por ela que o desfecho volta para o item certo. */
   indice: number;
@@ -127,6 +160,8 @@ interface Candidato {
   clinicName: string | null;
   instagram: string | null;
   city: string | null;
+  nota: string | null;
+  totalAvaliacoes: number | null;
 }
 
 /**
@@ -202,6 +237,8 @@ export async function importarLeads(
       clinicName: texto(bruto?.clinicName),
       instagram: texto(bruto?.instagram),
       city: texto(bruto?.city),
+      nota: nota(bruto?.nota),
+      totalAvaliacoes: contagem(bruto?.totalAvaliacoes),
     });
   }
 
@@ -321,6 +358,8 @@ export async function importarLeads(
             clinicName: c.clinicName,
             instagram: c.instagram,
             city: c.city,
+            nota: c.nota,
+            totalAvaliacoes: c.totalAvaliacoes,
             origin,
             status: "cold" as const,
             funnelStage: "new" as const,

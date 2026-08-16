@@ -634,10 +634,10 @@ ok(
     JULIA_OUTREACH_PROMPT.includes("SE ELE PEDIR PARA PARAR: pare na hora"),
 );
 
-secao("Rodada 34 — três exemplos de tom, com ordem de preferência e ordem de variar");
+secao("Rodada 34 — os exemplos de tom, escolhidos pela origem e não por preferência");
 {
   const exemplos = JULIA_OUTREACH_PROMPT.split("\n").filter((l) => l.startsWith('- "Oi'));
-  ok("são três exemplos", exemplos.length === 3, exemplos.join(" | "));
+  ok("são quatro exemplos", exemplos.length === 4, exemplos.join(" | "));
   ok(
     "e nenhum deles vende (preço, plano ou link)",
     !exemplos.some((e) => /R\$|plano|captaclin\.com\.br/i.test(e)),
@@ -657,19 +657,53 @@ ok(
   "os exemplos são declarados como TOM, não como modelo para copiar",
   JULIA_OUTREACH_PROMPT.includes("são de TOM, não\nmodelos para copiar"),
 );
+// A REPETIÇÃO DAS 6 PRÉVIAS (lead 33). Seis gerações saíram quase idênticas
+// porque o prompt mandava "comece pelo primeiro exemplo" e o primeiro exemplo é
+// uma frase literal — de origem Instagram, com vocativo, servindo mal a um lead
+// de Maps sem nome. O modelo fazia a EDIÇÃO MÍNIMA daquela frase, e edição
+// mínima a partir de uma âncora fixa dá sempre o mesmo texto.
+//
+// A âncora não pode voltar: é ela que anula o "VARIE SEMPRE" logo acima.
 ok(
-  "o mais curto e seguro é o ponto de partida",
-  JULIA_OUTREACH_PROMPT.includes("o PRIMEIRO é o formato preferido") &&
-    JULIA_OUTREACH_PROMPT.includes("comece por ele"),
+  "NÃO existe exemplo preferido nem exemplo por onde começar",
+  !JULIA_OUTREACH_PROMPT.includes("comece por ele") &&
+    !JULIA_OUTREACH_PROMPT.includes("formato preferido, porque") &&
+    JULIA_OUTREACH_PROMPT.includes("Não existe formato\npreferido"),
+);
+ok(
+  "a escolha do exemplo é feita pela ORIGEM declarada na ficha",
+  JULIA_OUTREACH_PROMPT.includes("use o exemplo da ORIGEM QUE A FICHA DECLAROU"),
+);
+ok(
+  "e manda reescrever com as próprias palavras, não copiar o exemplo",
+  JULIA_OUTREACH_PROMPT.includes("ESCREVA COM AS SUAS PALAVRAS") &&
+    JULIA_OUTREACH_PROMPT.includes("puder ser confundida com o\nexemplo, ela está errada"),
 );
 ok(
   "o que elogia só vale com Instagram na ficha",
-  JULIA_OUTREACH_PROMPT.includes("só quando\na ficha trouxer Instagram de verdade"),
+  JULIA_OUTREACH_PROMPT.includes("só quando a ficha trouxer Instagram de verdade"),
 );
 ok(
-  "e o terceiro é para quando não dá para dizer de onde viu",
-  JULIA_OUTREACH_PROMPT.includes("quando a ficha NÃO permitir\ndizer de onde você viu a clínica"),
+  "o terceiro é para quando não dá para dizer de onde viu",
+  JULIA_OUTREACH_PROMPT.includes("quando a ficha NÃO permitir dizer de onde\n  você viu a clínica"),
 );
+{
+  // O exemplo que faltava, e cuja ausência causou a repetição: Maps + sem nome.
+  // Sem ele o modelo cai no exemplo de Instagram e o adapta sempre igual.
+  const quarto = JULIA_OUTREACH_PROMPT.split("\n").filter((l) =>
+    l.startsWith('- "Oi'),
+  )[3] as string;
+  ok("o quarto exemplo é de Google Maps", quarto.includes("no Google Maps"), quarto);
+  ok(
+    "e não tem vocativo, porque clínica do Maps não traz o nome do dentista",
+    !/Dr\.|Dra\./.test(quarto),
+    quarto,
+  );
+  ok(
+    "a regra explica por que ele não tem vocativo",
+    JULIA_OUTREACH_PROMPT.includes("não tem vocativo, porque"),
+  );
+}
 {
   // Rede no espírito das Rodadas 31 e 32: nenhuma linha do prompt pode oferecer
   // preço, link ou promoção como coisa a dizer. As únicas ocorrências toleradas
@@ -710,12 +744,68 @@ ok(
   fichaFria({ instagram: "@odontovida" }).includes("no Instagram da clínica (diga isso, é verdade)"),
 );
 ok(
-  'origin "maps" continua citável',
-  fichaFria({ origin: "maps" }).includes("no Google, procurando clínica na região (diga isso, é verdade)"),
+  'origin "maps" continua citável, agora dizendo a cidade e o motivo',
+  fichaFria({ origin: "maps", city: "Fortaleza" }).includes(
+    "no Google Maps, procurando clínicas de odontologia em Fortaleza pra conversar (diga isso, é verdade)",
+  ),
+  fichaFria({ origin: "maps", city: "Fortaleza" }),
+);
+ok(
+  'maps sem cidade não deixa buraco na frase ("odontologia em pra conversar")',
+  fichaFria({ origin: "maps", city: null }).includes(
+    "procurando clínicas de odontologia pra conversar",
+  ) && !fichaFria({ origin: "maps", city: null }).includes(" em pra "),
+  fichaFria({ origin: "maps", city: null }),
 );
 ok(
   "e quando é citável não vem o aviso de não inventar",
   !fichaFria({ instagram: "@odontovida" }).includes("NÃO SABEMOS"),
+);
+
+secao("Reputação do Google na ficha — só nota alta COM volume é citável");
+const reputacao = (nota: string | number | null, total: number | null) =>
+  fichaFria({ origin: "maps", city: "Fortaleza", nota, totalAvaliacoes: total });
+ok(
+  "4.8 com 120 avaliações entra na ficha",
+  reputacao("4.8", 120).includes("Reputação no Google: 4.8 de 5, com 120 avaliações"),
+  reputacao("4.8", 120),
+);
+ok(
+  "exatamente no limite (4.5 e 20) entra — a trava é >=, não >",
+  reputacao("4.5", 20).includes("Reputação no Google: 4.5 de 5, com 20 avaliações"),
+  reputacao("4.5", 20),
+);
+ok(
+  "nota boa com POUCA avaliação não entra (5.0 com 3 é acaso, não reputação)",
+  !reputacao("5.0", 3).includes("Reputação no Google"),
+  reputacao("5.0", 3),
+);
+ok(
+  "nota mediana com muito volume não entra",
+  !reputacao("4.1", 400).includes("Reputação no Google"),
+  reputacao("4.1", 400),
+);
+ok(
+  "e o número reprovado NÃO aparece em lugar nenhum da ficha",
+  !reputacao("3.2", 400).includes("3.2") && !reputacao("3.2", 400).includes("Reputação"),
+  reputacao("3.2", 400),
+);
+ok(
+  "sem os dados (lead de planilha) a linha simplesmente não existe",
+  !reputacao(null, null).includes("Reputação no Google"),
+);
+ok(
+  "nota sem contagem não entra: uma trava sozinha não basta",
+  !reputacao("4.9", null).includes("Reputação no Google") &&
+    !reputacao(null, 300).includes("Reputação no Google"),
+);
+ok(
+  "aceita numeric como string (é assim que o driver devolve) e como number",
+  reputacao("4.7", 50).includes("4.7 de 5") && reputacao(4.7, 50).includes("4.7 de 5"),
+);
+ok(
+  "lixo no lugar da nota não vira citação",
+  !reputacao("sem nota", 300).includes("Reputação no Google"),
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
