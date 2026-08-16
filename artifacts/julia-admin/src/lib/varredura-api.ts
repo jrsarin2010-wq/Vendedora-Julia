@@ -232,9 +232,86 @@ export interface ResumoDeProspects {
   semWhatsapp: number | null;
   telefoneInvalido: number;
   total: number;
+  /**
+   * A trava mestra da prospecção ativa (`OUTREACH_ENABLED` no Railway).
+   *
+   * Está aqui porque é ao lado do botão "Promover" que ela decide o significado
+   * do clique: desligada, promover só cria o dentista; ligada, põe ele na fila
+   * e a Júlia escreve. Duas ações diferentes, o mesmo botão.
+   */
+  juliaLigada: boolean;
 }
 
 export async function obterResumoDeProspects(): Promise<ResumoDeProspects> {
   const res = await fetch("/api/prospects/resumo", { credentials: "include" });
   return lerJson<ResumoDeProspects>(res, "carregar o resumo das clínicas");
+}
+
+// ---------------------------------------------------------------------------
+// Promoção a dentista (Etapa 3C)
+// ---------------------------------------------------------------------------
+
+/** Teto por chamada, repetido aqui só para o botão poder avisar antes. */
+export const MAXIMO_POR_PROMOCAO = 50;
+
+export interface ProspectPromovido {
+  prospectId: number;
+  nome: string;
+  /** Nulo numa simulação: nada foi criado. */
+  leadId: number | null;
+}
+
+export interface ProspectJaExistente extends ProspectPromovido {
+  motivo: "duplicado" | "opt-out";
+}
+
+export interface ProspectSemLead {
+  prospectId: number;
+  nome: string;
+}
+
+export interface ProspectRecusado {
+  prospectId: number;
+  motivo: string;
+}
+
+export interface ResultadoDaPromocao {
+  solicitados: number;
+  modo: "simular" | "aplicar";
+  promovidos: ProspectPromovido[];
+  jaExistentes: ProspectJaExistente[];
+  /** O número existia na verificação e não existe mais. */
+  semWhatsapp: ProspectSemLead[];
+  /** A Evolution não deu veredito: continuam aptas e voltam depois. */
+  adiados: ProspectSemLead[];
+  /** Lista recusada por inteiro (clínica fora de "apto"). Nada foi processado. */
+  recusados: ProspectRecusado[];
+}
+
+/**
+ * `modo: "aplicar"` cria dentista de verdade e — com a Júlia ligada — faz
+ * mensagem sair. `"simular"` percorre as mesmas regras sem gravar nada.
+ */
+export async function promoverProspects(
+  prospectIds: number[],
+  modo: "simular" | "aplicar" = "aplicar",
+): Promise<ResultadoDaPromocao> {
+  const res = await fetch("/api/prospects/promover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ prospectIds, modo }),
+  });
+
+  // A recusa em bloco (409) traz o MOTIVO no corpo, e é a resposta mais útil
+  // desta rota: "a lista tem clínica que não está apta" precisa chegar na tela
+  // como frase, não como "HTTP 409".
+  if (res.status === 409) {
+    const corpo = (await res.json()) as ResultadoDaPromocao;
+    const motivos = corpo.recusados
+      .map((r) => `#${r.prospectId}: ${r.motivo}`)
+      .join("; ");
+    throw new Error(`Nada foi promovido — ${motivos}`);
+  }
+  return lerJson<ResultadoDaPromocao>(res, "promover as clínicas");
 }

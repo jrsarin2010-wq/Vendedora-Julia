@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -9,13 +9,25 @@ import {
   Star,
   BadgeCheck,
   ShieldCheck,
+  UserPlus,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Table,
   TableBody,
@@ -41,10 +53,13 @@ import {
   definirVerificacaoAtiva,
   listarProspects,
   obterResumoDeProspects,
+  promoverProspects,
+  MAXIMO_POR_PROMOCAO,
   type StatusDaVarredura,
   type StatusDaVerificacao,
   type StatusProspeccao,
   type ClinicaProspect,
+  type ResultadoDaPromocao,
 } from "@/lib/varredura-api";
 
 const CHAVE_STATUS = ["varredura-status"] as const;
@@ -566,13 +581,32 @@ function ConcentracaoPorBairro() {
   );
 }
 
+/**
+ * Uma frase com o que aconteceu, para o toast. Contagem zerada não entra: um
+ * "0 sem WhatsApp" no meio da linha só rouba a atenção do número que importa.
+ */
+function contarPromocao(r: ResultadoDaPromocao): string {
+  const partes: string[] = [];
+  if (r.promovidos.length) partes.push(`${r.promovidos.length} viraram dentista`);
+  if (r.jaExistentes.length) partes.push(`${r.jaExistentes.length} já eram lead`);
+  if (r.semWhatsapp.length) partes.push(`${r.semWhatsapp.length} sem WhatsApp`);
+  if (r.adiados.length)
+    partes.push(`${r.adiados.length} adiadas (a Evolution não respondeu — voltam depois)`);
+  return partes.length > 0 ? `${partes.join(", ")}.` : "Nada mudou.";
+}
+
 /** Bloco 3 — a tabela de clínicas. */
 function TabelaDeClinicas() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const [busca, setBusca] = useState("");
   const buscaAtrasada = useDebounce(busca, 300);
   const [status, setStatus] = useState<StatusProspeccao | "all">("all");
   const [uf, setUf] = useState<string>("all");
   const [pagina, setPagina] = useState(0);
+  const [selecionadas, setSelecionadas] = useState<Set<number>>(new Set());
+  const [confirmando, setConfirmando] = useState(false);
 
   // Mudar filtro tem de voltar para a primeira página: sem isto, filtrar na
   // página 3 mostra "nenhuma clínica" quando o resultado tem duas páginas.
@@ -601,6 +635,78 @@ function TabelaDeClinicas() {
   const primeiro = total === 0 ? 0 : pagina * POR_PAGINA + 1;
   const ultimo = Math.min((pagina + 1) * POR_PAGINA, total);
   const temProxima = (pagina + 1) * POR_PAGINA < total;
+
+  /*
+   * A PROMOÇÃO (Etapa 3C) só aparece no filtro "Apta".
+   *
+   * Não é enfeite: promover é a única ação desta tela que cria dentista de
+   * verdade, e o servidor recusa a lista inteira se qualquer clínica não
+   * estiver `apto`. Oferecer a caixinha em "Todas as situações" seria convidar
+   * a montar uma seleção que vai voltar recusada por inteiro.
+   */
+  const promovendo = status === "apto";
+
+  // Mesma consulta da concentração por bairro — o react-query dedupe pela
+  // chave, então não é uma segunda ida ao servidor. É de lá que vem o estado da
+  // Júlia, que muda o SIGNIFICADO do botão logo abaixo.
+  const { data: resumo } = useQuery({
+    queryKey: CHAVE_RESUMO,
+    queryFn: obterResumoDeProspects,
+    refetchInterval: 60_000,
+  });
+  const juliaLigada = resumo?.juliaLigada === true;
+
+  // Filtro ou página que muda invalida a seleção: os ids marcados saem da tela,
+  // e promover às cegas o que não está mais visível é exatamente o que o
+  // diálogo com os nomes existe para impedir.
+  useEffect(() => {
+    setSelecionadas(new Set());
+  }, [status, uf, buscaAtrasada, pagina]);
+
+  const escolhidas = itens.filter((c) => selecionadas.has(c.id));
+  const paginaInteiraMarcada = itens.length > 0 && escolhidas.length === itens.length;
+
+  function alternar(id: number) {
+    setSelecionadas((antes) => {
+      const proximo = new Set(antes);
+      if (proximo.has(id)) proximo.delete(id);
+      else proximo.add(id);
+      return proximo;
+    });
+  }
+
+  const promocao = useMutation({
+    mutationFn: (ids: number[]) => promoverProspects(ids, "aplicar"),
+    onSuccess: (r: ResultadoDaPromocao) => {
+      setSelecionadas(new Set());
+      setConfirmando(false);
+      toast({
+        title:
+          r.promovidos.length > 0
+            ? `${r.promovidos.length} clínica(s) promovida(s)`
+            : "Nenhuma clínica virou dentista",
+        description: `${contarPromocao(r)}${
+          r.promovidos.length > 0 && juliaLigada
+            ? " A Júlia vai abordar quem entrou, respeitando o ritmo."
+            : ""
+        }`,
+      });
+      // As duas: a lista (as promovidas saem do filtro "Apta") e o resumo (os
+      // contadores por status mudaram).
+      void queryClient.invalidateQueries({ queryKey: ["prospects"] });
+      void queryClient.invalidateQueries({ queryKey: CHAVE_RESUMO });
+    },
+    onError: (e: unknown) => {
+      setConfirmando(false);
+      toast({
+        title: "Não deu para promover",
+        description: e instanceof Error ? e.message : "Tente de novo.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const colunas = promovendo ? 8 : 7;
 
   return (
     /*
@@ -668,10 +774,89 @@ function TabelaDeClinicas() {
         </div>
       </div>
 
+      {/*
+        A FAIXA DA PROMOÇÃO.
+        O botão e o estado da Júlia moram lado a lado de propósito: promover com
+        ela desligada cria o dentista e mais nada; com ela ligada, põe o dentista
+        na fila e a mensagem sai. É o mesmo clique com duas consequências
+        completamente diferentes, e isso não pode ficar implícito.
+      */}
+      {promovendo && (
+        <div
+          className="flex shrink-0 flex-col gap-3 border-b border-border bg-muted/10 p-4 sm:flex-row sm:items-center sm:justify-between"
+          data-testid="barra-promocao"
+        >
+          <div className="flex items-center gap-3">
+            <Button
+              size="sm"
+              className="h-9"
+              disabled={
+                escolhidas.length === 0 ||
+                escolhidas.length > MAXIMO_POR_PROMOCAO ||
+                promocao.isPending
+              }
+              onClick={() => setConfirmando(true)}
+              data-testid="btn-promover"
+            >
+              <UserPlus size={15} className="mr-2" />
+              Promover selecionadas
+              {escolhidas.length > 0 ? ` (${escolhidas.length})` : ""}
+            </Button>
+            {escolhidas.length > MAXIMO_POR_PROMOCAO && (
+              <span className="text-xs text-destructive" data-testid="aviso-teto-promocao">
+                Máximo de {MAXIMO_POR_PROMOCAO} por vez.
+              </span>
+            )}
+          </div>
+
+          <div
+            className={`flex items-start gap-2 rounded-md border p-2.5 text-xs sm:max-w-md ${
+              juliaLigada
+                ? "border-emerald-500/40 bg-emerald-500/10"
+                : "border-amber-500/40 bg-amber-500/10"
+            }`}
+            data-testid={juliaLigada ? "aviso-julia-ligada" : "aviso-julia-desligada"}
+          >
+            <AlertTriangle
+              size={14}
+              className={`mt-0.5 shrink-0 ${
+                juliaLigada ? "text-emerald-600" : "text-amber-600"
+              }`}
+            />
+            <p className="text-muted-foreground">
+              {juliaLigada ? (
+                <>
+                  <strong className="text-foreground">A Júlia está ligada.</strong> Estas
+                  clínicas entram na fila de abordagem.
+                </>
+              ) : (
+                <>
+                  <strong className="text-foreground">A Júlia está desligada.</strong>{" "}
+                  Promover cria o dentista, mas nenhuma mensagem sai.
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-auto">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-md">
             <TableRow>
+              {promovendo && (
+                <TableHead className="w-[44px]">
+                  <Checkbox
+                    checked={paginaInteiraMarcada}
+                    disabled={itens.length === 0}
+                    onCheckedChange={(v) =>
+                      setSelecionadas(v === true ? new Set(itens.map((c) => c.id)) : new Set())
+                    }
+                    aria-label="Selecionar todas as clínicas desta página"
+                    data-testid="check-todas-da-pagina"
+                  />
+                </TableHead>
+              )}
               <TableHead className="w-[260px] font-mono text-xs uppercase tracking-wider">
                 Clínica
               </TableHead>
@@ -689,6 +874,11 @@ function TabelaDeClinicas() {
             {isLoading ? (
               Array.from({ length: 10 }).map((_, i) => (
                 <TableRow key={i}>
+                  {promovendo && (
+                    <TableCell>
+                      <Skeleton className="h-4 w-4" />
+                    </TableCell>
+                  )}
                   <TableCell>
                     <Skeleton className="h-5 w-44" />
                   </TableCell>
@@ -714,7 +904,7 @@ function TabelaDeClinicas() {
               ))
             ) : isError ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-64 text-center">
+                <TableCell colSpan={colunas} className="h-64 text-center">
                   <div className="flex flex-col items-center justify-center text-muted-foreground">
                     <AlertTriangle className="mb-3 h-10 w-10 text-destructive/40" />
                     <p className="text-lg font-medium text-foreground">
@@ -731,6 +921,16 @@ function TabelaDeClinicas() {
                   className="transition-colors hover:bg-muted/30"
                   data-testid={`prospect-row-${c.id}`}
                 >
+                  {promovendo && (
+                    <TableCell>
+                      <Checkbox
+                        checked={selecionadas.has(c.id)}
+                        onCheckedChange={() => alternar(c.id)}
+                        aria-label={`Selecionar ${c.nome}`}
+                        data-testid={`check-prospect-${c.id}`}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-medium text-foreground">{c.nome}</span>
@@ -795,7 +995,7 @@ function TabelaDeClinicas() {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={7} className="h-64 text-center">
+                <TableCell colSpan={colunas} className="h-64 text-center">
                   <div className="flex flex-col items-center justify-center text-muted-foreground">
                     <Filter className="mb-3 h-10 w-10 text-muted-foreground/30" />
                     <p className="text-lg font-medium text-foreground">
@@ -840,6 +1040,62 @@ function TabelaDeClinicas() {
           </Button>
         </div>
       </div>
+
+      {/*
+        O diálogo lista os NOMES, não a contagem.
+        A abertura fria da Júlia é escrita pelo modelo a cada lead — não existe
+        template para revisar antes, e a única forma de ver o que ela escreve é
+        ela escrever, para dentista de verdade. Ler "3 clínicas" não é conferir
+        nada; ler os nomes é.
+      */}
+      <AlertDialog open={confirmando} onOpenChange={setConfirmando}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Promover {escolhidas.length} clínica(s) a dentista?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  {juliaLigada
+                    ? "A Júlia está LIGADA: estas clínicas entram na fila e vão receber a primeira mensagem dela."
+                    : "A Júlia está desligada: elas viram dentistas na lista, e nenhuma mensagem sai enquanto continuar assim."}
+                </p>
+                <ul
+                  className="max-h-56 space-y-1 overflow-auto rounded-md border border-border bg-muted/20 p-3 text-sm"
+                  data-testid="lista-confirmacao-promocao"
+                >
+                  {escolhidas.map((c) => (
+                    <li key={c.id} className="flex justify-between gap-3">
+                      <span className="truncate text-foreground">{c.nome}</span>
+                      <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                        {c.cidade ?? "—"}
+                        {c.uf ? `/${c.uf}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="btn-cancelar-promocao">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={promocao.isPending}
+              onClick={(evento) => {
+                // O AlertDialogAction fecha sozinho ao clicar. Aqui o
+                // fechamento é da mutação (sucesso ou erro), para o resultado
+                // ter onde aparecer em vez de o diálogo sumir na hora.
+                evento.preventDefault();
+                promocao.mutate(escolhidas.map((c) => c.id));
+              }}
+              data-testid="btn-confirmar-promocao"
+            >
+              {promocao.isPending ? "Promovendo..." : "Promover"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1,9 +1,9 @@
 /**
  * CLÍNICAS CAPTADAS — leitura da antessala da tabela `leads` (Etapa 3B).
  *
- * Só LEITURA nesta etapa. Promover prospect a lead é a Etapa 3C, e ela depende
- * de uma decisão que ainda não foi tomada (o `origin` da rota de importação é
- * fixo em "import", ver leads-import.ts).
+ * Só LEITURA aqui. Promover prospect a lead é a Etapa 3C e mora em
+ * routes/prospects-promover.ts — separado porque é a única rota deste conjunto
+ * que cria dentista de verdade.
  *
  * PAGINAÇÃO NO SERVIDOR desde a primeira linha, de propósito. A lista de
  * dentistas do painel nasceu com um rodapé de paginação que nunca foi
@@ -14,6 +14,7 @@
 import { Router, type IRouter } from "express";
 import { db, clinicasProspectTable } from "@workspace/db";
 import { eq, and, ilike, sql, desc } from "drizzle-orm";
+import { lerConfig } from "../lib/outreach";
 
 const router: IRouter = Router();
 
@@ -122,6 +123,18 @@ router.get("/prospects/resumo", async (req, res) => {
       // é verdadeiro desde o primeiro lote.
       telefoneInvalido: porStatus.telefone_invalido,
       total: todas.length,
+      /**
+       * A TRAVA MESTRA da prospecção ativa (OUTREACH_ENABLED), na tela onde se
+       * clica em "Promover".
+       *
+       * Promover com ela desligada cria o dentista e mais nada. Promover com
+       * ela ligada põe aquele dentista na fila de abordagem — a Júlia escreve
+       * para ele. São duas ações com consequências completamente diferentes
+       * atrás do MESMO botão, e o painel não pode deixar isso implícito: sem
+       * este campo, a única forma de saber qual das duas está acontecendo seria
+       * abrir o Railway.
+       */
+      juliaLigada: lerConfig().habilitado,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to summarize prospects");

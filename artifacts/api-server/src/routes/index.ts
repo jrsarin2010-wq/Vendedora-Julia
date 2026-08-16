@@ -7,6 +7,7 @@ import leadsCanonicalizarRouter from "./leads-canonicalizar";
 import leadsImportRouter from "./leads-import";
 import outreachRouter from "./outreach";
 import prospectsRouter from "./prospects";
+import prospectsPromoverRouter from "./prospects-promover";
 import statsRouter from "./stats";
 import varredurasRouter from "./varreduras";
 import varredurasSeedRouter from "./varreduras-seed";
@@ -44,6 +45,10 @@ router.use(requireAuth, varredurasSeedRouter); // fila de varreduras Apify
 router.use(requireAuth, varredurasRouter);
 // Etapa 3A — o controle da verificação de WhatsApp, na mesma tela.
 router.use(requireAuth, verificacaoRouter);
+// Etapa 3C — a promoção. Vem ANTES da leitura pelo mesmo hábito da importação
+// de leads: as duas são literais e hoje não colidiriam, mas a ordem é para não
+// depender disso no dia em que aparecer um "/prospects/:id".
+router.use(requireAuth, prospectsPromoverRouter);
 router.use(requireAuth, prospectsRouter);
 
 export default router;
