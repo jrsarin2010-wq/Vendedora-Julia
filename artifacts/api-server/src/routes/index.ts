@@ -7,6 +7,7 @@ import leadsCanonicalizarRouter from "./leads-canonicalizar";
 import leadsImportRouter from "./leads-import";
 import outreachRouter from "./outreach";
 import prospectsRouter from "./prospects";
+import prospectsBackfillReputacaoRouter from "./prospects-backfill-reputacao";
 import prospectsPromoverRouter from "./prospects-promover";
 import statsRouter from "./stats";
 import varredurasRouter from "./varreduras";
@@ -49,6 +50,9 @@ router.use(requireAuth, verificacaoRouter);
 // de leads: as duas são literais e hoje não colidiriam, mas a ordem é para não
 // depender disso no dia em que aparecer um "/prospects/:id".
 router.use(requireAuth, prospectsPromoverRouter);
+// Conserto pontual da base, no mesmo molde do leads-canonicalizar: rota de
+// admin com dry-run por padrão. Antes da leitura pelo mesmo hábito acima.
+router.use(requireAuth, prospectsBackfillReputacaoRouter);
 router.use(requireAuth, prospectsRouter);
 
 export default router;

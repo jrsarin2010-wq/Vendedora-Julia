@@ -12,6 +12,7 @@
 export const eq = (col, val) => ({ tipo: "eq", col, val });
 export const inArray = (col, vals) => ({ tipo: "inArray", col, vals });
 export const isNotNull = (col) => ({ tipo: "isNotNull", col });
+export const isNull = (col) => ({ tipo: "isNull", col });
 export const gte = (col, val) => ({ tipo: "gte", col, val });
 export const lte = (col, val) => ({ tipo: "lte", col, val });
 export const ilike = (col, val) => ({ tipo: "ilike", col, val });
@@ -34,6 +35,10 @@ export function casa(linha, cond) {
       return Array.isArray(cond.vals) && cond.vals.includes(valor);
     case "isNotNull":
       return valor !== null && valor !== undefined;
+    // Coluna ausente do fixture conta como NULL, como no Postgres: o teste não
+    // precisa escrever `nota: null` em toda linha para dizer "não tem nota".
+    case "isNull":
+      return valor === null || valor === undefined;
     case "gte":
       return valor instanceof Date && cond.val instanceof Date
         ? valor.getTime() >= cond.val.getTime()
