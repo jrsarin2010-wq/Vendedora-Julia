@@ -32,6 +32,7 @@ import {
   definirOutreachAtivo,
 } from "../lib/configuracoes";
 import { gerarMensagemDeAbordagem } from "../lib/outreach-message";
+import { estadoDaPausaDaAbordagem, retomarAbordagem } from "../lib/restricao";
 import { datasDeEnviosFrios } from "../lib/ritmo-frio";
 
 const router: IRouter = Router();
@@ -252,11 +253,26 @@ export async function montarStatusDaAbordagem(agora: Date = new Date()) {
     // minutos" quando o que falta é a virada da hora seria chute.
   }
 
+  const pausa = await estadoDaPausaDaAbordagem();
+
   return {
     /** O botão do painel (chave `outreach_ativo` no banco). */
     ativo,
     /** A variável `OUTREACH_ENABLED` do Railway. */
     interruptorGeral: config.habilitado,
+    /**
+     * A pausa que o SISTEMA se impôs por concluir que o problema é do nosso
+     * número. Mesmos dois nomes da varredura e da verificação, de propósito: a
+     * tela já sabe desenhar essa dupla, e três nomes diferentes para a mesma
+     * ideia é como um deles fica sem tratamento.
+     *
+     * Fica SEPARADO de `ativo` porque as duas coisas podem ser verdade ao
+     * mesmo tempo, e é essa combinação que a tela precisa saber explicar: o
+     * botão está ligado, como você deixou, e mesmo assim nada sai.
+     */
+    pausadaPorErro: pausa.pausada,
+    motivoPausa: pausa.motivo,
+    pausadaDesde: pausa.desde,
     dentroDaJanela: janelaFechada(config, agora) === null,
     janela: { inicio: config.horaInicio, fim: config.horaFim },
     naFila,
@@ -293,6 +309,11 @@ router.post("/outreach/ativo", async (req, res) => {
     }
 
     await definirOutreachAtivo(ativo);
+    // Ligar é o gesto que também tira a pausa automática. É a única forma de
+    // sair dela, e é de gente de propósito: a restrição do WhatsApp tem hora
+    // para acabar, mas quem sabe se acabou é quem olha o aparelho — voltar
+    // sozinho, cedo demais, agrava a punição em vez de retomar o trabalho.
+    if (ativo) await retomarAbordagem();
     req.log.info({ ativo }, "Abordagem ligada/desligada pelo painel");
 
     res.json(await montarStatusDaAbordagem());

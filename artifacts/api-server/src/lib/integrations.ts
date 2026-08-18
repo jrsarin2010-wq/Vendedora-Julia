@@ -167,6 +167,73 @@ export interface EnvioWhatsApp {
    * instabilidade.
    */
   falhaPermanente: boolean;
+  /**
+   * A falha é do NOSSO lado — a sessão do WhatsApp caiu, ou o número da Júlia
+   * foi restringido pelo WhatsApp. O lead não tem nada com isso: não conta
+   * tentativa, e é o sinal que pausa a abordagem inteira (lib/restricao.ts).
+   *
+   * Vem junto de `falhaPermanente: false`, e não como um terceiro valor de um
+   * enum, porque quem chama precisa das duas respostas ao mesmo tempo: "conto
+   * strike neste lead?" e "paro tudo?" são perguntas diferentes.
+   */
+  bloqueioNosso: boolean;
+}
+
+/**
+ * ASSINATURAS DE PROBLEMA NOSSO dentro de um 400.
+ *
+ * A Evolution devolve 400 para duas coisas muito diferentes: "este
+ * destinatário não existe" (que é do número) e "minha sessão caiu" (que é
+ * nossa). Em 18/08/2026 o corpo veio assim, com o número da Júlia restringido
+ * pelo WhatsApp por 23h:
+ *
+ *   {"status":400,"error":"Bad Request",
+ *    "response":{"message":["Error: Connection Closed"]}}
+ *
+ * Lido como rejeição do destinatário, condenou três dentistas com número bom.
+ *
+ * A lista é de assinaturas NOSSAS, e não de assinaturas do número, porque o
+ * default seguro é o oposto em cada caso: um lead mantido na fila por engano
+ * custa um retry; um lead condenado por engano sai da fila para sempre. Mas
+ * ela não é a única defesa — a rajada de leads diferentes em lib/restricao.ts
+ * pega o mesmo problema sem depender de reconhecer frase nenhuma, e é ela que
+ * continua de pé quando a Evolution inventar uma mensagem nova.
+ */
+const ASSINATURAS_DE_BLOQUEIO_NOSSO = [
+  "connection closed",
+  "connection lost",
+  "connection terminated",
+  "not connected",
+  "instance not",
+  "instance is not",
+  "close connection",
+  "socket",
+  "unauthorized",
+  "forbidden",
+  "spam",
+  "banned",
+  "blocked",
+  "restrict",
+];
+
+/**
+ * Separa "o número é ruim" de "nós estamos impedidos de enviar". Função pura,
+ * exportada para o teste — é a regra que já condenou lead bom uma vez.
+ */
+export function classificarFalhaDeEnvio(
+  status: number,
+  corpo: string,
+): { falhaPermanente: boolean; bloqueioNosso: boolean } {
+  const texto = (corpo ?? "").toLowerCase();
+  const nosso = ASSINATURAS_DE_BLOQUEIO_NOSSO.some((a) => texto.includes(a));
+
+  // 401/403/404 são configuração nossa; 5xx e timeout são infra. Nenhum deles
+  // fala do destinatário, e nenhum pode contar tentativa contra o lead.
+  if (status !== 400) {
+    return { falhaPermanente: false, bloqueioNosso: status === 401 || status === 403 };
+  }
+  if (nosso) return { falhaPermanente: false, bloqueioNosso: true };
+  return { falhaPermanente: true, bloqueioNosso: false };
 }
 
 /**
@@ -176,11 +243,11 @@ export interface EnvioWhatsApp {
  * andamento o diagnóstico não muda a decisão (fica gravado no log dos dois
  * jeitos).
  *
- * O critério de "permanente" é o HTTP 400: é o status que a Evolution devolve
- * quando o destinatário não existe no WhatsApp ou o número é malformado —
- * problemas que são DESTE número. 401/403/404 são configuração NOSSA errada e
- * 5xx/timeout são infra; nos dois casos o lead não tem culpa, então contam
- * como transitórias.
+ * O critério de "permanente" era o HTTP 400 puro, e isso estava ERRADO: a
+ * Evolution usa 400 tanto para "o destinatário não existe" quanto para "minha
+ * sessão caiu". Quem decide agora é `classificarFalhaDeEnvio`, que lê o corpo.
+ * 401/403/404 são configuração NOSSA errada e 5xx/timeout são infra; nos dois
+ * casos o lead não tem culpa, então contam como transitórias.
  */
 export async function enviarWhatsAppComDiagnostico(
   phone: string,
@@ -190,7 +257,7 @@ export async function enviarWhatsAppComDiagnostico(
   const { base, chave } = configEvolution();
   if (!base || !chave) {
     logger.warn({ phone }, "Evolution API not configured — skipping WhatsApp send");
-    return { entregue: false, falhaPermanente: false };
+    return { entregue: false, falhaPermanente: false, bloqueioNosso: false };
   }
 
   const atraso = tempoDeDigitacao(message, primeiraResposta);
@@ -214,14 +281,18 @@ export async function enviarWhatsAppComDiagnostico(
 
     if (!response.ok) {
       const body = await response.text();
-      logger.error({ phone, status: response.status, body }, "Evolution API error");
-      return { entregue: false, falhaPermanente: response.status === 400 };
+      const veredicto = classificarFalhaDeEnvio(response.status, body);
+      logger.error(
+        { phone, status: response.status, body, ...veredicto },
+        "Evolution API error",
+      );
+      return { entregue: false, ...veredicto };
     }
     await anotarIdEnviado(response, phone);
-    return { entregue: true, falhaPermanente: false };
+    return { entregue: true, falhaPermanente: false, bloqueioNosso: false };
   } catch (err) {
     logger.error({ err, phone }, "Failed to send WhatsApp message");
-    return { entregue: false, falhaPermanente: false };
+    return { entregue: false, falhaPermanente: false, bloqueioNosso: false };
   }
 }
 

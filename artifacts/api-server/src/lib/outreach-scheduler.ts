@@ -26,6 +26,13 @@ import {
   EXPLICACAO_INELEGIVEL,
 } from "./outreach";
 import { outreachAtivoNoPainel } from "./configuracoes";
+import {
+  estadoDaPausaDaAbordagem,
+  motivoDaPausa,
+  pausarAbordagem,
+  registrarEnvioEntregue,
+  registrarFalhaDeEnvio,
+} from "./restricao";
 import { gerarMensagemDeAbordagem } from "./outreach-message";
 import { ABORDAGEM_TOQUES, ABORDAGEM_DELAYS_HOURS } from "../julia-persona";
 
@@ -65,6 +72,18 @@ export async function rodarCicloDeAbordagem(
   // pelo webhook, que não consulta nada disto.
   if (!(await outreachAtivoNoPainel())) {
     return { enviou: false, motivo: "desligado_no_painel" };
+  }
+
+  // TERCEIRA TRAVA (18/08/2026): a pausa que o SISTEMA se impõe quando conclui
+  // que o problema é do nosso número, e não dos leads.
+  //
+  // Vem depois do botão porque é a mais cara de ler e a mais rara de valer, e
+  // fica numa chave SEPARADA do `outreach_ativo` de propósito: virar o botão
+  // do dono por baixo dele é o que produziria de novo a confusão de "eu tinha
+  // desligado e estava ligado". Aqui a tela diz as duas coisas ao mesmo tempo.
+  const pausa = await estadoDaPausaDaAbordagem();
+  if (pausa.pausada) {
+    return { enviou: false, motivo: "pausada_por_erro_nosso" };
   }
 
   // Envios FRIOS recentes — aberturas E toques (Rodada 51, lib/ritmo-frio.ts).
@@ -167,18 +186,43 @@ export async function rodarCicloDeAbordagem(
   // uma chamada de modelo. Na terceira, desiste-se do número (ver
   // lib/nao-entregavel.ts) e a fila anda.
   if (!envio.entregue) {
-    if (envio.falhaPermanente) {
+    // A RAJADA vem primeiro, e conta TODA falha de envio — inclusive a que
+    // parece ser do número. Se leads DIFERENTES falham em sequência, o
+    // problema não é dos números, e essa conclusão não pode depender de a
+    // gente ter reconhecido a frase de erro.
+    const rajada = registrarFalhaDeEnvio(lead.id);
+
+    // Bloqueio nosso NÃO conta tentativa contra o lead. É o conserto do
+    // incidente de 18/08: o WhatsApp restringiu o número da Júlia, todo envio
+    // voltou 400 "Connection Closed", e a regra antiga leu isso como "este
+    // número não existe" — três dentistas com número bom saíram da fila.
+    if (envio.falhaPermanente && !envio.bloqueioNosso) {
       const { desistiu } = await registrarFalhaPermanente(lead, "abordagem");
       if (desistiu) {
         return { enviou: false, motivo: "nao_entregavel", leadId: lead.id };
       }
     }
+
+    if (rajada.deveParar) {
+      await pausarAbordagem(
+        motivoDaPausa(
+          rajada.leadsSeguidos,
+          envio.bloqueioNosso ? "a Evolution recusou o envio pelo NOSSO lado" : "envio recusado",
+        ),
+        agora,
+      );
+      return { enviou: false, motivo: "pausada_por_erro_nosso", leadId: lead.id };
+    }
+
     logger.error(
-      { leadId: lead.id, phone: lead.phone },
+      { leadId: lead.id, phone: lead.phone, bloqueioNosso: envio.bloqueioNosso },
       "Abordagem NÃO entregue — lead segue na fila",
     );
     return { enviou: false, motivo: "nao_entregue", leadId: lead.id };
   }
+
+  // Entregou: o caminho está aberto, a rajada morre aqui.
+  registrarEnvioEntregue();
 
   await db.insert(leadMessagesTable).values({
     leadId: lead.id,

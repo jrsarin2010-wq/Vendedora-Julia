@@ -21,6 +21,13 @@ import { datasDeEnviosFrios } from "./ritmo-frio";
 import { outreachAtivoNoPainel } from "./configuracoes";
 import { registrarFalhaPermanente, limparFalhasDeEnvio } from "./nao-entregavel";
 import {
+  estadoDaPausaDaAbordagem,
+  motivoDaPausa,
+  pausarAbordagem,
+  registrarEnvioEntregue,
+  registrarFalhaDeEnvio,
+} from "./restricao";
+import {
   ABORDAGEM_TOQUES,
   ABORDAGEM_DELAYS_HOURS,
   TOQUES_REATIVACAO,
@@ -128,6 +135,31 @@ const REATIVACOES_POR_CICLO = 1;
 export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<void> {
   try {
     const now = agora;
+
+    // A PAUSA POR ERRO NOSSO GOVERNA TODO O CICLO, inclusive o toque de
+    // CONVERSA — e é a única trava da abordagem que faz isso.
+    //
+    // As outras não valem aqui de propósito (o botão do painel governa quem
+    // ainda NÃO conversa; a cota diária protege contra volume frio). Esta vale,
+    // e a diferença é o que está em jogo: quando o WhatsApp restringe o número,
+    // qualquer mensagem que NÓS iniciamos agrava a punição, e o toque de
+    // conversa é uma mensagem que nós iniciamos — o dentista não pediu por ela
+    // naquele instante.
+    //
+    // Foi o que aconteceu em 18/08/2026: desligar a abordagem no painel parou
+    // as aberturas e NÃO parou os toques de conversa, que continuaram batendo
+    // no número restringido e queimando a cadência de conversas vivas.
+    //
+    // Responder quem escreveu continua liberado: isso é o webhook, não passa
+    // por aqui, e é justamente o que a restrição do WhatsApp não proíbe.
+    const pausa = await estadoDaPausaDaAbordagem();
+    if (pausa.pausada) {
+      logger.warn(
+        { motivo: pausa.motivo },
+        "Follow-up parado: a abordagem está pausada por erro nosso. Nenhum toque sai enquanto isso",
+      );
+      return;
+    }
     let toquesFriosNesteCiclo = 0;
     let reativacoesNesteCiclo = 0;
     // Contado no banco (não em memória) para o limite diário sobreviver a
@@ -423,15 +455,39 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       // pendentes deste lead — este toque incluso — e avisa o Telegram. Vale
       // para qualquer cadência: se o número não recebe, adiar não conserta.
       if (!envio.entregue) {
-        if (envio.falhaPermanente) {
+        // Mesma rajada da abordagem, e de propósito o MESMO contador: os dois
+        // agendadores saem pelo mesmo número de WhatsApp, então uma restrição
+        // atinge os dois. Contadores separados precisariam de três leads em
+        // CADA um para concluir a mesma coisa, e dobrariam o estrago.
+        const rajada = registrarFalhaDeEnvio(lead.id);
+
+        // Bloqueio nosso não conta tentativa contra o lead. Aqui a conta é
+        // ainda mais cara que na abordagem: ao desistir, TODOS os follow-ups
+        // pendentes deste lead são cancelados — inclusive os de uma conversa
+        // viva, que a restrição do WhatsApp nem sequer impede de continuar.
+        if (envio.falhaPermanente && !envio.bloqueioNosso) {
           const { desistiu } = await registrarFalhaPermanente(
             lead,
             `toque de ${followUp.kind}`,
           );
           if (desistiu) continue;
         }
+
+        if (rajada.deveParar) {
+          await pausarAbordagem(
+            motivoDaPausa(
+              rajada.leadsSeguidos,
+              envio.bloqueioNosso
+                ? "a Evolution recusou o envio pelo NOSSO lado"
+                : "envio recusado",
+            ),
+            now,
+          );
+          return;
+        }
+
         logger.error(
-          { leadId: lead.id, touchNumber: followUp.touchNumber },
+          { leadId: lead.id, touchNumber: followUp.touchNumber, bloqueioNosso: envio.bloqueioNosso },
           "Follow-up NÃO entregue — segue pendente para nova tentativa",
         );
         continue;
@@ -440,6 +496,8 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       // Entregou: zera a contagem de falhas permanentes, que precisa ser de
       // falhas SEGUIDAS para condenar um número (só escreve se havia o quê).
       await limparFalhasDeEnvio(lead);
+      // Entregou: o caminho esta aberto, a rajada morre aqui.
+      registrarEnvioEntregue();
 
       // Save outbound follow-up message
       await db.insert(leadMessagesTable).values({

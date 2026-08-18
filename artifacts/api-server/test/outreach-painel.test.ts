@@ -411,7 +411,7 @@ abordagemNoPainel(true);
 const resposta = await chamarRota(statusHandler, {});
 ok("status 200", resposta.status === 200, JSON.stringify(resposta.body));
 ok(
-  "com as oito chaves do contrato, e só elas",
+  "com as onze chaves do contrato, e só elas",
   JSON.stringify(Object.keys(resposta.body as object).sort()) ===
     JSON.stringify([
       "abordadosNas24h",
@@ -420,7 +420,13 @@ ok(
       "dentroDaJanela",
       "interruptorGeral",
       "janela",
+      // A pausa que o SISTEMA se impõe (18/08/2026). Três chaves e não uma
+      // porque a tela precisa dizer QUE parou, POR QUE parou e DESDE quando —
+      // e porque `ativo` continua sendo a resposta do dono, não do sistema.
+      "motivoPausa",
       "naFila",
+      "pausadaDesde",
+      "pausadaPorErro",
       "proximoEnvioEm",
     ]),
   JSON.stringify(Object.keys(resposta.body as object).sort()),
