@@ -59,6 +59,11 @@ import {
 } from "../lib/temperatura";
 import { REPLY_MODEL, EXTRACTION_MODEL } from "../lib/modelos";
 import {
+  perguntasRepetidas,
+  registrarDescoberta,
+  TOPICO_PT,
+} from "../lib/descoberta";
+import {
   ehPessoa,
   lerInterlocutor,
   mereceFollowUp,
@@ -678,6 +683,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
       totalMessages: history.length,
       origin: lead.origin,
       interlocutor: lead.interlocutor,
+      descoberta: lead.descoberta,
     });
 
     const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
@@ -842,6 +848,31 @@ router.post("/webhook/whatsapp", async (req, res) => {
         "julia_estranha",
         "A resposta não foi entregue no WhatsApp.",
       );
+    } else if (perguntasRepetidas(textoLimpo, lead.descoberta).length > 0) {
+      // A CERCA DA PORTA DE SAIDA (Rodada 54).
+      //
+      // O prompt manda perguntar uma vez so, e a ficha diz o que ja saiu. Isto
+      // aqui e o que acontece quando ela desobedece assim mesmo: instrucao de
+      // modelo reduz frequencia, nao impede — a mesma licao do nome inventado.
+      //
+      // NAO bloqueia a mensagem, e nao daria: quando isto roda o texto dela ja
+      // existe, e reescrever a fala de um modelo por regex seria pior que o
+      // defeito. O que ela faz e transformar uma regressao silenciosa em alarme
+      // na central. Causa 4 e a unica das cinco que vive fora do alcance do
+      // teste; sem este gatilho, a unica forma de descobrir que ela voltou a
+      // insistir seria um dentista reclamando.
+      const repetidas = perguntasRepetidas(textoLimpo, lead.descoberta);
+      await marcarAtencao(
+        lead,
+        "julia_estranha",
+        `Ela perguntou de novo o que ele já respondeu: ${repetidas
+          .map((t) => TOPICO_PT[t])
+          .join(", ")}.`,
+      );
+      req.log.warn(
+        { leadId: lead.id, topicos: repetidas },
+        "Pergunta repetida — a porta de saida nao foi respeitada",
+      );
     } else if (respostaRepetida(textoLimpo, respostaAnterior)) {
       await marcarAtencao(
         lead,
@@ -958,6 +989,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         duvidaDoSite?: string | null;
         sinais?: string[];
         interlocutor?: string | null;
+        descoberta?: Record<string, unknown> | null;
       };
 
       // Sinais de temperatura. A validação de nome fica em registrarSinais
@@ -975,6 +1007,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         funnelStage?: FunnelStage;
         duvidaDoSite?: string;
         interlocutor?: Interlocutor;
+        descoberta?: string;
         updatedAt?: Date;
       } = {};
       // QUEM ESTA DO OUTRO LADO, segunda camada. Sobrescreve em QUALQUER
@@ -982,6 +1015,15 @@ router.post("/webhook/whatsapp", async (req, res) => {
       // extrator le a conversa inteira, entao e ele que enxerga a pessoa
       // assumindo depois do robo, ou o "sou da equipe da doutora" que nenhuma
       // lista de palavras alcanca. Valor invalido vira "nao_sei" e nao grava.
+      // O QUE JA FOI PERGUNTADO. Funde com o que ja estava guardado em vez de
+      // substituir: um turno em que o extrator nao enxergou o assunto nao pode
+      // apagar o que se sabia, senao a pergunta volta — que e o defeito, nao o
+      // conserto. A precedencia mora em registrarDescoberta.
+      const descobertaAgora = registrarDescoberta(lead.descoberta, parsed.descoberta);
+      if (descobertaAgora && descobertaAgora !== (lead.descoberta ?? "")) {
+        update.descoberta = descobertaAgora;
+      }
+
       const quemAgora = lerInterlocutor(parsed.interlocutor);
       if (quemAgora !== "nao_sei" && quemAgora !== lerInterlocutor(lead.interlocutor)) {
         update.interlocutor = quemAgora;
@@ -1091,6 +1133,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         // Reflete em memoria: as travas de temperatura e de follow-up logo
         // abaixo leem este campo, e sem isto so valeriam na passada seguinte.
         if (update.interlocutor) lead.interlocutor = update.interlocutor;
+        if (update.descoberta) lead.descoberta = update.descoberta;
       }
 
       // Virou cliente? Para de vender pra quem já comprou.

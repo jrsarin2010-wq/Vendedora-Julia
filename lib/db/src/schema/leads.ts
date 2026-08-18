@@ -130,6 +130,21 @@ export const leadsTable = pgTable("leads", {
   // Quem decide o que fazer com cada caso é o prompt, não a coluna — aqui mora
   // o fato. Mesma divisão da `nota` do Google.
   interlocutor: text("interlocutor"),
+  // O QUE JA FOI PERGUNTADO NA DESCOBERTA, e o que ele respondeu.
+  // Formato "anuncia=instagram;profissionais=2;verba=sem_resposta", mesmo
+  // espirito do `sinaisVistos`: lista pequena, vocabulario fechado, validada em
+  // codigo (api-server/src/lib/descoberta.ts).
+  //
+  // Existe porque a ficha do lead nao guardava NEM o que foi perguntado NEM a
+  // resposta — a unica memoria era a janela de 20 mensagens, e passado disso a
+  // mesma pergunta voltava como se fosse a primeira vez. Numa conversa real a
+  // pergunta sobre anuncio saiu seis vezes, com duas recusas no meio.
+  //
+  // `sem_resposta` e um valor legitimo, nao ausencia: significa "perguntei e
+  // ele desconversou", e vale tanto quanto uma resposta para efeito de NAO
+  // repetir. Nao confundir com `sinaisVistos`, que guarda PONTUACAO de
+  // interesse; aqui mora o CONTEUDO da resposta.
+  descoberta: text("descoberta"),
   notes: text("notes"),
   // Áudios de demonstração já enviados a este lead, separados por vírgula
   // ("vou_pensar,fora_do_horario"). É o que impede repetir a mesma demo, que

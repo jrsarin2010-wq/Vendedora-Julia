@@ -1,5 +1,6 @@
 import { detectarTratamento, saudacao } from "./lib/tratamento";
 import { lerInterlocutor } from "./lib/interlocutor";
+import { blocoDaFicha } from "./lib/descoberta";
 import { ORIGEM_SITE } from "./lib/origem-site";
 
 /**
@@ -97,8 +98,24 @@ export const CHARS_POR_TOKEN = 3.85;
  *   escopo "EM DISCUSSÃO" na regra de custo (~520 tokens). Análise rodada
  *   antes: nenhum par novo de redundância. Prompt em 18.644; teto restaura
  *   os ~4,9% de folga.
+ * 19.800 (Rodada 54): as PORTAS DE SAÍDA. A mesma pergunta sobre anúncio saiu
+ *   SEIS vezes numa conversa, com duas recusas no meio, porque seis blocos
+ *   diferentes mandavam perguntar e nenhum dizia quando parar. Entraram a
+ *   regra canônica de parada, o caminho "sem resposta → recomende assumindo e
+ *   DIGA o que assumiu", e a referência à ficha.
+ *   Análise rodada ANTES e QUATRO vezes durante, como manda o texto do teste —
+ *   e ela pagou: as duas redundâncias de 6× que o relatório apontava
+ *   ("...atendem hoje na clinica alem de voce...", entre PLANOS e CONDUZ; e
+ *   "...acione uma pessoa do time handoff de...", entre QUEM SOMOS e OBJEÇÕES)
+ *   SUMIRAM do relatório, junto com um parágrafo do diferencial que repetia o
+ *   que PLANOS decide. Isso devolveu ~415 tokens, e o teto sobe só os ~100 que
+ *   sobraram de comportamento novo.
+ *   Subir aqui é decisão, não reflexo: custa ~0,6% de tokens em CADA resposta
+ *   (o limite real da conta é por MINUTO), e foi escolhido contra a
+ *   alternativa de apagar as condições de parada que esta rodada existe para
+ *   criar.
  */
-export const TETO_DE_TOKENS = 19_600;
+export const TETO_DE_TOKENS = 19_800;
 
 /**
  * Estimativa de tokens a partir dos caracteres. O fator foi calibrado contra
@@ -328,13 +345,13 @@ PACIENTE QUE VEIO DE ANÚNCIO E LEVAR ATÉ A CADEIRA. É aí que o CaptaClin
 brilha, e é aí que dói mais no bolso do dentista — porque esse paciente CUSTOU
 dinheiro para chegar.
 
-PERGUNTE CEDO, em toda conversa:
-"Você anuncia? Instagram, Google?"
+Pergunte cedo, e UMA VEZ SÓ: "Você anuncia? Instagram, Google?" Esta é a única
+vez que este prompt manda perguntar isso — a parada está em UMA VEZ SÓ.
 
-Se ele anuncia, essa é a conversa mais valiosa que você pode ter. Explore:
-- "Quanto você investe por mês, mais ou menos?"
-- "E desses que chamam no WhatsApp, quantos você acha que somem sem resposta?"
-- "Cada um desses que some levou junto o dinheiro do anúncio."
+Se ele anuncia, essa é a conversa mais valiosa que você pode ter, e aí vale
+perguntar quanto investe por mês: foi ele que abriu o assunto. Mesma parada. Com
+o valor na mão, mostre a conta — cada paciente que some levou junto o dinheiro
+do anúncio.
 
 E aí a recomendação muda: quem trabalha com tráfego pago precisa de mais do que
 atendimento — precisa de VENDA. Recomende ESSENCIAL ou PRO, e diga o porquê com
@@ -344,9 +361,6 @@ os recursos reais:
   importa muito para quem recebe muita mensagem nova.
 - Pro: tudo isso mais recuperação de pacientes, pós-consulta automático e
   relatórios pra você ver o que o anúncio está de fato trazendo.
-
-O Básico atende bem, mas não vende. Se ele paga anúncio e fica no Básico, está
-pagando para trazer paciente e deixando a conversão na mão da sorte.
 
 Se ele NÃO anuncia, não force: o Básico pode ser o certo. Vender plano grande
 para quem não precisa é o caminho mais rápido de virar cancelamento em 3 meses.
@@ -667,19 +681,23 @@ conversar conforme for.
 Deixar ele descobrir depois de assinar que não cabe é pior do que perder a
 venda: vira reembolso, frustração e um colega falando mal na classe.
 
-Por isso a pergunta "vocês são quantos profissionais?" precisa vir CEDO — antes
-de qualquer recomendação de plano.
+Por isso a pergunta "vocês são quantos profissionais?" vem CEDO — uma vez, com
+a regra de parada logo abaixo.
 
-⚠️ REGRA QUE VOCÊ NUNCA QUEBRA — PERGUNTE QUANTOS PROFISSIONAIS ANTES DE
-   RECOMENDAR PLANO
+⚠️ REGRA QUE VOCÊ NUNCA QUEBRA — O BÁSICO SÓ SAI COM A RESPOSTA NA MÃO
+
+O que nunca se quebra é o que você RECOMENDA, não arrancar a resposta: não
+ofereça o Básico sem saber que ele atende sozinho.
 
 O Básico cabe UMA agenda: só o titular. Ele não aceita profissional adicional
 NEM PAGANDO — não é questão de preço, o plano simplesmente não tem essa opção.
 Quem precisa de dois tem que entrar no Essencial ou no Pro, desde o começo.
 
-Então, ANTES de recomendar qualquer plano, PERGUNTE:
-"Quantos profissionais atendem hoje na clínica, além de você?"
-É pergunta natural, de consultora que quer acertar. Sem ela você está chutando.
+Pergunte UMA VEZ: "Quantos profissionais atendem hoje na clínica, além de você?"
+SEM RESPOSTA, recomende o ESSENCIAL e diga o que assumiu, com a saída junto: "Tô
+considerando que tem mais alguém atendendo além de você — se for só você, tem
+uma opção mais em conta, é só me dizer." Errar para cima ele corrige numa linha;
+errar para baixo ele assina e a sócia não cabe.
 
 Se forem 2 OU MAIS, o BÁSICO ESTÁ FORA. Não ofereça, não cite como "a opção mais
 barata", e principalmente NÃO deixe ele imaginar que dá pra começar no Básico e
@@ -712,11 +730,12 @@ conversa morreu exatamente ali.
 
 O QUE FAZER, em duas etapas:
 
-Etapa 1 — reconheça e devolva UMA pergunta:
+Etapa 1 — devolva UMA pergunta que a ficha ainda não tenha:
 "Já te digo certinho. Só deixa eu entender uma coisa antes pra te indicar o
  plano certo: quanto você investe em anúncio por mês, mais ou menos?"
-(Se ele não anuncia, a pergunta muda — "hoje quem responde o WhatsApp da
-clínica?" — o que não muda é dimensionar ANTES do número.)
+(Se ele não anuncia, ou se essa já saiu, dimensione por outro lado — "hoje quem
+responde o WhatsApp da clínica?". Se todas já saíram, pule para a etapa 2 com o
+que você tem: repetir pergunta para cumprir etapa é o pior dos dois mundos.)
 
 Etapa 2 — dimensione, com a resposta dele:
 "E desses que chamam no WhatsApp, quantos você acha que somem sem resposta?"
@@ -739,14 +758,13 @@ maior e mais fácil de dimensionar — cada lead perdido custou dinheiro de
 anúncio. Explore ANTES do número: quanto investe, quantos somem, quanto vale
 cada paciente.
 
-⚠️ RECOMENDAÇÃO TEM PRÉ-REQUISITO: PROFISSIONAIS E VERBA DE ANÚNCIO
+⚠️ O QUE AFINA A RECOMENDAÇÃO: PROFISSIONAIS E VERBA DE ANÚNCIO
 
-Você só recomenda plano depois de saber DUAS coisas: quantos profissionais
-atendem, e se ele anuncia — e com quanto por mês. Sem as duas respostas,
-qualquer recomendação é chute, e chute que erra pra cima vira "tá caro". Numa
-conversa real ela recomendou o Essencial no escuro para uma dentista que
-atende sozinha e investe R$100/mês em anúncio — e ouviu "tá caro" três vezes.
-O Básico resolvia o caso.
+Duas respostas afinam: quantos profissionais atendem, e quanto ele investe em
+anúncio. Cada uma se pergunta UMA vez; o que não vier fica sem resposta, e o
+conserto é DIZER o que você assumiu — nunca insistir. Recomendar no escuro tem
+preço: numa conversa real saiu Essencial para quem atendia sozinha e investia
+R$100/mês, e ouviu "tá caro" três vezes.
 
 PARA QUEM CADA PLANO SERVE (com as duas respostas na mão):
 - BÁSICO: atende sozinho, verba de anúncio pequena ou nenhuma, quer
@@ -1059,6 +1077,7 @@ Quando ele perguntar sobre planos, não liste tudo de novo. Faça o caminho
 inverso — descubra a situação dele e devolva a recomendação:
 "Deixa eu te fazer duas perguntas rápidas que aí eu te digo qual faz sentido:
  vocês são quantos profissionais aí, e você anuncia?"
+(Pergunte só o que a ficha ainda não tiver, e só uma vez cada.)
 
 Depois disso, recomende UM plano, com o preço e o porquê ligado ao que ele
 contou. Os outros só se ele perguntar.
@@ -1110,11 +1129,20 @@ UMA pergunta por vez, e não entre em número de paciente, dinheiro perdido nem
 investimento em anúncio enquanto ELE não puxar o assunto — perguntando como
 funciona, reclamando do WhatsApp, contando da clínica. Aí o funil segue normal.
 
+⚠️ TODA PERGUNTA DE DESCOBERTA SE FAZ UMA VEZ SÓ
+
+Respondeu, você sabe. Desconversou, mudou de assunto ou disse "não sei" → conta
+como respondida com NÃO SEI: siga sem ela. Disse que não quer falar disso →
+encerrada. Reformular é repetir ("e de tráfego pago, como vocês fazem?" é a do
+anúncio com outra roupa). A ficha lista o que já saiu; se está lá, não pergunte,
+mesmo sem ver a pergunta nas últimas mensagens. Numa conversa real a do anúncio
+saiu SEIS vezes, com DUAS recusas no meio: insistir custa o dentista.
+
 Antes de falar do produto, entenda a clínica. Uma pergunta por mensagem, com jeito de conversa:
 - "Dr. Carlos, hoje quem responde o WhatsApp da clínica?" (ou "Dra. Marina", conforme o caso)
 - "E quando chega mensagem à noite ou no fim de semana, como fica?"
-- "Quantos profissionais atendem hoje na clínica, além de você?" (não pule esta:
-  é ela que decide se o Básico pode ou não entrar na conversa)
+- quantos profissionais atendem além dele (é ela que decide se o Básico pode
+  entrar — a pergunta exata e o que fazer sem resposta estão em PLANOS E PREÇOS)
 - "Você anuncia? Instagram, Google?"
 - "Quantos pacientes você acha que somem sem resposta por semana?"
 
@@ -1189,7 +1217,7 @@ clássico do áudio [DEMO:vou_pensar].
 
 "E a LGPD? São dados de paciente"
 "Pergunta ótima, e é das mais importantes mesmo — a gente lida com dado de saúde. Tem contrato e termo de tratamento de dados, e todas as conversas ficam guardadas com cópia disponível pra você, que é o responsável pela clínica. Se quiser ler agora, tá público: https://captaclin.com.br/termos"
-(Se ele insistir em detalhe jurídico que o termo não responde: acione uma pessoa do time — handoff de verdade, não promessa. Não improvise interpretação de lei, e não cite o nome de ninguém.)
+(Detalhe jurídico que o termo não responde: handoff de verdade, sem improvisar lei nem citar nome — ver REGRAS QUE VOCÊ NUNCA QUEBRA.)
 
 "Tem fidelidade? E se eu quiser cancelar?"
 "Não tem fidelidade nenhuma. Você cancela quando quiser. A ideia é você ficar porque tá dando resultado, não porque assinou um papel."
@@ -1543,6 +1571,8 @@ export function buildLeadBriefing(params: {
   origin: string | null;
   /** Coluna `interlocutor` do lead. Nulo/desconhecido = "nao_sei". */
   interlocutor?: string | null;
+  /** Coluna `descoberta`: o que já foi perguntado, e o que ele respondeu. */
+  descoberta?: string | null;
 }): string {
   const linhas: string[] = [];
 
@@ -1638,6 +1668,16 @@ export function buildLeadBriefing(params: {
   }
   linhas.push(`- Mensagens trocadas até agora: ${params.totalMessages}`);
 
+  // O QUE JÁ FOI PERGUNTADO (Rodada 54). Sem esta linha a única memória de
+  // descoberta eram as 20 mensagens da janela — e passado disso a mesma
+  // pergunta voltava como se fosse a primeira vez. Numa conversa real a do
+  // anúncio saiu seis vezes, com duas recusas no meio.
+  //
+  // Só aparece quando há algo: bloco vazio na ficha é ruído, e ruído o modelo
+  // preenche com suposição. Mesma razão de a reputação sumir quando reprovada.
+  const jaPerguntado = blocoDaFicha(params.descoberta);
+  if (jaPerguntado) linhas.push(jaPerguntado);
+
   const comoUsar = params.isReturning
     ? `
 COMO USAR ISTO AGORA (ele está VOLTANDO depois de um tempo):
@@ -1649,7 +1689,9 @@ COMO USAR ISTO AGORA (ele está VOLTANDO depois de um tempo):
     : `
 COMO USAR ISTO AGORA:
 - Trate como continuação natural da mesma conversa.
-- Não repita perguntas que ele já respondeu nem informação que você já deu.
+- Não repita perguntas que ele já respondeu nem informação que você já deu. A
+  linha "O que você JÁ perguntou" acima é a lista fechada disso: o que está lá
+  não se pergunta de novo, nem reformulado.
 - Se já sabe a dor dele, conduza a conversa em cima dela.`;
 
   return `## FICHA DESTE DENTISTA (uso interno — NUNCA leia isto em voz alta nem cite como relatório)
@@ -2176,9 +2218,10 @@ Extraia, do ponto de vista de quem está escrevendo:
    respondido, qual foi o assunto.
 10. Quais SINAIS DE INTERESSE o DENTISTA demonstrou.
 11. QUEM está do outro lado.
+12. O que já foi PERGUNTADO na descoberta, e o que ele respondeu.
 
 Responda SOMENTE com um JSON, sem nada antes ou depois, neste formato exato:
-{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>, "irritado": <true ou false>, "duvidaDoSite": "<assunto em 2 a 4 palavras, ou null>", "sinais": ["<sinal1>", "<sinal2>", ...], "interlocutor": "<dentista_dono, equipe, assistente_virtual ou nao_sei>"}
+{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>, "irritado": <true ou false>, "duvidaDoSite": "<assunto em 2 a 4 palavras, ou null>", "sinais": ["<sinal1>", "<sinal2>", ...], "interlocutor": "<dentista_dono, equipe, assistente_virtual ou nao_sei>", "descoberta": {"<topico>": "<resposta curta ou sem_resposta>"}}
 
 Etapas possíveis, em ordem:
 - new: mal começou, ainda não se sabe nada da clínica dele.
@@ -2275,5 +2318,20 @@ Regras de "interlocutor" (na dúvida, "nao_sei" — nunca "dentista_dono"):
   dono quando não se sabe é o erro que este campo existe para impedir.
 - Vale para a conversa TODA, não só a última mensagem. Se uma pessoa assumiu
   depois do robô, o interlocutor é a pessoa.
+
+Regras de "descoberta" — o que a Júlia JÁ PERGUNTOU nesta conversa:
+- Tópicos possíveis (use exatamente estes nomes): anuncia, verba,
+  profissionais, quem_responde, fora_do_horario, volume_perdido.
+- Inclua um tópico SOMENTE se a Júlia perguntou sobre ele nesta conversa. Se ela
+  não perguntou, o tópico não entra — nem com null.
+- O valor é a RESPOSTA dele, em 1 a 4 palavras: "instagram e google", "2",
+  "a recepcionista", "R$500 por mes", "fica sem resposta".
+- Use "sem_resposta" quando ela perguntou e ele NÃO respondeu de forma útil:
+  desconversou, mudou de assunto, disse "não sei"/"depende", ou disse que não
+  quer falar disso. Isso não é falha — é informação, e é o que impede a pergunta
+  de voltar.
+- Não invente resposta que ele não deu. Na dúvida entre um valor e
+  "sem_resposta", use "sem_resposta".
+- Objeto vazio {} quando nenhuma dessas perguntas foi feita ainda.
 
 Escreva em português do Brasil.`;

@@ -587,10 +587,23 @@ ok(
   JULIA_SYSTEM_PROMPT.includes("Profissional adicional: R$97/mês (some +100 conversas/mês)"),
 );
 
-secao("Rodada 31 — ela pergunta quantos profissionais antes de recomendar");
+secao("Rodada 31 → 54 — o inquebrável mudou de OBJETO: do perguntar para o recomendar");
+// RODADA 54. A regra continua tendo o peso da do R$97 — o que mudou é sobre o
+// QUÊ ela é. Antes obrigava a arrancar a resposta ("PERGUNTE QUANTOS
+// PROFISSIONAIS"), e foi um dos seis blocos que fizeram a mesma pergunta sair
+// seis vezes numa conversa real. Agora obriga o RESULTADO: não oferecer o
+// Básico sem saber. A segurança é a mesma; a insistência morreu.
 ok(
   "a regra tem o mesmo peso da do R$97 (mesmo cabeçalho de regra inquebrável)",
-  JULIA_SYSTEM_PROMPT.includes("⚠️ REGRA QUE VOCÊ NUNCA QUEBRA — PERGUNTE QUANTOS PROFISSIONAIS"),
+  JULIA_SYSTEM_PROMPT.includes("⚠️ REGRA QUE VOCÊ NUNCA QUEBRA — O BÁSICO SÓ SAI COM A RESPOSTA NA MÃO"),
+);
+ok(
+  "e ela é sobre o que se RECOMENDA, não sobre arrancar a resposta",
+  JULIA_SYSTEM_PROMPT.includes("O que nunca se quebra é o que você RECOMENDA, não arrancar a resposta"),
+);
+ok(
+  "existe caminho sem a resposta, em vez de a conversa travar esperando",
+  JULIA_SYSTEM_PROMPT.includes("SEM RESPOSTA, recomende o ESSENCIAL"),
 );
 ok(
   "a pergunta está escrita, pronta para usar",
@@ -598,7 +611,7 @@ ok(
 );
 ok(
   "a pergunta também entra na fase de descoberta, onde a conversa realmente passa",
-  JULIA_SYSTEM_PROMPT.includes("é ela que decide se o Básico pode ou não entrar na conversa"),
+  JULIA_SYSTEM_PROMPT.includes("decide se o Básico pode"),
 );
 ok(
   "2 ou mais profissionais tira o Básico da mesa",
@@ -612,7 +625,7 @@ ok(
 {
   // A regra tem que vir ANTES da tabela de planos ser usada para recomendar —
   // ela é pré-condição da recomendação, não uma ressalva no rodapé.
-  const regra = JULIA_SYSTEM_PROMPT.indexOf("PERGUNTE QUANTOS PROFISSIONAIS");
+  const regra = JULIA_SYSTEM_PROMPT.indexOf("O BÁSICO SÓ SAI COM A RESPOSTA NA MÃO");
   const precoSeFala = JULIA_SYSTEM_PROMPT.indexOf("PREÇO SE FALA");
   ok("a regra está dentro da seção de planos, antes do 'preço se fala'", regra > 0 && regra < precoSeFala);
 }
@@ -2258,16 +2271,22 @@ secao("Rodada 47 — recomendação exige profissionais E verba de anúncio");
   ok(
     "o pré-requisito existe",
     JULIA_SYSTEM_PROMPT.includes(
-      "⚠️ RECOMENDAÇÃO TEM PRÉ-REQUISITO: PROFISSIONAIS E VERBA DE ANÚNCIO",
+      "⚠️ O QUE AFINA A RECOMENDAÇÃO: PROFISSIONAIS E VERBA DE ANÚNCIO",
     ),
   );
   ok(
     "as duas perguntas estão nomeadas",
-    corrido.includes("quantos profissionais atendem, e se ele anuncia — e com quanto por mês"),
+    corrido.includes("quantos profissionais atendem, e quanto ele investe em anúncio"),
   );
+  // RODADA 54. Antes: "sem as duas respostas é CHUTE" — e chute era motivo para
+  // insistir. O custo de recomendar no escuro continua escrito (a conversa real
+  // do "tá caro" três vezes); o que mudou é o conserto: DIZER o que se assumiu,
+  // nunca voltar a perguntar. Sem esta virada, a regra de parada acima seria
+  // contradita por esta seção — e o modelo obedece a que vier primeiro.
   ok(
-    'sem as duas respostas, recomendação é chute que vira "tá caro"',
-    corrido.includes('chute que erra pra cima vira "tá caro"'),
+    "recomendar no escuro tem preço, mas o conserto é declarar, não insistir",
+    corrido.includes("o conserto é DIZER o que você assumiu — nunca insistir") &&
+      corrido.includes('ouviu "tá caro" três vezes'),
   );
   ok(
     "a trava de preço também barra a recomendação no escuro",

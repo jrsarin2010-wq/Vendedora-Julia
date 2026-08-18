@@ -32,6 +32,7 @@ export const leadsTable = {
   notes: "notes",
   painPoints: "painPoints",
   interlocutor: "interlocutor",
+  descoberta: "descoberta",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
 };
