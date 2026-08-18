@@ -83,12 +83,33 @@ const buildDir = path.join(here, ".build");
 rmSync(buildDir, { recursive: true, force: true });
 mkdirSync(buildDir, { recursive: true });
 
-const arquivos = readdirSync(here)
+/**
+ * Filtro opcional: `pnpm test concorrencia webhook` roda só o que casar. Sem
+ * argumento, roda tudo — o comportamento de sempre.
+ *
+ * Existe porque a suíte inteira é cara para responder à única pergunta de um
+ * bloco de conserto ("o conserto pegou?"), e rodá-la a cada passo é o que faz
+ * ninguém rodar teste nenhum. O CI e o commit continuam merecendo tudo.
+ */
+const filtros = process.argv.slice(2);
+
+const todos = readdirSync(here)
   .filter((f) => f.endsWith(".test.ts"))
   .sort();
 
-if (arquivos.length === 0) {
+const arquivos =
+  filtros.length === 0
+    ? todos
+    : todos.filter((f) => filtros.some((alvo) => f.includes(alvo)));
+
+if (todos.length === 0) {
   console.error("Nenhum arquivo *.test.ts encontrado em test/");
+  process.exit(1);
+}
+
+if (arquivos.length === 0) {
+  console.error(`Nenhum teste casou com: ${filtros.join(", ")}`);
+  console.error(`Disponíveis: ${todos.join(", ")}`);
   process.exit(1);
 }
 
@@ -116,7 +137,25 @@ for (const arquivo of arquivos) {
   });
 
   console.log(`\n=== ${arquivo} ===`);
-  const r = spawnSync(process.execPath, [saida], { stdio: "inherit" });
+  const r = spawnSync(process.execPath, [saida], {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      // A JANELA DE AGRUPAMENTO ZERADA é o padrão do teste, do mesmo jeito que
+      // os agendadores recebem o `agora` de fora: relógio de produção dentro de
+      // teste não prova nada e cobra caro. Em produção a janela é de 3s na
+      // abertura e 8s no resto (lib/turno-do-lead.ts); aqui, cada `post` do
+      // driver pagaria isso em tempo de parede, e a suíte passaria de segundos
+      // para minutos sem exercitar nada de novo.
+      //
+      // Quem QUER exercitar a janela sobrescreve no próprio arquivo —
+      // concorrencia.test.ts faz exatamente isso no cenário B. Por isso os
+      // valores entram aqui e não no driver: assim o teste que precisa da
+      // janela consegue tomá-la de volta.
+      AGRUPAMENTO_ABERTURA_MS: "0",
+      AGRUPAMENTO_MS: "0",
+    },
+  });
   if (r.status !== 0) falharam.push(arquivo);
 }
 

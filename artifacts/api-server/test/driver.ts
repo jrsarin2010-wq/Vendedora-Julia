@@ -41,12 +41,23 @@ export async function chamar(body: unknown): Promise<void> {
   await new Promise((r) => setTimeout(r, 20));
 }
 
-/** Como `chamar`, mas zerando banco, envios e logs antes — cenário do zero. */
-export async function post(body: unknown): Promise<void> {
+/**
+ * Zera banco, envios e logs sem entregar payload nenhum.
+ *
+ * Existe para o teste de concorrência, que precisa disparar VÁRIAS chamadas
+ * sem `await` entre elas — coisa que o `post` não permite, porque ele espera a
+ * primeira terminar antes de devolver.
+ */
+export function zerar(): void {
   state.reset();
   wa.reset();
   ctrl.reset();
   logs.length = 0;
+}
+
+/** Como `chamar`, mas zerando banco, envios e logs antes — cenário do zero. */
+export async function post(body: unknown): Promise<void> {
+  zerar();
   await chamar(body);
 }
 

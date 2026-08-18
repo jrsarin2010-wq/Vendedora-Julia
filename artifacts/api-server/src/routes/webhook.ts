@@ -57,6 +57,15 @@ import {
   CADENCIA_POR_FAIXA,
 } from "../lib/temperatura";
 import { REPLY_MODEL, EXTRACTION_MODEL } from "../lib/modelos";
+import {
+  travar,
+  soltar,
+  chegou,
+  foiSuperado,
+  encerrarTurno,
+  esperarSilencio,
+  janelaDeAgrupamentoMs,
+} from "../lib/turno-do-lead";
 
 const router: IRouter = Router();
 
@@ -218,6 +227,14 @@ router.post("/webhook/whatsapp", async (req, res) => {
   // Acknowledge immediately to avoid Evolution API timeout
   res.json({ ok: true });
 
+  // O TURNO DESTE LEAD (ver lib/turno-do-lead.ts). Declarados aqui fora, antes
+  // do try, porque quem os devolve é o `finally` lá embaixo — e ele precisa
+  // alcançá-los em qualquer saída, inclusive nos vários `return` do caminho e
+  // num erro no meio da geração. Trava não devolvida cala o lead para sempre.
+  let chaveDoTurno: string | null = null;
+  let senhaDoTurno = 0;
+  let tokenDaTrava: number | null = null;
+
   try {
     const payload = req.body;
     if (!payload?.data) return;
@@ -318,6 +335,22 @@ router.post("/webhook/whatsapp", async (req, res) => {
         }
       }
     }
+
+    // ————— TURNO DESTE LEAD, ABERTURA —————
+    //
+    // Daqui até a devolução da trava (logo depois de gravar a mensagem) só
+    // roda UM handler por lead de cada vez. É o que impede duas gerações
+    // simultâneas, dois leads com o mesmo telefone (`leads.phone` é UNIQUE: a
+    // segunda inserção estourava e a mensagem sumia neste catch) e duas levas
+    // de follow-up (o cancelamento de um handler caindo entre o cancelamento e
+    // o insert do outro).
+    //
+    // A senha é tirada ANTES da trava, de propósito: ela marca a ordem de
+    // CHEGADA, e é isso que decide quem responde a rajada. Esperar a vez na
+    // fila não pode mudar essa ordem.
+    chaveDoTurno = phone;
+    senhaDoTurno = chegou(phone);
+    tokenDaTrava = await travar(phone);
 
     // Upsert lead.
     //
@@ -506,6 +539,66 @@ router.post("/webhook/whatsapp", async (req, res) => {
       await marcarAtencao(lead, "julia_estranha", text);
     }
 
+    // A conversa ainda não tem resposta NOSSA nenhuma? Então a janela de
+    // silêncio é a curta. A pergunta é feita aqui, com o lead em mãos e a
+    // trava na mão, porque logo abaixo ela já não valeria: entre soltar e
+    // retomar a trava, outro handler pode ter respondido.
+    const jaFalamos =
+      (
+        await db
+          .select()
+          .from(leadMessagesTable)
+          .where(
+            and(
+              eq(leadMessagesTable.leadId, lead.id),
+              eq(leadMessagesTable.direction, "outbound"),
+            ),
+          )
+          .limit(1)
+      ).length > 0;
+
+    // ————— TURNO DESTE LEAD, A JANELA —————
+    //
+    // A trava sai da mão DE PROPÓSITO antes de esperar. Segurando-a durante os
+    // segundos de janela, o handler da mensagem seguinte não conseguiria nem
+    // gravar o que o dentista escreveu — e o grupo nunca se formaria. Solta, as
+    // mensagens da rajada entram todas no histórico, em ordem, e só então uma
+    // delas gera.
+    soltar(chaveDoTurno, tokenDaTrava);
+    tokenDaTrava = null;
+
+    await esperarSilencio(janelaDeAgrupamentoMs(!jaFalamos));
+
+    // Chegou mensagem mais nova enquanto esperávamos? Então esta resposta já
+    // nasceu velha: quem responde é o dono da última, com esta aqui no
+    // histórico. Era exatamente o caso das 19:14 — a mensagem que continuava a
+    // descoberta já estava desatualizada quando a recusa chegou.
+    if (foiSuperado(chaveDoTurno, senhaDoTurno)) {
+      req.log.info(
+        { leadId: lead.id },
+        "Mensagem mais nova chegou na janela — esta não gera resposta",
+      );
+      return;
+    }
+
+    tokenDaTrava = await travar(chaveDoTurno);
+
+    // Passou a janela inteira desde a leitura lá de cima: `pausedUntil`,
+    // `status` e `atencao` podem ter mudado (o humano assumiu no celular, por
+    // exemplo). Seguir com a cópia velha seria trocar uma corrida por outra.
+    const leadAtual = (
+      await db.select().from(leadsTable).where(eq(leadsTable.id, lead.id)).limit(1)
+    )[0];
+    if (leadAtual) lead = leadAtual;
+
+    if (lead.pausedUntil && new Date(lead.pausedUntil).getTime() > Date.now()) {
+      req.log.info(
+        { leadId: lead.id, pausedUntil: lead.pausedUntil },
+        "Humano assumiu durante a janela — não respondendo",
+      );
+      return;
+    }
+
     // Get last N messages for context.
     // Buscamos as N MAIS RECENTES (desc) e depois invertemos para a ordem
     // cronológica (mais antiga → mais nova), que é o que o modelo espera.
@@ -648,14 +741,19 @@ router.post("/webhook/whatsapp", async (req, res) => {
     // sai do texto aqui — o dentista nunca pode ver isso.
     const { texto: textoLimpo, demo: demoPedida } = extrairDemo(reply);
 
-    // É a PRIMEIRA resposta desta conversa? O histórico foi lido depois de
-    // gravar a mensagem que ele acabou de mandar e antes de gravar a resposta,
-    // então numa conversa nova ele tem exatamente uma linha: a dele.
+    // É a PRIMEIRA resposta desta conversa?
     //
     // Quem clicou no botão do site está com a tela aberta, olhando. Os 12
     // segundos de "digitando..." da Rodada 28 fazem ele achar que não tem
     // ninguém — aqui o teto cai para 3s (ver PRIMEIRA_RESPOSTA_MAXIMO_MS).
-    const primeiraResposta = history.length <= 1;
+    //
+    // A pergunta é "já falamos com ele?", e não mais "o histórico tem uma linha
+    // só?". A contagem funcionava enquanto cada mensagem dele virava uma
+    // resposta; com a rajada agrupada, um "Ola julia" + "Renata" chega ao
+    // histórico como DUAS linhas e a primeira resposta da conversa perderia o
+    // teto de 3s — justamente no caso que o agrupamento existe para juntar.
+    // `jaFalamos` é a mesma pergunta que escolheu a janela lá em cima.
+    const primeiraResposta = !jaFalamos;
 
     let delivered = false;
     if (textoLimpo) {
@@ -1191,6 +1289,17 @@ router.post("/webhook/whatsapp", async (req, res) => {
     }
   } catch (err) {
     req.log.error({ err }, "Webhook processing error");
+  } finally {
+    // A trava volta em QUALQUER saída — os vários `return` do caminho, o erro
+    // no meio da geração, o corte por spam. Uma trava esquecida não faz barulho
+    // nenhum: ela simplesmente cala aquele lead para sempre, e o sintoma
+    // (dentista sem resposta) aparece longe da causa.
+    if (chaveDoTurno !== null && tokenDaTrava !== null) {
+      soltar(chaveDoTurno, tokenDaTrava);
+    }
+    if (chaveDoTurno !== null) {
+      encerrarTurno(chaveDoTurno, senhaDoTurno);
+    }
   }
 });
 
