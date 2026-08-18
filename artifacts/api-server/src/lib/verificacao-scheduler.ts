@@ -233,11 +233,17 @@ export async function rodarCicloDeVerificacao(
 
   // A DISTRIBUIÇÃO do lote, em toda rodada.
   //
-  // Ninguém testou o endpoint com telefone FIXO: a suposição é que ele volta
-  // `exists: false` limpo, como o número inexistente. Se vier diferente, é
-  // aqui que aparece — um `indeterminados` alto no primeiro lote significa que
-  // a suposição caiu e a regra muda. O warn de jid ilegível, dentro de
-  // canonicalizar-telefone.ts, é a outra metade dessa auditoria.
+  // A suposição sobre telefone FIXO CAIU, e para o lado bom: esperava-se
+  // `exists: false` limpo, como o número inexistente, e a 123 Odonto (fixo,
+  // DDD 85) voltou existindo e virou `apto`. Fixo continua entrando na fila
+  // por isso — ver o cabeçalho de `triar()`.
+  //
+  // O que esta distribuição ainda audita: `indeterminados` alto num lote
+  // significa Evolution instável, não telefone estranho. O warn de jid
+  // ilegível, dentro de canonicalizar-telefone.ts, é a outra metade. E a
+  // proporção de fixo COM WhatsApp — a conta que um dia decide se vale barrar
+  // — mora no `GET /api/prospects/resumo`, que enxerga a base inteira em vez
+  // de um lote de 50.
   logger.info(
     {
       lote: candidatos.length,

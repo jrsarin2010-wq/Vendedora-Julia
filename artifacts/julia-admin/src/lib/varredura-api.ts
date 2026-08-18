@@ -204,6 +204,19 @@ export interface ClinicaProspect {
   telefoneWhatsapp: string | null;
   /** Nulo = ainda não verificado. NÃO é o mesmo que "não tem". */
   temWhatsapp: boolean | null;
+  /**
+   * Fixo ou celular, LIDO NO SERVIDOR (api-server/src/lib/tipo-de-linha.ts).
+   *
+   * Vem pronto de propósito, em vez de a tela contar dígitos: é a mesma regra
+   * que monta a taxa `fixos` do resumo, e regra copiada para os dois lados é
+   * regra que um dia discorda de si mesma — a etiqueta diria "fixo" numa linha
+   * que a conta não contou.
+   *
+   * "indefinido" é o que não se encaixa (número internacional, telefone que a
+   * normalização recusou): a tela não etiqueta, porque etiqueta errada é pior
+   * que etiqueta ausente.
+   */
+  tipoDeLinha: TipoDeLinha;
   verificadoWhatsappEm: string | null;
   website: string | null;
   instagram: string | null;
@@ -269,6 +282,9 @@ export async function listarProspects(
   return lerJson<RespostaDeProspects>(res, "carregar as clínicas");
 }
 
+/** O tipo da linha, decidido no servidor. */
+export type TipoDeLinha = "celular" | "fixo" | "indefinido";
+
 export interface BairroContado {
   bairro: string;
   total: number;
@@ -290,6 +306,20 @@ export interface ResumoDeProspects {
   comWhatsapp: number | null;
   semWhatsapp: number | null;
   telefoneInvalido: number;
+  /**
+   * A TAXA DO TELEFONE FIXO — a conta que decide se um dia vale barrar fixo
+   * antes da verificação. Hoje ele NÃO é barrado, e por medição: a 123 Odonto
+   * entrou com fixo e voltou apta.
+   *
+   * Os dois últimos andam juntos porque `comWhatsapp` sozinho não decide nada:
+   * o mesmo número é ótimo em 5 verificados e é ruína em 300. `total` inclui
+   * quem ainda não foi verificado — é o tamanho da pergunta que falta.
+   */
+  fixos: {
+    total: number;
+    verificados: number;
+    comWhatsapp: number;
+  };
   total: number;
   /**
    * A trava da prospecção ativa, JÁ COMBINADA (Etapa 4): a `OUTREACH_ENABLED`

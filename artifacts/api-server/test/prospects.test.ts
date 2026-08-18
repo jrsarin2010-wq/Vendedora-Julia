@@ -17,7 +17,13 @@ const resumoHandler = handlerDe(prospectsRouter, 0);
 const listaHandler = handlerDe(prospectsRouter, 1);
 
 interface Lista {
-  itens: { id: number; nome: string; uf: string | null; cidade: string | null }[];
+  itens: {
+    id: number;
+    nome: string;
+    uf: string | null;
+    cidade: string | null;
+    tipoDeLinha: "celular" | "fixo" | "indefinido";
+  }[];
   total: number;
   limite: number;
   offset: number;
@@ -28,6 +34,7 @@ interface Resumo {
   porBairro: { bairro: string; total: number }[];
   comTelefone: number;
   comWhatsapp: number | null;
+  fixos: { total: number; verificados: number; comWhatsapp: number };
   total: number;
 }
 
@@ -275,5 +282,70 @@ ok("total 0", resumo.total === 0);
 ok("porBairro vazio", resumo.porBairro.length === 0);
 ok("comWhatsapp null", resumo.comWhatsapp === null);
 ok("os 9 status continuam lá", Object.keys(resumo.porStatus).length === 9);
+ok("fixos zerado, não ausente", resumo.fixos.total === 0 && resumo.fixos.verificados === 0);
+
+// ---------------------------------------------------------------------------
+secao("lista — cada linha diz se o telefone é fixo ou celular");
+// Sem isto a coluna do telefone é uma fileira de dígitos onde nada distingue
+// um do outro, e muita clínica do Maps só publica o fixo.
+state.reset();
+clinica({ nome: "Fixo", telefoneRaw: "(85) 3121-5444" });
+clinica({ nome: "Celular", telefoneRaw: "(11) 99999-8888" });
+clinica({ nome: "Sem telefone", telefoneRaw: null, statusProspeccao: "sem_telefone" });
+clinica({ nome: "Inválido", telefoneRaw: "0800 111 2222", statusProspeccao: "telefone_invalido" });
+r = await chamarRota(listaHandler, {});
+const porNome = new Map((r.body as Lista).itens.map((i) => [i.nome, i.tipoDeLinha]));
+ok("o fixo vem marcado fixo", porNome.get("Fixo") === "fixo", JSON.stringify([...porNome]));
+ok("o celular vem marcado celular", porNome.get("Celular") === "celular");
+ok("sem telefone não vira etiqueta", porNome.get("Sem telefone") === "indefinido");
+ok("telefone que a normalização recusou também não", porNome.get("Inválido") === "indefinido");
+
+secao("lista — o tipo sai do telefone do MAPS, não da forma canônica");
+// Conta antiga vive no jid com 8 dígitos (canonicalizar-telefone.ts). Ler
+// `telefone_whatsapp` primeiro marcaria esse celular como fixo justamente na
+// linha já verificada — a que o dono mais olha.
+state.reset();
+clinica({
+  nome: "Celular antigo",
+  telefoneRaw: "(85) 99200-8899",
+  telefoneWhatsapp: "558592008899",
+  temWhatsapp: true,
+});
+r = await chamarRota(listaHandler, {});
+ok(
+  "continua celular",
+  (r.body as Lista).itens[0].tipoDeLinha === "celular",
+  (r.body as Lista).itens[0].tipoDeLinha,
+);
+
+// ---------------------------------------------------------------------------
+secao("resumo — a taxa do telefone FIXO, com o denominador junto");
+// A conta que decide se um dia vale barrar fixo antes da verificação. Hoje ele
+// passa, e por medição: a 123 Odonto entrou com fixo e voltou apta.
+state.reset();
+clinica({ nome: "Fixo com zap", telefoneRaw: "(85) 3121-5444", temWhatsapp: true });
+clinica({ nome: "Fixo sem zap", telefoneRaw: "(85) 3121-5445", temWhatsapp: false });
+clinica({ nome: "Fixo na fila", telefoneRaw: "(85) 3121-5446", temWhatsapp: null });
+clinica({ nome: "Celular com zap", telefoneRaw: "(11) 99999-8888", temWhatsapp: true });
+clinica({ nome: "Sem telefone", telefoneRaw: null, statusProspeccao: "sem_telefone" });
+resumo = (await chamarRota(resumoHandler, {})).body as Resumo;
+ok("3 fixos captados", resumo.fixos.total === 3, String(resumo.fixos.total));
+ok("2 deles verificados", resumo.fixos.verificados === 2, String(resumo.fixos.verificados));
+ok("1 com WhatsApp", resumo.fixos.comWhatsapp === 1, String(resumo.fixos.comWhatsapp));
+ok(
+  "o celular não entrou na conta do fixo",
+  resumo.comWhatsapp === 2 && resumo.fixos.comWhatsapp === 1,
+  JSON.stringify(resumo.fixos),
+);
+
+secao("resumo — celular ANTIGO (8 dígitos) não entra na conta do fixo");
+// É o número que envenenaria a decisão: celular quase sempre tem WhatsApp, e
+// contá-lo como fixo faria a taxa parecer boa pelo motivo errado.
+state.reset();
+clinica({ nome: "Celular antigo", telefoneRaw: "(85) 9200-8899", temWhatsapp: true });
+clinica({ nome: "Fixo sem zap", telefoneRaw: "(85) 3121-5444", temWhatsapp: false });
+resumo = (await chamarRota(resumoHandler, {})).body as Resumo;
+ok("só 1 fixo", resumo.fixos.total === 1, String(resumo.fixos.total));
+ok("e a taxa dele é 0 de 1", resumo.fixos.comWhatsapp === 0 && resumo.fixos.verificados === 1);
 
 fim();

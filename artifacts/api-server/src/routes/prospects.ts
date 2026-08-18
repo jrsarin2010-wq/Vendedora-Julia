@@ -15,6 +15,7 @@ import { Router, type IRouter } from "express";
 import { db, clinicasProspectTable } from "@workspace/db";
 import { eq, and, ilike, inArray, sql, desc } from "drizzle-orm";
 import { abordagemLigada } from "../lib/configuracoes";
+import { tipoDeLinha } from "../lib/tipo-de-linha";
 
 const router: IRouter = Router();
 
@@ -86,6 +87,14 @@ router.get("/prospects/resumo", async (req, res) => {
     // exatamente aí que um "0 com WhatsApp" mentiria com mais convicção.
     const algumVerificado = todas.some((c) => c.temWhatsapp !== null);
 
+    // `telefoneRaw` primeiro: é o número como o Maps entregou, e é ele que diz
+    // o tipo da LINHA. O `telefoneWhatsapp` é a forma que o jid devolveu, e
+    // conta antiga vive lá com 8 dígitos (ver canonicalizar-telefone.ts) —
+    // olhar essa coluna primeiro faria celular antigo ser contado como fixo.
+    const fixos = todas.filter(
+      (c) => tipoDeLinha(c.telefoneRaw ?? c.telefoneWhatsapp) === "fixo",
+    );
+
     res.json({
       porStatus,
       porBairro,
@@ -122,6 +131,26 @@ router.get("/prospects/resumo", async (req, res) => {
       // Por isso também não depende de ninguém ter sido verificado — o número
       // é verdadeiro desde o primeiro lote.
       telefoneInvalido: porStatus.telefone_invalido,
+      // A TAXA DO TELEFONE FIXO — a conta que decide se um dia vale barrar
+      // fixo antes da verificação.
+      //
+      // Hoje fixo NÃO é barrado, e isso foi medido, não suposto: a 123 Odonto
+      // entrou com fixo (DDD 85) e voltou APTA. Fixo com WhatsApp Business é
+      // comum, e costuma ser sinal de clínica organizada — barrar economizaria
+      // consulta descartando justamente essas.
+      //
+      // Os dois números vão juntos porque o de cima sozinho não decide nada:
+      // "3 fixos com WhatsApp" é ótimo em 5 verificados e é ruína em 300. Se
+      // um dia `comWhatsapp` ficar perto de zero com `verificados` na casa das
+      // centenas, aí a trava passa a se pagar — e a decisão terá dado.
+      //
+      // `total` inclui quem ainda não foi verificado, de propósito: é ele que
+      // diz o tamanho da pergunta que ainda falta responder.
+      fixos: {
+        total: fixos.length,
+        verificados: fixos.filter((c) => c.temWhatsapp !== null).length,
+        comWhatsapp: fixos.filter((c) => c.temWhatsapp === true).length,
+      },
       total: todas.length,
       /**
        * A TRAVA DA PROSPECÇÃO ATIVA, na tela onde se clica em "Promover".
@@ -215,7 +244,19 @@ router.get("/prospects", async (req, res) => {
 
     // `total` é o tamanho do RESULTADO FILTRADO, não da tabela: é o número que
     // a paginação da tela usa para saber se existe próxima página.
-    res.json({ itens, total: contagem[0]?.count ?? 0, limite, offset });
+    //
+    // `tipoDeLinha` é calculado AQUI e não no navegador: é a mesma regra que
+    // monta a taxa do resumo, e regra copiada para os dois lados é regra que
+    // um dia discorda de si mesma. Ver lib/tipo-de-linha.ts.
+    res.json({
+      itens: itens.map((c) => ({
+        ...c,
+        tipoDeLinha: tipoDeLinha(c.telefoneRaw ?? c.telefoneWhatsapp),
+      })),
+      total: contagem[0]?.count ?? 0,
+      limite,
+      offset,
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to list prospects");
     res.status(500).json({ error: "Internal server error" });

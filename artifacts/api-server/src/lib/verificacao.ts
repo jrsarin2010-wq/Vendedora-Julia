@@ -78,6 +78,19 @@ export interface Triagem {
  * sem sentido. O critério é o mesmo do webhook e da importação
  * (`pareceCelularReal`, dentro de `normalizarTelefone`), para não existirem
  * duas ideias de telefone válido no sistema.
+ *
+ * TELEFONE FIXO PASSA, e isso é decisão, não descuido. Muita clínica do Maps
+ * só publica o fixo, e a 123 Odonto entrou com um (DDD 85) e voltou APTA:
+ * fixo com WhatsApp Business é comum, e costuma ser sinal de clínica
+ * organizada. Barrar aqui economizaria uma consulta e descartaria justamente
+ * essas — em silêncio, porque quem foi barrado antes da pergunta não aparece
+ * em contagem nenhuma.
+ *
+ * O que decide se um dia vale barrar é o par `fixos.verificados` /
+ * `fixos.comWhatsapp` do `GET /api/prospects/resumo`. Enquanto ele não estiver
+ * perto de zero na casa das centenas, esta linha fica como está — e a etiqueta
+ * da tela sai de lib/tipo-de-linha.ts, que existe só para MOSTRAR, nunca para
+ * filtrar.
  */
 export function triar(prospects: ProspectParaVerificar[]): Triagem {
   const aprovados: Aprovado[] = [];

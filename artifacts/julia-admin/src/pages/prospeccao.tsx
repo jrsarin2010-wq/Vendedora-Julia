@@ -6,6 +6,8 @@ import {
   MapPin,
   Radar,
   Search,
+  Smartphone,
+  Phone,
   Star,
   BadgeCheck,
   ShieldCheck,
@@ -59,6 +61,7 @@ import {
   type StatusDaVerificacao,
   type StatusProspeccao,
   type ClinicaProspect,
+  type TipoDeLinha,
   type ResultadoDaPromocao,
 } from "@/lib/varredura-api";
 
@@ -615,6 +618,41 @@ function ConcentracaoPorBairro() {
                 dos telefones captados têm WhatsApp.
               </p>
             )}
+
+            {/*
+              A TAXA DO TELEFONE FIXO — a única razão pela qual esta linha
+              existe é decidir, com dado, se um dia vale barrar fixo antes da
+              verificação. Hoje ele passa, e por medição: a 123 Odonto entrou
+              com fixo e voltou apta.
+
+              O DENOMINADOR fica na frase inteiro, não escondido atrás da
+              porcentagem: "20% dos fixos têm WhatsApp" não diz nada se foram 5
+              fixos, e diz tudo se foram 300. Enquanto ninguém foi verificado,
+              a frase diz quantos ESPERAM — 0% ali leria como "conferimos e
+              nenhum tem", que é o mesmo engano do "0 com WhatsApp".
+            */}
+            {data.fixos.total > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground" data-testid="taxa-fixos">
+                Telefone fixo:{" "}
+                {data.fixos.verificados === 0 ? (
+                  <>
+                    <strong className="font-mono text-foreground">{data.fixos.total}</strong>{" "}
+                    captados, nenhum verificado ainda.
+                  </>
+                ) : (
+                  <>
+                    <strong className="font-mono text-foreground">
+                      {data.fixos.comWhatsapp} de {data.fixos.verificados}
+                    </strong>{" "}
+                    verificados têm WhatsApp (
+                    {Math.round((data.fixos.comWhatsapp / data.fixos.verificados) * 100)}%)
+                    {data.fixos.total > data.fixos.verificados &&
+                      `, ${data.fixos.total - data.fixos.verificados} na fila`}
+                    .
+                  </>
+                )}
+              </p>
+            )}
           </>
         )}
       </CardContent>
@@ -634,6 +672,42 @@ function contarPromocao(r: ResultadoDaPromocao): string {
   if (r.adiados.length)
     partes.push(`${r.adiados.length} adiadas (a Evolution não respondeu — voltam depois)`);
   return partes.length > 0 ? `${partes.join(", ")}.` : "Nada mudou.";
+}
+
+/**
+ * FIXO OU CELULAR, na própria linha.
+ *
+ * Muita clínica do Maps só publica o fixo, e sem isto a coluna do telefone era
+ * uma fileira de dígitos onde nada distinguia um do outro.
+ *
+ * O FIXO é que ganha cor. É o caso notável — o que faz olhar duas vezes antes
+ * de promover — enquanto celular é o esperado e não precisa disputar atenção.
+ * Pintar os dois seria a mesma fileira de antes, só que colorida.
+ *
+ * Quem decide o tipo é o servidor (`tipoDeLinha`): a tela só desenha, e por
+ * isso a etiqueta nunca discorda da taxa do resumo. "indefinido" não vira
+ * etiqueta nenhuma.
+ */
+function EtiquetaDeLinha({ tipo }: { tipo: TipoDeLinha }) {
+  if (tipo === "indefinido") return null;
+  const fixo = tipo === "fixo";
+  const Icone = fixo ? Phone : Smartphone;
+  return (
+    <span
+      className={`flex items-center gap-1 text-[10px] uppercase tracking-wider ${
+        fixo ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"
+      }`}
+      title={
+        fixo
+          ? "Telefone fixo (8 dígitos depois do DDD). Não é impedimento: fixo com WhatsApp Business é comum."
+          : "Celular (9 dígitos depois do DDD)"
+      }
+      data-testid={`tipo-de-linha-${tipo}`}
+    >
+      <Icone size={10} />
+      {fixo ? "fixo" : "celular"}
+    </span>
+  );
 }
 
 /** Bloco 3 — a tabela de clínicas. */
@@ -1047,7 +1121,12 @@ function TabelaDeClinicas() {
                     {c.cidade ? `${c.cidade}${c.uf ? `/${c.uf}` : ""}` : "—"}
                   </TableCell>
                   <TableCell className="font-mono text-xs">
-                    {c.telefoneWhatsapp || c.telefoneRaw || (
+                    {c.telefoneWhatsapp || c.telefoneRaw ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span>{c.telefoneWhatsapp || c.telefoneRaw}</span>
+                        <EtiquetaDeLinha tipo={c.tipoDeLinha} />
+                      </div>
+                    ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
