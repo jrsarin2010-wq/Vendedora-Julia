@@ -50,6 +50,17 @@ ok(
 
 const NUMERO = "5585999998888";
 
+/**
+ * Terça-feira, 12h em São Paulo.
+ *
+ * Entrou em 18/08/2026, quando a janela de horário passou a valer também para
+ * o toque de CONVERSA: sem instante injetado, este arquivo passava a depender
+ * do relógio de quem roda — verde às 10h, vermelho às 8h. É o mesmo defeito
+ * que já tinha derrubado o verificacao.test.ts, e a fixture agora nasce toda
+ * pendurada nesta constante, e não em `Date.now()`.
+ */
+const AGORA = new Date("2026-08-18T15:00:00.000Z");
+
 function armar(opts: {
   direction: "inbound" | "outbound";
   content: string;
@@ -74,14 +85,14 @@ function armar(opts: {
       leadId: 1,
       direction: "inbound",
       content: "cadê o contrato?",
-      createdAt: new Date(Date.now() - 60_000),
+      createdAt: new Date(AGORA.getTime() - 60_000),
     },
     {
       id: 11,
       leadId: 1,
       direction: opts.direction,
       content: opts.content,
-      createdAt: new Date(),
+      createdAt: new Date(AGORA.getTime() - 30_000),
     },
   );
   state.followUps.push({
@@ -90,7 +101,7 @@ function armar(opts: {
     kind: "conversa",
     status: "pending",
     touchNumber: opts.touchNumber ?? 1,
-    scheduledAt: new Date(Date.now() - 1000), // vencido
+    scheduledAt: new Date(AGORA.getTime() - 1000), // vencido
     messageTemplate: "toque de teste",
   });
 }
@@ -102,7 +113,7 @@ secao("última mensagem é NOSSA e promete algo → o toque 1 não sai");
     direction: "outbound",
     content: "Vou pedir pra alguém do time te mandar o contrato ainda hoje, tá?",
   });
-  await rodarCicloDeFollowUp();
+  await rodarCicloDeFollowUp(AGORA);
   ok("nada foi enviado", wa.enviadas.length === 0, JSON.stringify(wa.enviadas));
   ok("o toque foi CANCELADO, não adiado", meuToque().status === "cancelled", meuToque().status);
   ok(
@@ -125,7 +136,7 @@ secao("última mensagem é NOSSA e promete algo → o toque 1 não sai");
 secao("última mensagem é DELE → o toque 1 sai normal");
 {
   armar({ direction: "inbound", content: "vou pensar" });
-  await rodarCicloDeFollowUp();
+  await rodarCicloDeFollowUp(AGORA);
   ok("o toque saiu", wa.enviadas.length === 1, JSON.stringify(wa.enviadas));
   ok("virou 'sent'", meuToque().status === "sent", meuToque().status);
   ok("sem marcação de atenção", !state.leads[0].atencao, String(state.leads[0].atencao));
@@ -136,7 +147,7 @@ secao("última mensagem é nossa mas NÃO promete nada → o toque 1 sai");
   // A rede não pode matar todo toque 1: a última mensagem QUASE SEMPRE é nossa
   // (a resposta da Júlia). Só promessa segura o toque.
   armar({ direction: "outbound", content: "Boa! Qualquer dúvida é só me chamar 😊" });
-  await rodarCicloDeFollowUp();
+  await rodarCicloDeFollowUp(AGORA);
   ok("o toque saiu", wa.enviadas.length === 1, JSON.stringify(wa.enviadas));
   ok("virou 'sent'", meuToque().status === "sent", meuToque().status);
 }
@@ -148,7 +159,7 @@ secao("lead já marcado para atenção → o toque 1 não sai, e a marcação fi
     content: "quero falar com uma pessoa",
     atencao: "pediu_pessoa",
   });
-  await rodarCicloDeFollowUp();
+  await rodarCicloDeFollowUp(AGORA);
   ok("nada foi enviado", wa.enviadas.length === 0, JSON.stringify(wa.enviadas));
   ok("o toque foi cancelado", meuToque().status === "cancelled", meuToque().status);
   ok(
@@ -167,7 +178,7 @@ secao("a supressão é SÓ do toque 1 — os seguintes saem mesmo com promessa")
     content: "Vou pedir pra alguém do time te mandar o contrato ainda hoje, tá?",
     touchNumber: 2,
   });
-  await rodarCicloDeFollowUp();
+  await rodarCicloDeFollowUp(AGORA);
   ok("o toque 2 saiu", wa.enviadas.length === 1, JSON.stringify(wa.enviadas));
   ok("virou 'sent'", meuToque().status === "sent", meuToque().status);
 }

@@ -164,6 +164,35 @@ export interface Decisao {
  * de horário que pudessem divergir é exatamente o tipo de mentira que o painel
  * não pode contar.
  */
+/**
+ * SÓ AS HORAS — sem o fim de semana, sem cota e sem o botão do painel.
+ *
+ * Existe para o follow-up de CONVERSA, que até 18/08/2026 não passava por
+ * janela nenhuma: o `toqueFrioPodeSair` só era chamado no ramo da reativação e
+ * no do toque frio, e ninguém tinha feito a mesma pergunta para a conversa. O
+ * lead 59 recebeu o toque 2 à 01:28 da manhã, e é o tipo de mensagem que faz
+ * um dentista bloquear o número — que é o mesmo número da prospecção.
+ *
+ * Por que NÃO reaproveita o `janelaFechada` inteiro: as outras três travas são
+ * da prospecção e aqui estariam erradas.
+ *  - o botão do painel governa quem ainda NÃO conversa; quem já conversa
+ *    continua sendo atendido com ele desligado, e isso é regra testada;
+ *  - a cota diária protege o número contra volume FRIO — o toque de uma
+ *    conversa em andamento não é volume frio;
+ *  - o fim de semana fica de fora por decisão: sábado às 10h não é o que faz
+ *    bloquear, e segurar o toque até segunda tira dois dias de uma conversa
+ *    viva. A madrugada é que era o problema, e é a madrugada que isto fecha.
+ *    Se um dia o dono quiser o fim de semana também, é trocar esta função pelo
+ *    `janelaFechada` — e aí o `soDiasUteis` já resolve.
+ */
+export function foraDoHorarioDeConversa(
+  config: ConfigOutreach,
+  agora: Date,
+): boolean {
+  const { hora } = momentoEmSaoPaulo(agora);
+  return hora < config.horaInicio || hora >= config.horaFim;
+}
+
 export function janelaFechada(
   config: ConfigOutreach,
   agora: Date,

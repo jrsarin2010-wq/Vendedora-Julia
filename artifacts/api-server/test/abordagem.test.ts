@@ -459,7 +459,22 @@ secao("número que rejeita 3 envios: a cadência inteira morre e o Telegram avis
   ok("nada mais sai para este número", wa.enviadas.length === antesDeTudo);
 }
 
-secao("follow-up de conversa NÃO é freado pela janela (ele já respondeu)");
+// ───────────────────────────────────────────────────────────────────────────
+// QUAIS TRAVAS VALEM PARA O TOQUE DE CONVERSA (revisto em 18/08/2026).
+//
+// Este bloco afirmava "o follow-up de conversa NÃO é freado pela janela", e
+// afirmava certo pela metade. O princípio continua de pé: a trava mestra, o
+// botão do painel e o fim de semana protegem quem NÃO pediu contato, e quem já
+// está conversando não espera segunda-feira por causa deles.
+//
+// O que estava errado era estender isso ao HORÁRIO. Sem janela nenhuma, o
+// toque saía de madrugada: em 18/08/2026 o lead 59 recebeu o toque 2 à 01:28.
+// Mensagem automática nessa hora é o que faz um dentista bloquear o número — e
+// o número é o mesmo da prospecção, então a conta é paga pelos dois lados.
+//
+// Decisão do dono, 18/08/2026: passa a valer a janela de HORÁRIO, e só ela.
+// ───────────────────────────────────────────────────────────────────────────
+secao("toque de conversa — fim de semana e botão do painel continuam NÃO freando");
 {
   state.reset();
   wa.reset();
@@ -484,12 +499,69 @@ secao("follow-up de conversa NÃO é freado pela janela (ele já respondeu)");
     messageTemplate: "toque de conversa",
   });
   delete process.env.OUTREACH_ENABLED;
-  // Domingo de noite, trava mestra desligada: o toque de CONVERSA sai assim
-  // mesmo. A janela da prospecção protege quem não pediu contato; quem pediu
-  // não tem por que esperar segunda-feira.
-  await rodarCicloDeFollowUp(new Date("2026-08-16T23:00:00.000Z"));
-  ok("saiu", wa.enviadas.length === 1 && wa.enviadas[0].message === "toque de conversa", JSON.stringify(wa.enviadas));
+  // Domingo, 14h em SP, trava mestra desligada: sai assim mesmo.
+  await rodarCicloDeFollowUp(new Date("2026-08-16T17:00:00.000Z"));
+  ok(
+    "domingo à tarde, com a trava mestra desligada, o toque de conversa sai",
+    wa.enviadas.length === 1 && wa.enviadas[0].message === "toque de conversa",
+    JSON.stringify(wa.enviadas),
+  );
   process.env.OUTREACH_ENABLED = "true";
+}
+
+secao("toque de conversa — a MADRUGADA freia, e o toque fica pendente");
+{
+  state.reset();
+  wa.reset();
+  abordagemNoPainel(true);
+  const id = state.nextId++;
+  state.leads.push({
+    id,
+    phone: NUMERO,
+    name: "Marina",
+    status: "warm",
+    funnelStage: "qualified",
+    outreachStatus: "none",
+    createdAt: new Date(),
+  });
+  state.followUps.push({
+    id: state.nextId++,
+    leadId: id,
+    status: "pending",
+    touchNumber: 2,
+    kind: "conversa",
+    scheduledAt: new Date("2026-08-18T02:00:00.000Z"),
+    messageTemplate: "toque de conversa",
+  });
+
+  // 01:28 em São Paulo — a hora exata em que o lead 59 recebeu o dele.
+  await rodarCicloDeFollowUp(new Date("2026-08-18T04:28:00.000Z"));
+  ok("de madrugada não sai", wa.enviadas.length === 0, JSON.stringify(wa.enviadas));
+  ok(
+    "e NÃO foi cancelado — segue pendente, como na pausa humana",
+    pendentes().length === 1,
+    JSON.stringify(state.followUps.map((f: any) => f.status)),
+  );
+
+  // 19h em SP: ainda fechado (a janela é 9h-18h).
+  await rodarCicloDeFollowUp(new Date("2026-08-18T22:00:00.000Z"));
+  ok("de noite também não sai", wa.enviadas.length === 0);
+  ok("continua pendente", pendentes().length === 1);
+
+  // 9h em SP do dia seguinte: sai, com o texto que já estava gravado.
+  await rodarCicloDeFollowUp(new Date("2026-08-19T12:00:00.000Z"));
+  ok(
+    "quando o horário abre, sai — e com o mesmo texto",
+    wa.enviadas.length === 1 && wa.enviadas[0].message === "toque de conversa",
+    JSON.stringify(wa.enviadas),
+  );
+  // O toque vira 'sent'. Os pendentes NÃO zeram, e é correto: era o último da
+  // cadência de conversa, então o agendador armou a reativação em seguida.
+  ok(
+    "e aí sim o toque vira 'sent'",
+    state.followUps.filter((f: any) => f.kind === "conversa").every((f: any) => f.status === "sent"),
+    JSON.stringify(state.followUps.map((f: any) => `${f.kind}:${f.status}`)),
+  );
 }
 
 // ───────────────────────────────────────────────────────────────────────────

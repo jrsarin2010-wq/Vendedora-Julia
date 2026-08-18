@@ -97,13 +97,55 @@ ok("falhou: loga erro", temLog("Resposta NÃO entregue"), JSON.stringify(logs));
 ok("falhou: mensagem recebida continua gravada", saidas("inbound").length === 1);
 wa.entrega = true;
 
+// D — RESPOSTA VAZIA. As duas caras da mesma falha (18/08/2026).
+//
+// Gerar a resposta falha de dois jeitos: a chamada LANÇA, ou ela volta 200 com
+// conteúdo vazio. O desfecho para o dentista é idêntico — ele falou e ninguém
+// respondeu —, mas só o caminho que lançava mandava o lead para a central de
+// vigia. A cara barulhenta era vigiada, a silenciosa ficava numa linha de log
+// que ninguém lê a menos que já esteja procurando.
+//
+// É a mesma assimetria que a abordagem tinha, e é a que faz um defeito parecer
+// dois: metade dos relatos chega com alerta, metade não chega nunca.
 secao("D — resposta vazia do modelo");
 
 ctrl.reply = "";
 await post(evento("oi"));
 ok("loga erro", temLog("resposta vazia"), JSON.stringify(logs));
 ok("nada é enviado", !respondeu());
+ok(
+  "e o lead VAI para a central de vigia — silêncio não pode ser o desfecho",
+  (state.leads[0] as any)?.atencao === "julia_estranha",
+  String((state.leads[0] as any)?.atencao),
+);
+ok(
+  "com detalhe que diz o que houve, para quem for ler a conversa depois",
+  String((state.leads[0] as any)?.atencaoDetalhe ?? "").includes("sem resposta"),
+  String((state.leads[0] as any)?.atencaoDetalhe),
+);
 ctrl.reply = "Oi!";
+
+secao("D2 — o mesmo, quando a causa é o teto de saída estourado");
+{
+  state.reset();
+  ctrl.reset();
+  ctrl.reply = "";
+  ctrl.finishReason = "length";
+  await post(evento("oi"));
+  ok("nada é enviado", !respondeu());
+  ok(
+    "o log nomeia o teto, em vez de dizer só que veio vazia",
+    temLog("estourou o teto"),
+    JSON.stringify(logs),
+  );
+  ok(
+    "e o lead vai para a central do mesmo jeito",
+    (state.leads[0] as any)?.atencao === "julia_estranha",
+    String((state.leads[0] as any)?.atencao),
+  );
+  ctrl.finishReason = "stop";
+  ctrl.reply = "Oi!";
+}
 
 secao("regressão — fluxos anteriores à Rodada 21");
 

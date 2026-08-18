@@ -791,6 +791,28 @@ router.post("/webhook/whatsapp", async (req, res) => {
           ? "Resposta estourou o teto de saída — lead ficou sem resposta; suba TETO_RESPOSTA em lib/modelos.ts"
           : "Modelo devolveu resposta vazia — lead ficou sem resposta",
       );
+
+      // A CENTRAL DE VIGIA VALE PARA AS DUAS CARAS DA MESMA FALHA.
+      //
+      // O caminho que LANÇA já mandava o lead para a central: "silêncio nunca
+      // mais é o desfecho". Este caminho — a chamada volta 200 com conteúdo
+      // vazio — produz exatamente o mesmo desfecho para o dentista (ele falou
+      // e ninguém respondeu) e ficava só numa linha de log, que ninguém lê a
+      // menos que já esteja procurando. A falha barulhenta era vigiada; a
+      // silenciosa, não, e é a silenciosa que não avisa que está acontecendo.
+      //
+      // Mesmo motivo do teto: um estouro pode devolver 400 OU resposta vazia,
+      // e tratar as duas de jeitos diferentes fez o defeito da abordagem
+      // parecer dois defeitos.
+      const porQueVazia =
+        escolhaDaResposta?.finish_reason === "length"
+          ? `A IA estourou o teto de saída (${TETO_RESPOSTA} tokens) e não sobrou texto.`
+          : "A IA respondeu, mas veio sem texto nenhum.";
+      await marcarAtencao(
+        lead,
+        "julia_estranha",
+        `${porQueVazia} O dentista falou e ficou sem resposta — vale reler a conversa e responder na mão.`,
+      );
       return;
     }
 

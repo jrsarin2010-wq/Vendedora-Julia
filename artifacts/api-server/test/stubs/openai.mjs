@@ -58,8 +58,11 @@ export const ctrl = {
     this.ttsCalls = [];
     this.falhasRestantes = 0;
     this.falhaStatus = 429;
-    this.finishReason = "stop";
-    this.usage = null;
+    // `finishReason` e `usage` NAO sao zerados, pela mesma razao do `reply` e
+    // do `atraso`: sao comportamento CONFIGURADO pelo cenario, e o `post()` do
+    // driver chama este reset antes de cada evento. Zerar aqui apagaria a
+    // configuracao entre o que o teste pede e o que ele executa. Quem os liga,
+    // desliga — como ja se faz com o `wa.entrega`.
     // `atraso` NÃO é zerado: é comportamento configurado pelo teste, como o
     // `wa.entrega` e o `wa.media`, e não pode sumir no meio de um cenário.
   },

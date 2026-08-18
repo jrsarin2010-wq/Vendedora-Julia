@@ -13,6 +13,8 @@ import {
   lerConfig,
   podeDispararAgora,
   contarEnvios,
+  foraDoHorarioDeConversa,
+  momentoEmSaoPaulo,
   EXPLICACAO_BLOQUEIO,
 } from "./outreach";
 import { datasDeEnviosFrios } from "./ritmo-frio";
@@ -206,6 +208,28 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
             pausedUntil: lead.pausedUntil,
           },
           "Lead pausado (humano assumiu) — follow-up adiado, segue pendente",
+        );
+        continue;
+      }
+
+      // A MADRUGADA (18/08/2026). O toque de conversa não passava por janela
+      // nenhuma — o lead 59 recebeu o toque 2 à 01:28 da manhã.
+      //
+      // Fica PENDING, não cancelado: é o mesmo tratamento da pausa humana logo
+      // acima e do toque frio fora da janela, e pelo mesmo motivo — perder o
+      // toque é pior que atrasá-lo. Assim que o horário abrir, ele sai na
+      // rodada seguinte, com o texto que já estava gravado.
+      //
+      // Só as HORAS: o botão do painel e a cota são da prospecção, e quem já
+      // conversa não responde a nenhum dos dois (ver foraDoHorarioDeConversa).
+      if (followUp.kind === "conversa" && foraDoHorarioDeConversa(lerConfig(), now)) {
+        logger.info(
+          {
+            leadId: lead.id,
+            touchNumber: followUp.touchNumber,
+            horaEmSP: momentoEmSaoPaulo(now).hora,
+          },
+          "Follow-up de conversa fora do horário — adiado, segue pendente",
         );
         continue;
       }
