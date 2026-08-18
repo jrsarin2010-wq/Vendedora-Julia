@@ -37,6 +37,19 @@ export const ctrl = {
   falhasRestantes: 0,
   /** O status HTTP da falha simulada: 429 (limite), 500 (a OpenAI caiu), 401… */
   falhaStatus: 429,
+  /**
+   * O `finish_reason` que a resposta de chat carrega. "length" e o que a
+   * OpenAI devolve quando o teto de saida acaba antes do texto — e num modelo
+   * de raciocinio isso vem junto de conteudo VAZIO, que foi como a previa de
+   * abordagem falhou calada em 18/08. Sem este campo o stub so sabia imitar a
+   * metade barulhenta da falha (a excecao), nunca a silenciosa.
+   */
+  finishReason: "stop",
+  /**
+   * O bloco `usage` da resposta. E dele que sai o numero que diz se o teto
+   * ficou curto; nulo imita as respostas em que a OpenAI nao o manda.
+   */
+  usage: null,
   /** Mensagem do erro simulado. */
   falhaMensagem: "429 Rate limit reached for gpt-5.4-mini on tokens per min (TPM)",
   reset() {
@@ -45,6 +58,8 @@ export const ctrl = {
     this.ttsCalls = [];
     this.falhasRestantes = 0;
     this.falhaStatus = 429;
+    this.finishReason = "stop";
+    this.usage = null;
     // `atraso` NÃO é zerado: é comportamento configurado pelo teste, como o
     // `wa.entrega` e o `wa.media`, e não pode sumir no meio de um cenário.
   },
@@ -69,7 +84,15 @@ export const openai = {
         }
         // O extrator roda no modelo "nano"; a resposta de venda no "mini".
         const ehExtrator = String(params.model).includes("nano");
-        return { choices: [{ message: { content: ehExtrator ? ctrl.extraction : ctrl.reply } }] };
+        return {
+          choices: [
+            {
+              message: { content: ehExtrator ? ctrl.extraction : ctrl.reply },
+              finish_reason: ctrl.finishReason,
+            },
+          ],
+          usage: ctrl.usage,
+        };
       },
     },
   },

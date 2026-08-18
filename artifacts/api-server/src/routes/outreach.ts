@@ -85,6 +85,22 @@ router.get("/leads/:id/outreach-preview", async (req, res) => {
       erroAoGerar = "Não consegui gerar a mensagem agora. Tente de novo.";
     }
 
+    // AS DUAS FALHAS TÊM QUE APARECER, e antes desta linha só uma aparecia.
+    //
+    // Gerar pode falhar de dois jeitos: a chamada explode (o catch acima) ou ela
+    // volta sem texto aproveitável (null, sem exceção nenhuma). O segundo caso
+    // saía daqui com mensagem nula E erro nulo — e o painel, que só sabe mostrar
+    // um dos dois, não mostrava nada. Quem olhava não tinha como distinguir
+    // "falhou" de "ainda está carregando".
+    //
+    // O porquê do null já foi para o log dentro de gerarMensagemDeAbordagem, com
+    // finish_reason e contagem de tokens. Aqui fica só o que a tela precisa: uma
+    // frase diferente da outra, para o próximo relato dizer QUAL das duas foi.
+    if (!mensagem && !erroAoGerar) {
+      erroAoGerar =
+        "O modelo respondeu, mas veio sem texto. O motivo está no log desta requisição.";
+    }
+
     const momento = momentoEmSaoPaulo(agora);
 
     res.json({

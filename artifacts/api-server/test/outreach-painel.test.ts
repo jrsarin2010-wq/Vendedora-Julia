@@ -528,5 +528,96 @@ secao("sem sessão — as rotas do interruptor respondem 401");
   ok("nenhuma rota /outreach fica antes do requireAuth", !alcancaSemAuth);
 }
 
+// ---------------------------------------------------------------------------
+// A PRÉVIA QUE FALHA TEM QUE DIZER QUE FALHOU (18/08/2026).
+//
+// Gerar a prévia falha de dois jeitos, e até aqui só um chegava à tela:
+//
+//   - a chamada EXPLODE (400, 429, timeout) → o catch enche `erroAoGerar`;
+//   - a chamada VOLTA SEM TEXTO → `gerarMensagemDeAbordagem` devolve null, sem
+//     exceção nenhuma, e a rota devolvia mensagem nula E erro nulo. O painel,
+//     que só sabe mostrar um dos dois, não mostrava nada — indistinguível de
+//     "ainda carregando".
+//
+// Aconteceu de verdade: com o teto de saída em 200 tokens, o modelo de
+// raciocínio ora estourava com 400, ora devolvia conteúdo vazio. Metade dos
+// relatos vinha com erro na tela, metade com a tela muda, e as duas metades
+// eram o MESMO defeito — o que atrasou o diagnóstico.
+//
+// O agendador já tinha o log da mensagem vazia; a rota não tinha nada. Mesma
+// disciplina, um lugar só: quem sabe do vazio é quem gera, e a rota garante
+// que a tela nunca fique sem resposta.
+// ---------------------------------------------------------------------------
+const previaHandler = handlerDe(outreachRouter, 0);
+
+secao("prévia — o modelo devolve VAZIO: a tela recebe um erro, não o silêncio");
+{
+  limpar();
+  const lead = naFila();
+  ctrl.reply = "";
+  const r = await chamarRota(previaHandler, { params: { id: String(lead.id) } });
+  const corpo = r.body as { mensagem: string | null; erroAoGerar: string | null };
+  ok("responde 200 (a rota nunca quebra por causa disso)", r.status === 200, String(r.status));
+  ok("sem mensagem", corpo.mensagem === null, JSON.stringify(corpo.mensagem));
+  ok(
+    "MAS com erro preenchido — nunca os dois nulos",
+    typeof corpo.erroAoGerar === "string" && corpo.erroAoGerar.length > 0,
+    JSON.stringify(corpo.erroAoGerar),
+  );
+}
+
+secao("prévia — o modelo ESTOURA o teto: mesmo desfecho, e o log é que separa");
+{
+  limpar();
+  const lead = naFila();
+  // O par que a OpenAI devolve quando o teto acaba antes do texto: conteúdo
+  // vazio E finish_reason "length". É a metade silenciosa da falha.
+  ctrl.reply = "";
+  ctrl.finishReason = "length";
+  const r = await chamarRota(previaHandler, { params: { id: String(lead.id) } });
+  const corpo = r.body as { mensagem: string | null; erroAoGerar: string | null };
+  ok("sem mensagem", corpo.mensagem === null);
+  ok("e a tela recebe erro", !!corpo.erroAoGerar, JSON.stringify(corpo.erroAoGerar));
+  ctrl.finishReason = "stop";
+}
+
+secao("prévia — a chamada EXPLODE: erro diferente do da resposta vazia");
+{
+  limpar();
+  const lead = naFila();
+  ctrl.falhasRestantes = 1;
+  // 400 de propósito: `ehRecusaTemporaria` só repica 429/408/5xx, então o erro
+  // sobe na primeira tentativa — como subiu o 400 de teto estourado.
+  ctrl.falhaStatus = 400;
+  ctrl.falhaMensagem = "400 Could not finish the message because max_tokens was reached";
+  const r = await chamarRota(previaHandler, { params: { id: String(lead.id) } });
+  const corpo = r.body as { mensagem: string | null; erroAoGerar: string | null };
+  ok("sem mensagem", corpo.mensagem === null);
+  ok("com erro", !!corpo.erroAoGerar, JSON.stringify(corpo.erroAoGerar));
+
+  // As duas frases têm que ser DIFERENTES. É o que faz o próximo relato do
+  // dono já dizer qual das duas falhas foi, sem ninguém abrir log.
+  limpar();
+  const outro = naFila();
+  ctrl.reply = "";
+  const vazio = (await chamarRota(previaHandler, { params: { id: String(outro.id) } }))
+    .body as { erroAoGerar: string | null };
+  ok(
+    "a tela distingue explodiu de veio-vazio",
+    corpo.erroAoGerar !== vazio.erroAoGerar,
+    `${corpo.erroAoGerar} | ${vazio.erroAoGerar}`,
+  );
+}
+
+secao("prévia — o caminho feliz continua devolvendo a mensagem, e sem erro");
+{
+  limpar();
+  const lead = naFila();
+  const r = await chamarRota(previaHandler, { params: { id: String(lead.id) } });
+  const corpo = r.body as { mensagem: string | null; erroAoGerar: string | null };
+  ok("veio mensagem", typeof corpo.mensagem === "string" && corpo.mensagem.length > 0, JSON.stringify(corpo.mensagem));
+  ok("e nenhum erro", corpo.erroAoGerar === null, JSON.stringify(corpo.erroAoGerar));
+}
+
 delete process.env.OUTREACH_ENABLED;
 fim();
