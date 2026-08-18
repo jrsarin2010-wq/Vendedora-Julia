@@ -253,6 +253,13 @@ function ControleDaAbordagem() {
       });
     },
     onError: (e: unknown) => {
+      // Falhar NÃO é "nada mudou": a requisição pode ter CHEGADO, gravado e
+      // perdido a resposta — foi o que aconteceu em 18/08/2026, com um clique
+      // de desligar caindo em cima de um deploy. Sem reler, a tela segue
+      // afirmando o estado velho enquanto o banco já tem o novo, e o clique
+      // seguinte, dado "para garantir", manda o valor CONTRÁRIO.
+      void queryClient.invalidateQueries({ queryKey: CHAVE_ABORDAGEM });
+      void queryClient.invalidateQueries({ queryKey: ["prospects-resumo"] });
       toast({
         title: "Não deu para mudar",
         description: e instanceof Error ? e.message : "Tente de novo.",
