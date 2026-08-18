@@ -31,6 +31,7 @@ export const leadsTable = {
   atencaoDetalhe: "atencaoDetalhe",
   notes: "notes",
   painPoints: "painPoints",
+  interlocutor: "interlocutor",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
 };

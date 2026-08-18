@@ -115,6 +115,21 @@ export const leadsTable = pgTable("leads", {
   // Os sinais que JÁ pontuaram nesta conversa ("perguntou_preco,contou_a_dor"),
   // para o mesmo sinal não somar duas vezes. Mesmo formato do demosEnviadas.
   sinaisVistos: text("sinais_vistos"),
+  // QUEM ESTA DO OUTRO LADO: "dentista_dono", "equipe", "assistente_virtual".
+  //
+  // NULO significa "ainda não sei", e é o padrão de propósito: presumir que
+  // quem escreve é o dono é exatamente o erro que esta coluna existe para
+  // acabar. Uma conversa real tratou quem se apresentou como "da equipe da
+  // Dra. Liliane" como se fosse a dentista, e outra chamou uma assistente
+  // virtual de "Dr." e de "senhor".
+  //
+  // `text` e não enum, como o `origin`: a lista fechada é validada em código
+  // (api-server/src/lib/interlocutor.ts), e assim acrescentar um caso novo não
+  // precisa de tipo novo no Postgres. Valor desconhecido é tratado como nulo.
+  //
+  // Quem decide o que fazer com cada caso é o prompt, não a coluna — aqui mora
+  // o fato. Mesma divisão da `nota` do Google.
+  interlocutor: text("interlocutor"),
   notes: text("notes"),
   // Áudios de demonstração já enviados a este lead, separados por vírgula
   // ("vou_pensar,fora_do_horario"). É o que impede repetir a mesma demo, que

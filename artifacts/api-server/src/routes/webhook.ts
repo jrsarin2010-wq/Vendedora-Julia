@@ -58,6 +58,15 @@ import {
 } from "../lib/temperatura";
 import { REPLY_MODEL, EXTRACTION_MODEL } from "../lib/modelos";
 import {
+  ehPessoa,
+  lerInterlocutor,
+  mereceFollowUp,
+  nomeFoiDito,
+  pareceAssistenteVirtual,
+  podePontuarTemperatura,
+  type Interlocutor,
+} from "../lib/interlocutor";
+import {
   travar,
   soltar,
   chegou,
@@ -539,6 +548,30 @@ router.post("/webhook/whatsapp", async (req, res) => {
       await marcarAtencao(lead, "julia_estranha", text);
     }
 
+    // QUEM ESTA DO OUTRO LADO, primeira camada: o que a lista fixa reconhece
+    // sozinha, sem esperar o extrator. Fica ANTES da geracao de proposito — o
+    // extrator so roda DEPOIS da resposta, entao sem esta camada a primeira
+    // mensagem para um robo sairia com a ficha achando que e o dentista, e e
+    // justamente ela que precisa acertar. Mesmo desenho de duas camadas da
+    // irritacao e do opt-out.
+    //
+    // So PREENCHE lacuna, nunca rebaixa: quem ja tem interlocutor conhecido
+    // (o extrator leu a conversa inteira e decidiu) nao volta a ser robo por
+    // causa de uma frase solta. O extrator continua podendo mudar em qualquer
+    // direcao, porque ele ve o que a lista nao ve.
+    const sinalDeRobo = pareceAssistenteVirtual(text);
+    if (sinalDeRobo && lerInterlocutor(lead.interlocutor) === "nao_sei") {
+      await db
+        .update(leadsTable)
+        .set({ interlocutor: "assistente_virtual", updatedAt: new Date() })
+        .where(eq(leadsTable.id, lead.id));
+      lead.interlocutor = "assistente_virtual";
+      req.log.info(
+        { leadId: lead.id, sinal: sinalDeRobo },
+        "Atendimento automatico do outro lado — modo vitrine",
+      );
+    }
+
     // A conversa ainda não tem resposta NOSSA nenhuma? Então a janela de
     // silêncio é a curta. A pergunta é feita aqui, com o lead em mãos e a
     // trava na mão, porque logo abaixo ela já não valeria: entre soltar e
@@ -643,6 +676,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
       isReturning,
       totalMessages: history.length,
       origin: lead.origin,
+      interlocutor: lead.interlocutor,
     });
 
     const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
@@ -922,6 +956,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         irritado?: boolean;
         duvidaDoSite?: string | null;
         sinais?: string[];
+        interlocutor?: string | null;
       };
 
       // Sinais de temperatura. A validação de nome fica em registrarSinais
@@ -938,8 +973,19 @@ router.post("/webhook/whatsapp", async (req, res) => {
         planInterest?: "basic" | "essencial" | "pro";
         funnelStage?: FunnelStage;
         duvidaDoSite?: string;
+        interlocutor?: Interlocutor;
         updatedAt?: Date;
       } = {};
+      // QUEM ESTA DO OUTRO LADO, segunda camada. Sobrescreve em QUALQUER
+      // direcao (ao contrario da lista fixa, que so preenche lacuna): o
+      // extrator le a conversa inteira, entao e ele que enxerga a pessoa
+      // assumindo depois do robo, ou o "sou da equipe da doutora" que nenhuma
+      // lista de palavras alcanca. Valor invalido vira "nao_sei" e nao grava.
+      const quemAgora = lerInterlocutor(parsed.interlocutor);
+      if (quemAgora !== "nao_sei" && quemAgora !== lerInterlocutor(lead.interlocutor)) {
+        update.interlocutor = quemAgora;
+      }
+
       if (parsed.painPoints && parsed.painPoints.trim()) {
         update.painPoints = parsed.painPoints.trim();
       }
@@ -947,8 +993,28 @@ router.post("/webhook/whatsapp", async (req, res) => {
         update.mainObjection = parsed.mainObjection.trim();
       }
       // Só grava o nome se ainda não temos um (não sobrescreve o que já sabíamos).
+      //
+      // E SÓ SE ELE TIVER DITO (Rodada 52). O extrator devolvia qualquer string
+      // e isto aqui gravava com um `.trim()`: numa conversa real saiu "Rosane"
+      // de uma troca em que ninguém escreveu "Rosane". A instrução "não invente
+      // nada" existe no prompt dele desde sempre — instrução de modelo não é
+      // cerca, esta é.
+      //
+      // Confere só contra o que ELE mandou. Incluir as falas da Júlia reabriria
+      // o buraco pelo outro lado: ela chuta um nome, o extrator lê a própria
+      // fala dela na passada seguinte, e o chute vira fato gravado.
       if (!lead.name && parsed.name && parsed.name.trim()) {
-        update.name = parsed.name.trim();
+        const ditosPorEle = history
+          .filter((m) => m.direction === "inbound")
+          .map((m) => m.content);
+        if (nomeFoiDito(parsed.name, ditosPorEle)) {
+          update.name = parsed.name.trim();
+        } else {
+          req.log.warn(
+            { leadId: lead.id, nome: parsed.name.trim() },
+            "Nome do extrator nao aparece no que ele escreveu — descartado",
+          );
+        }
       }
       if (
         parsed.planInterest &&
@@ -997,6 +1063,9 @@ router.post("/webhook/whatsapp", async (req, res) => {
         // Reflete em memória para a guarda do "só uma vez" continuar valendo se
         // este mesmo lead voltar a passar por aqui na mesma execução.
         if (update.duvidaDoSite) lead.duvidaDoSite = update.duvidaDoSite;
+        // Reflete em memoria: as travas de temperatura e de follow-up logo
+        // abaixo leem este campo, e sem isto so valeriam na passada seguinte.
+        if (update.interlocutor) lead.interlocutor = update.interlocutor;
       }
 
       // Virou cliente? Para de vender pra quem já comprou.
@@ -1139,7 +1208,11 @@ router.post("/webhook/whatsapp", async (req, res) => {
       "falar com a responsavel",
       "falar com o dono",
       "falar com o vendedor",
-      "falar com um atendente",
+      // "falar com um atendente" SAIU daqui (Rodada 52): e frase de MENU
+      // automatico ("digite 2 para falar com um atendente"), nao pedido de
+      // gente. Ela sozinha punha 30 pontos no lead — o piso da faixa quente —
+      // e foi assim que um bot institucional virou lead QUENTE em 7 minutos.
+      // As irmas ficam: nenhuma delas cabe num menu.
       "falar com a equipe",
       "falar com o sarinho",
       "falar com o dr sarinho",
@@ -1162,11 +1235,34 @@ router.post("/webhook/whatsapp", async (req, res) => {
       "tem alguem ai",
     ];
 
-    const handoffRequested =
+    // DE QUEM É O FATO, aplicado ao handoff (Rodada 52).
+    //
+    // Duas coisas diferentes disparavam o MESMO handoff, e as duas ganhavam as
+    // mesmas consequências:
+    //   - o dentista PEDIR uma pessoa;
+    //   - a própria Júlia PROMETER que vai passar adiante.
+    //
+    // A segunda continua precisando de alerta: promessa dela em aberto é caso
+    // de gente entregar (é a mesma pendência que o toque 1 do follow-up já
+    // respeita, via SINAIS_DE_PROMESSA). O que ela NÃO pode é esquentar o lead:
+    // temperatura mede o que ELE demonstrou, e ela falando sozinha não é sinal
+    // de compra nenhum. Era o mesmo erro do extrator lendo as falas dela como
+    // interesse dele.
+    // `ehPessoa` fecha o caminho lateral: o bloco abaixo escreve status "hot"
+    // DIRETO no lead, sem passar pela temperatura, entao a trava do termometro
+    // sozinha nao alcanca este ponto. Sem isto, um menu com qualquer frase da
+    // lista promoveria o robo a quente por fora — e ainda chamaria o dono ao
+    // Telegram para uma conversa em que ninguem pediu nada.
+    const pediuPessoa =
       !optedOut &&
-      (handoffKeywords.some((k) => textoNorm.includes(k)) ||
-        respostaNorm.includes("vou passar para") ||
+      ehPessoa(lerInterlocutor(lead.interlocutor)) &&
+      handoffKeywords.some((k) => textoNorm.includes(k));
+    const elaPrometeuPassar =
+      !optedOut &&
+      (respostaNorm.includes("vou passar para") ||
         respostaNorm.includes("vou te passar"));
+
+    const handoffRequested = pediuPessoa || elaPrometeuPassar;
 
     // Alerta SEMPRE que o lead pedir — não uma única vez na vida dele.
     // Antes, um falso positivo queimava a flag e o pedido real semanas depois
@@ -1176,8 +1272,11 @@ router.post("/webhook/whatsapp", async (req, res) => {
       // ("lost"). O handoff roda DEPOIS da extração; sem esta guarda, um
       // cliente que escrevesse "me liga" voltaria para "hot" e a leva de
       // follow-up de VENDA seria armada de novo para quem já pagou.
+      //
+      // E só sobe para "hot" quando o pedido foi DELE: a promessa dela não
+      // promove ninguém, pelo mesmo motivo de não pontuar.
       const statusAposHandoff =
-        lead.status === "closed" || lead.status === "lost"
+        lead.status === "closed" || lead.status === "lost" || !pediuPessoa
           ? lead.status
           : ("hot" as const);
 
@@ -1218,11 +1317,33 @@ router.post("/webhook/whatsapp", async (req, res) => {
     //
     // Roda ANTES de armar a leva de follow-ups, de propósito: a cadência é
     // escolhida pela temperatura, e tem que ser a temperatura DE AGORA.
-    try {
+    // ROBO NAO ESQUENTA LEAD (Rodada 52). A trava que nao depende do modelo:
+    // qualquer que seja o sinal — preco, recurso, ate o "falar com um atendente"
+    // de um menu — palavra de automatico nao move o termometro. Barrar num lugar
+    // so vale mais do que cacar palavra por palavra na lista de cada detector, e
+    // foi assim que um bot institucional virou lead QUENTE em 7 minutos.
+    //
+    // Nem sequer ANOTA os sinais, e isso e o ponto: `sinaisVistos` acumula num
+    // conjunto que nunca zera. Um "perguntou_preco" colhido do menu do robo
+    // ficaria valendo 15 pontos que ninguem ganhou — e cobraria esses pontos da
+    // pessoa de verdade que assumir a conversa depois.
+    //
+    // Escrito como `else try` para nao reindentar o bloco inteiro: o que muda e
+    // so a guarda na entrada.
+    if (!podePontuarTemperatura(lerInterlocutor(lead.interlocutor))) {
+      req.log.info(
+        { leadId: lead.id },
+        "Atendimento automatico — temperatura nao pontua",
+      );
+    } else try {
       const novos = [...sinaisDaConversa, "respondeu_algo"];
       // O handoff tem detector próprio (acima), mais confiável que o extrator
       // para este sinal — por isso ele não está na lista do prompt.
-      if (handoffRequested) novos.push("pediu_pessoa");
+      //
+      // `pediuPessoa`, e nao `handoffRequested`: a Julia prometendo passar
+      // adiante gera alerta (alguem tem que entregar), mas nao vale os 30
+      // pontos. Temperatura mede o que ELE demonstrou.
+      if (pediuPessoa) novos.push("pediu_pessoa");
 
       const { sinaisVistos, temperatura } = registrarSinais(lead.sinaisVistos, novos);
 
@@ -1258,7 +1379,18 @@ router.post("/webhook/whatsapp", async (req, res) => {
     // Como acabamos de cancelar os pendentes acima, não há leva ativa — então
     // sempre criamos uma nova. Assim, se o lead sumir, a cadência recomeça do
     // último contato. (Só não arma se o lead já fechou ou foi perdido.)
-    if (!["closed", "lost"].includes(lead.status)) {
+    // Robo do outro lado nao recebe leva (decisao do dono, 17/08/2026): a
+    // Julia responde UMA vez, bem — o dentista pode ler depois — e para. Os
+    // toques cairiam no mesmo automatico, que responderia de novo: ping-pong de
+    // robo com robo gastando credito dos dois lados. Quando uma pessoa assumir,
+    // o interlocutor muda e a cadencia arma sozinha na passada seguinte, porque
+    // a leva e armada a cada resposta dele.
+    if (!mereceFollowUp(lerInterlocutor(lead.interlocutor))) {
+      req.log.info(
+        { leadId: lead.id },
+        "Atendimento automatico — nenhuma leva de follow-up armada",
+      );
+    } else if (!["closed", "lost"].includes(lead.status)) {
       // RODADA 41 (Parte 2): a leva nasce na cadência da temperatura DE AGORA
       // — a atualização logo acima veio antes disto de propósito. Como toda
       // resposta dele cancela a leva antiga e arma esta, um lead frio que

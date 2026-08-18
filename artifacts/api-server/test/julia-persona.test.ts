@@ -15,7 +15,16 @@ import {
 } from "../src/julia-persona";
 import { detectarTratamento, saudacao } from "../src/lib/tratamento";
 
-const ficha = (name: string | null, origin: string | null = null) =>
+const ficha = (
+  name: string | null,
+  origin: string | null = null,
+  // RODADA 52: o título "Dr."/"Dra." é do DENTISTA, então a ficha só o entrega
+  // quando sabe que é com ele que se está falando. Estas asserções sempre
+  // testaram a regra de GÊNERO, e o gênero só é consultado depois dessa
+  // pergunta — por isso a pré-condição vira explícita aqui, em vez de
+  // implícita como era quando o sistema presumia que todo mundo era o dono.
+  interlocutor: string | null = "dentista_dono",
+) =>
   buildLeadBriefing({
     name,
     funnelStage: "qualified",
@@ -26,6 +35,7 @@ const ficha = (name: string | null, origin: string | null = null) =>
     isReturning: true,
     totalMessages: 8,
     origin,
+    interlocutor,
   });
 
 secao("Dr./Dra. determinístico na ficha do lead");
@@ -37,6 +47,19 @@ ok('"Yuri" → ambíguo', ficha("Yuri").includes("nome ambíguo"));
 ok('"raquel silva" → só o primeiro nome, capitalizado', ficha("raquel silva").includes("trate como: Dra. Raquel"));
 ok("sem nome → manda perguntar", ficha(null).includes("ainda não sei"));
 ok('nunca escreve "Dr(a)."', !ficha("Alex").includes("Dr(a)"));
+
+// RODADA 52 — o título não sai por padrão, só quando se sabe que é o dentista.
+// Sem esta cerca, a regra de gênero acima (que é boa) voltaria a ser aplicada a
+// quem não é dentista, que foi como uma assistente virtual virou "Dr. Romero".
+ok(
+  "sem saber quem é do outro lado, nome feminino NÃO vira Dra.",
+  !ficha("Marina", null, null).includes("Dra. Marina"),
+  ficha("Marina", null, null),
+);
+ok(
+  "e a ficha diz que não sabe, em vez de calar e deixar o modelo supor",
+  ficha("Marina", null, null).includes("ainda NÃO SABE"),
+);
 
 secao("origem do lead na ficha — a Júlia não inventa de onde ele veio");
 // O bug real: ela abria com "vi que você deu uma olhada na gente" para quem

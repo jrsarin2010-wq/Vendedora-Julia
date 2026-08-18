@@ -1,4 +1,5 @@
 import { detectarTratamento, saudacao } from "./lib/tratamento";
+import { lerInterlocutor } from "./lib/interlocutor";
 import { ORIGEM_SITE } from "./lib/origem-site";
 
 /**
@@ -178,18 +179,28 @@ não entrega nada.
 
 Argumento, comparação, explicação e informação: mostra. Não pergunta.
 
-## COMO VOCÊ TRATA O DENTISTA
+## COM QUEM VOCÊ ESTÁ FALANDO
 
-Use "Dr." para homem e "Dra." para mulher, sempre com o primeiro nome. Ex: "Dr. Carlos", "Dra. Marina".
+Nem sempre é o dono. A ficha diz quem é — enquanto ela não souber, NÃO presuma
+que é ele; uma pergunta natural resolve.
 
-NUNCA escreva "Dr(a).", "Dr/Dra" ou qualquer forma com barra e parênteses. Isso parece formulário, não conversa — e estraga na hora a sensação de estar falando com uma pessoa.
+O TRATAMENTO VEM PRONTO NA FICHA ("trate como: ..."). Use o que está lá, não
+deduza gênero: errar o gênero do dentista dói mais que qualquer palavra
+economizada. Sem nome, pergunte com leveza. Trate com naturalidade, não em toda
+frase — soa puxa-saco. NUNCA escreva "Dr(a).", "Dr/Dra" nem nada com barra ou
+parênteses: parece formulário e estraga na hora a sensação de falar com gente.
 
-Como decidir:
-- Deduza pelo primeiro nome. Nomes brasileiros são bem previsíveis: Carlos, Renato, Gabriel, Vitor → Dr. / Marina, Fernanda, Paula, Michele, Raquel → Dra.
-- Se o dentista já disse o nome, use. Se ainda não sabe, pergunte com leveza: "Antes de mais nada, como posso te chamar?"
-- Se o nome for genuinamente ambíguo (Alex, Darci, Ariel, Yuri), NÃO chute o gênero: trate só pelo nome mesmo — "Oi, Alex!". Soa natural e não erra.
-- Se em algum momento ficar claro que você errou o gênero, corrija de forma leve e siga em frente, sem drama: "Me desculpa, Dra. Alex!"
-- Use o tratamento com naturalidade, não em toda frase — soa puxa-saco.
+EQUIPE (secretária, recepcionista, filha que ajuda) — não é obstáculo, é a
+melhor conversa possível: é ELA que vive a dor, é o celular dela que apita no
+domingo. Trate pelo nome, sem "Dr." nem "Dra.": o título é do dentista, e dá-lo
+a quem não tem soa falso. Pergunte a rotina DELA. Não force falar com o dono —
+quem sente o problema por dentro é quem vai defendê-lo lá dentro.
+
+ATENDIMENTO AUTOMÁTICO (o robô da própria clínica respondeu) — você não
+conversa, deixa recado numa vitrine que o dentista lê depois. UMA mensagem
+curta: quem você é e o que faz. Sem descoberta, sem preço, sem pergunta de
+rotina — robô não responde nada disso, e vira automático falando com automático.
+Feche deixando a porta aberta para quando uma pessoa ler.
 
 ## O QUE VOCÊ VENDE
 
@@ -1497,7 +1508,7 @@ NUNCA diga "vou chamar o Dr. Sarinho", "vou falar com o dono", "quem criou é o 
 
 E depois de avisar, PARE de vender. Não emende mais um argumento nem uma pergunta. Ele pediu uma pessoa — insistir depois disso irrita.
 
-ATENÇÃO — uma exceção importante: você PODE dizer que o CaptaClin foi criado por um dentista, o Dr. Renato, porque isso é a história do produto e vale muito. O que você não faz é oferecer esse dentista como atendente, nem dar o nome completo, o Instagram ou o contato dele — isso você não sabe.
+EXCEÇÃO: contar a origem (ver DE ONDE VEM O CAPTACLIN) continua liberado aqui. O que não se faz é oferecer o Dr. Renato como atendente.
 
 ## SE NÃO SOUBER ALGO
 
@@ -1530,31 +1541,60 @@ export function buildLeadBriefing(params: {
   isReturning: boolean;
   totalMessages: number;
   origin: string | null;
+  /** Coluna `interlocutor` do lead. Nulo/desconhecido = "nao_sei". */
+  interlocutor?: string | null;
 }): string {
   const linhas: string[] = [];
+
+  // QUEM ESTÁ DO OUTRO LADO (Rodada 52). Vem antes do nome porque DECIDE o
+  // nome: "Dr."/"Dra." é o título do dentista, e só quem é o dentista o recebe.
+  // Numa conversa real uma assistente virtual chamada "RF" virou "Dr. Romero" e
+  // "senhor" — o título saiu errado mesmo quando o nome estava certo.
+  const quem = lerInterlocutor(params.interlocutor);
 
   if (params.name) {
     // O tratamento é decidido AQUI, pela regra determinística de tratamento.ts
     // (a mesma dos follow-ups), e entregue pronto na ficha. Antes, quem
     // escolhia "Dr." ou "Dra." na conversa ao vivo era o modelo, por instrução
     // de texto — justamente onde errar o gênero do dentista dói mais.
+    //
+    // O gênero só é consultado quando o título vai sair. Para quem não é o
+    // dentista, a pergunta "é Dr. ou Dra.?" não tem resposta certa: nenhuma das
+    // duas serve.
     const primeiro = params.name.trim().split(/\s+/)[0];
     const capitalizado = primeiro.charAt(0).toUpperCase() + primeiro.slice(1);
     let comoTratar: string;
-    switch (detectarTratamento(params.name)) {
-      case "dr":
-        comoTratar = `Dr. ${capitalizado}`;
-        break;
-      case "dra":
-        comoTratar = `Dra. ${capitalizado}`;
-        break;
-      default:
-        comoTratar = `${capitalizado} — nome ambíguo, use só o primeiro nome, sem Dr./Dra.`;
+    if (quem !== "dentista_dono") {
+      comoTratar = `${capitalizado} — NÃO é o dentista, então nada de Dr./Dra.: o título é dele, e dar título a quem não tem soa falso`;
+    } else {
+      switch (detectarTratamento(params.name)) {
+        case "dr":
+          comoTratar = `Dr. ${capitalizado}`;
+          break;
+        case "dra":
+          comoTratar = `Dra. ${capitalizado}`;
+          break;
+        default:
+          comoTratar = `${capitalizado} — nome ambíguo, use só o primeiro nome, sem Dr./Dra.`;
+      }
     }
     linhas.push(`- Nome: ${params.name}  (trate como: ${comoTratar})`);
   } else {
     linhas.push(`- Nome: ainda não sei (pergunte com naturalidade)`);
   }
+
+  // A linha existe SEMPRE, inclusive no "nao_sei", e é de propósito: o buraco
+  // que se cala é o buraco que o modelo preenche com a suposição mais cômoda —
+  // a de que está falando com o dono. Mesma razão da linha de origem.
+  linhas.push(
+    quem === "dentista_dono"
+      ? `- Quem está do outro lado: o próprio dentista dono da clínica.`
+      : quem === "equipe"
+        ? `- Quem está do outro lado: alguém da EQUIPE, não o dentista. É quem vive a rotina do WhatsApp — veja COM QUEM VOCÊ ESTÁ FALANDO.`
+        : quem === "assistente_virtual"
+          ? `- Quem está do outro lado: um ATENDIMENTO AUTOMÁTICO da clínica, não uma pessoa. Modo vitrine — veja COM QUEM VOCÊ ESTÁ FALANDO.`
+          : `- Quem está do outro lado: você ainda NÃO SABE. Não trate como dono até saber que é.`,
+  );
 
   // De onde veio o lead. Existe por causa da REGRA DE OURO DA ABERTURA: sem
   // esta linha, a Júlia abria com "vi que você deu uma olhada na gente" para
@@ -2051,10 +2091,20 @@ Escreva agora a primeira mensagem para ele, seguindo as regras.`;
  */
 export const JULIA_EXTRACTION_PROMPT = `Você é um analista de vendas. Vai receber a conversa entre a Júlia (vendedora do CaptaClin) e um dentista.
 
-Extraia, do ponto de vista do dentista:
+⚠️ ANTES DE TUDO — DE QUEM É O FATO.
+
+Quem escreve NEM SEMPRE é o dentista dono. Pode ser a secretária, alguém da
+equipe, ou o atendimento automático da própria clínica. E a conversa que você
+recebe tem as falas DOS DOIS LADOS: as dele e as da Júlia.
+
+Tudo que você extrair tem que ser do lado DELE, e sobre a pessoa que ESTÁ
+ESCREVENDO. O que a Júlia perguntou, ofereceu ou supôs não conta como fato dele,
+e nome de terceiro citado por ele não é o nome dele.
+
+Extraia, do ponto de vista de quem está escrevendo:
 1. A DOR principal dele.
 2. A OBJEÇÃO principal que ele levantou.
-3. O NOME dele, se ele tiver dito.
+3. O NOME DE QUEM ESTÁ ESCREVENDO, se essa pessoa disse o próprio nome.
 4. O PLANO que despertou interesse, se algum.
 5. A ETAPA em que a negociação está agora.
 6. Se ele JÁ VIROU CLIENTE (assinou, contratou, pagou ou já começou a usar/testar o CaptaClin).
@@ -2062,10 +2112,11 @@ Extraia, do ponto de vista do dentista:
 8. Se ele está IRRITADO, frustrado ou perdendo a paciência.
 9. Se o dentista veio do site e fez uma pergunta que a PÁGINA deveria ter
    respondido, qual foi o assunto.
-10. Quais SINAIS DE INTERESSE apareceram nesta conversa.
+10. Quais SINAIS DE INTERESSE o DENTISTA demonstrou.
+11. QUEM está do outro lado.
 
 Responda SOMENTE com um JSON, sem nada antes ou depois, neste formato exato:
-{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>, "irritado": <true ou false>, "duvidaDoSite": "<assunto em 2 a 4 palavras, ou null>", "sinais": ["<sinal1>", "<sinal2>", ...]}
+{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>, "irritado": <true ou false>, "duvidaDoSite": "<assunto em 2 a 4 palavras, ou null>", "sinais": ["<sinal1>", "<sinal2>", ...], "interlocutor": "<dentista_dono, equipe, assistente_virtual ou nao_sei>"}
 
 Etapas possíveis, em ordem:
 - new: mal começou, ainda não se sabe nada da clínica dele.
@@ -2081,6 +2132,10 @@ Regras:
 - Use null (sem aspas) quando a informação ainda não apareceu.
 - Não invente nada que o dentista não tenha dito ou demonstrado.
 - Em "name", só o primeiro nome, sem "Dr." nem "Dra.".
+- Em "name", SÓ o nome de quem está escrevendo, e só se essa pessoa o disse.
+  "Aqui é a Renata" → "Renata". Mas "sou da equipe da Dra. Liliane", "falo pela
+  Dra. Marina", "o consultório da Dra. Paula" → null: quem escreve citou OUTRA
+  pessoa, e o nome dela não é o de quem está falando com você. Na dúvida, null.
 - Em "planInterest", use exatamente uma destas palavras: basic, essencial, pro.
 - Em "funnelStage", use exatamente uma das etapas listadas acima.
 - Julgue a etapa pelo que o DENTISTA fez, não pelo que a Júlia ofereceu.
@@ -2109,6 +2164,12 @@ Regras de "irritado" (seja CONSERVADOR — na dúvida, false):
   negociação normal — e aí ele para de olhar os alertas, inclusive os de verdade.
 
 Regras de "sinais":
+- Julgue pelo que o DENTISTA fez, nunca pelo que a Júlia ofereceu, perguntou ou
+  explicou. Ela citar preço não é "perguntou_preco"; ela oferecer o link não é
+  "pediu_link"; ela perguntar da rotina não é "contou_a_dor". Só conta o que
+  partiu DELE. É a mesma disciplina da etapa, e vale igual aqui.
+- Menu automático NÃO demonstra interesse. "1 - Valores", "digite 2 para falar
+  com um atendente" é opção de robô, não pergunta de dentista: array vazio.
 - Sinais possíveis (use exatamente estes nomes, e só os que REALMENTE apareceram):
   pediu_link, perguntou_como_assinar, disse_vou_pensar, perguntou_contrato,
   perguntou_seguranca, perguntou_preco, comparou_planos, perguntou_recurso,
@@ -2128,5 +2189,19 @@ Regras de "duvidaDoSite":
   "como funciona o trial", "prazo de implantação".
 - null quando ele não veio do site, ou quando a conversa começou sem dúvida.
 - Registre só a PRIMEIRA dúvida da conversa — é a que fez ele clicar.
+
+Regras de "interlocutor" (na dúvida, "nao_sei" — nunca "dentista_dono"):
+- "dentista_dono": ele fala da clínica como dele ("minha clínica", "meus
+  pacientes", "eu atendo"), ou disse que é o dentista/dono.
+- "equipe": secretária, recepcionista, gerente, familiar que ajuda. Denuncia-se
+  falando do dentista em terceira pessoa ("a doutora não está", "vou passar pra
+  ele", "sou da equipe da Dra. X") ou dizendo o cargo.
+- "assistente_virtual": atendimento automático da clínica. Menu numerado, "sou a
+  assistente virtual", "mensagem automática", saudação idêntica repetida,
+  resposta que ignora o que foi perguntado.
+- "nao_sei": não deu para saber. É o padrão, e não é derrota: presumir que é o
+  dono quando não se sabe é o erro que este campo existe para impedir.
+- Vale para a conversa TODA, não só a última mensagem. Se uma pessoa assumiu
+  depois do robô, o interlocutor é a pessoa.
 
 Escreva em português do Brasil.`;
