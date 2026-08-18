@@ -342,6 +342,20 @@ secao("F — o script de medicao nao pode divergir do modulo");
     fonte.includes("dentroDePergunta"),
   );
   ok("e e somente leitura", !/INSERT|UPDATE|DELETE/i.test(fonte), "o script escreve no banco!");
+
+  // As DUAS bordas. O baseline nao precisa ser medido antes de subir — as
+  // mensagens moram no banco, e o deploy nao apaga nenhuma (as colunas desta
+  // frente nascem anulaveis, sem backfill). Sem `--ate` isso deixaria de ser
+  // verdade na pratica: o "antes" existiria no banco e nao teria como ser lido.
+  ok("sabe cortar para tras (--ate), que e o baseline", fonte.includes('"--ate"'));
+  ok("e para frente (--desde), que e a era nova", fonte.includes('"--desde"'));
+  // O script importa `pg` diretamente, entao a api-server precisa declara-lo:
+  // com o pnpm isolando dependencias, `pg` de lib/db NAO resolve daqui, e o
+  // script morria no import antes de rodar uma linha.
+  const pacote = JSON.parse(
+    readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+  );
+  ok("e a dependencia dele esta declarada", Boolean(pacote.dependencies?.pg), "falta pg");
 }
 
 fim();

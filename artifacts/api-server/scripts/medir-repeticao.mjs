@@ -7,18 +7,25 @@
  * carrega o estado e que o detector dispara — nada disso prova que ela parou de
  * insistir. Isso so as conversas de verdade dizem.
  *
- * Entao o metodo e: rodar ANTES de subir, guardar a saida, rodar DEPOIS, e
- * comparar. Guardar importa — o log morre com o deploy, e sem a copia o numero
- * de antes deixa de existir.
+ * O metodo e comparar duas janelas separadas pela data do deploy.
+ *
+ * ⚠️ O BASELINE NAO PRECISA SER MEDIDO ANTES DE SUBIR. Isto contraria o
+ * instinto (e o que eu mesmo escrevi na primeira versao), entao vale escrito:
+ * a medicao le `lead_messages`, que e BANCO, nao log. O deploy nao apaga
+ * mensagem nenhuma — as colunas desta frente nascem anulaveis e sem backfill.
+ * Entao o "antes" continua inteiro depois de subir, e se recupera com `--ate`.
+ * Nao confundir com [[o-log-morre-com-o-deploy]]: aquilo vale para LOG.
  *
  * SOMENTE LEITURA. Nao escreve nada, nao apaga nada, nao manda mensagem.
  *
  * Uso:
  *   DATABASE_URL=... node scripts/medir-repeticao.mjs
- *   DATABASE_URL=... node scripts/medir-repeticao.mjs --desde 2026-08-18
+ *   DATABASE_URL=... node scripts/medir-repeticao.mjs --ate 2026-08-18    # ANTES
+ *   DATABASE_URL=... node scripts/medir-repeticao.mjs --desde 2026-08-18  # DEPOIS
  *
- * O `--desde` e o que separa o depois do antes: com a data do deploy, so entram
- * conversas que ja nasceram sob as regras novas. Sem ele, mede tudo.
+ * Use a data do DEPLOY nos dois, e os dois numeros sao comparaveis: `--ate`
+ * pega so o que nasceu sob as regras velhas, `--desde` so o que nasceu sob as
+ * novas. Rodar sem nenhum dos dois mistura as duas eras e nao responde nada.
  */
 import pg from "pg";
 
@@ -28,12 +35,19 @@ if (!url) {
   process.exit(1);
 }
 
-const i = process.argv.indexOf("--desde");
-const desde = i !== -1 ? process.argv[i + 1] : null;
-if (i !== -1 && !/^\d{4}-\d{2}-\d{2}$/.test(desde ?? "")) {
-  console.error("--desde precisa de uma data AAAA-MM-DD");
-  process.exit(1);
+function dataDoArgumento(flag) {
+  const i = process.argv.indexOf(flag);
+  if (i === -1) return null;
+  const valor = process.argv[i + 1];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor ?? "")) {
+    console.error(`${flag} precisa de uma data AAAA-MM-DD`);
+    process.exit(1);
+  }
+  return valor;
 }
+
+const desde = dataDoArgumento("--desde");
+const ate = dataDoArgumento("--ate");
 
 /**
  * Os mesmos fragmentos de `src/lib/descoberta.ts`, e a mesma regra de "so conta
@@ -99,13 +113,23 @@ function topicosPerguntados(texto) {
 const cliente = new pg.Client({ connectionString: url });
 await cliente.connect();
 
+const condicoes = ["direction = 'outbound'"];
+const parametros = [];
+if (desde) {
+  parametros.push(desde);
+  condicoes.push(`created_at >= $${parametros.length}`);
+}
+if (ate) {
+  parametros.push(ate);
+  condicoes.push(`created_at < $${parametros.length}`);
+}
+
 const { rows } = await cliente.query(
   `SELECT lead_id, content, created_at
      FROM lead_messages
-    WHERE direction = 'outbound'
-      ${desde ? "AND created_at >= $1" : ""}
+    WHERE ${condicoes.join(" AND ")}
     ORDER BY lead_id, created_at`,
-  desde ? [desde] : [],
+  parametros,
 );
 await cliente.end();
 
@@ -145,7 +169,11 @@ for (const [leadId, conta] of porLead) {
 const pct = (a, b) => (b === 0 ? "  -  " : `${((a / b) * 100).toFixed(0).padStart(3)}%`);
 
 console.log("");
-console.log(`INSISTENCIA${desde ? ` (desde ${desde})` : " (historico inteiro)"}`);
+const janela = desde && ate ? `de ${desde} a ${ate}`
+  : desde ? `desde ${desde} — a era NOVA`
+  : ate ? `ate ${ate} — a era VELHA, o baseline`
+  : "historico inteiro (as duas eras misturadas: nao compara nada)";
+console.log(`INSISTENCIA (${janela})`);
 console.log("");
 console.log(`  mensagens nossas lidas .............. ${rows.length}`);
 console.log(`  conversas com pergunta de descoberta  ${totalLeads}`);
