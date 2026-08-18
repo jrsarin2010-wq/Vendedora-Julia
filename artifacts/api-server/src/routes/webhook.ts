@@ -57,7 +57,12 @@ import {
   statusDaFaixa,
   CADENCIA_POR_FAIXA,
 } from "../lib/temperatura";
-import { REPLY_MODEL, EXTRACTION_MODEL } from "../lib/modelos";
+import {
+  REPLY_MODEL,
+  EXTRACTION_MODEL,
+  TETO_RESPOSTA,
+  TETO_EXTRACAO,
+} from "../lib/modelos";
 import {
   perguntasRepetidas,
   registrarDescoberta,
@@ -712,7 +717,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
           openai.chat.completions.create(
             {
               model: REPLY_MODEL,
-              max_completion_tokens: 512,
+              max_completion_tokens: TETO_RESPOSTA,
               messages: chatMessages,
             },
             { timeout: 30_000 },
@@ -762,13 +767,29 @@ router.post("/webhook/whatsapp", async (req, res) => {
       return;
     }
 
-    const reply = completion.choices[0]?.message?.content?.trim();
+    const escolhaDaResposta = completion.choices[0];
+    const reply = escolhaDaResposta?.message?.content?.trim();
     if (!reply) {
       // Não inventamos resposta (melhor calar do que falar bobagem), mas o
       // lead fica sem resposta — isso precisa aparecer no log, não sumir.
+      //
+      // O `finish_reason` e a contagem entram porque "veio vazia" sozinho não
+      // diz NADA sobre a causa: estouro de teto e recusa do modelo produzem a
+      // mesma string vazia. Foram esses dois números que faltaram para explicar
+      // a prévia muda da abordagem em 18/08, e este caminho é o mesmo.
       req.log.error(
-        { leadId: lead.id, model: REPLY_MODEL },
-        "Modelo devolveu resposta vazia — lead ficou sem resposta",
+        {
+          leadId: lead.id,
+          model: REPLY_MODEL,
+          finishReason: escolhaDaResposta?.finish_reason ?? null,
+          tetoDeSaida: TETO_RESPOSTA,
+          tokensGerados: completion.usage?.completion_tokens ?? null,
+          tokensDeRaciocinio:
+            completion.usage?.completion_tokens_details?.reasoning_tokens ?? null,
+        },
+        escolhaDaResposta?.finish_reason === "length"
+          ? "Resposta estourou o teto de saída — lead ficou sem resposta; suba TETO_RESPOSTA em lib/modelos.ts"
+          : "Modelo devolveu resposta vazia — lead ficou sem resposta",
       );
       return;
     }
@@ -960,7 +981,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
           openai.chat.completions.create(
             {
               model: EXTRACTION_MODEL,
-              max_completion_tokens: 200,
+              max_completion_tokens: TETO_EXTRACAO,
               messages: [
                 { role: "system", content: JULIA_EXTRACTION_PROMPT },
                 { role: "user", content: transcript },
@@ -975,7 +996,25 @@ router.post("/webhook/whatsapp", async (req, res) => {
         },
       );
 
-      const rawExtraction = extraction.choices[0]?.message?.content?.trim() ?? "";
+      // O JSON TRUNCADO E O JSON AUSENTE não são o mesmo problema, e o catch
+      // lá embaixo trata os dois como "seguindo sem". A diferença importa: um
+      // JSON cortado no meio significa TETO CURTO, e teto curto piora
+      // exatamente na conversa rica — a que tem sinal, descoberta respondida e
+      // dor escrita, ou seja, o melhor lead da lista. Sem esta linha o sintoma
+      // seria a ficha parada, sem ninguém saber por quê.
+      const escolhaDaExtracao = extraction.choices[0];
+      if (escolhaDaExtracao?.finish_reason === "length") {
+        req.log.error(
+          {
+            leadId: lead.id,
+            model: EXTRACTION_MODEL,
+            tetoDeSaida: TETO_EXTRACAO,
+            tokensGerados: extraction.usage?.completion_tokens ?? null,
+          },
+          "Extração estourou o teto de saída — a ficha deste lead não foi atualizada; suba TETO_EXTRACAO em lib/modelos.ts",
+        );
+      }
+      const rawExtraction = escolhaDaExtracao?.message?.content?.trim() ?? "";
       const jsonText = rawExtraction.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(jsonText) as {
         painPoints?: string | null;
