@@ -128,6 +128,13 @@ router.patch("/leads/:id", async (req, res) => {
     if (body.status !== undefined) updateData.status = body.status;
     if (body.notes !== undefined) updateData.notes = body.notes;
     if (body.handoffRequested !== undefined) updateData.handoffRequested = body.handoffRequested;
+    // QUEM ESTÁ DO OUTRO LADO, corrigido à mão.
+    //
+    // É o caminho de volta que o extrator não dá: ele só reabre o nome quando o
+    // interlocutor MUDA numa mensagem nova, e um lead cuja assistente nunca
+    // mais disser um nome ficaria com o nome dela para sempre. Aqui o dono
+    // arruma os dois de uma vez — este campo também decide se o "Dr./Dra." sai.
+    if (body.interlocutor !== undefined) updateData.interlocutor = body.interlocutor;
     // Retomar a Júlia antes dos 5 minutos. O schema só admite null, então isto
     // nunca cria uma pausa pelo painel — quem pausa é o humano respondendo pelo
     // WhatsApp. Aqui a única operação possível é liberar.

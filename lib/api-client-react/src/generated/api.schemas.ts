@@ -50,6 +50,16 @@ export const LeadStatus = {
   lost: 'lost',
 } as const;
 
+export type LeadInterlocutor = typeof LeadInterlocutor[keyof typeof LeadInterlocutor];
+
+
+export const LeadInterlocutor = {
+  dentista_dono: 'dentista_dono',
+  equipe: 'equipe',
+  assistente_virtual: 'assistente_virtual',
+  nao_sei: 'nao_sei',
+} as const;
+
 export interface Lead {
   id: number;
   /** @nullable */
@@ -74,6 +84,7 @@ export interface Lead {
   /** @nullable */
   pausedUntil?: string | null;
   handoffRequested?: boolean;
+  interlocutor?: LeadInterlocutor;
   createdAt: string;
   updatedAt: string;
 }
@@ -112,6 +123,16 @@ export const LeadUpdateStatus = {
   lost: 'lost',
 } as const;
 
+export type LeadUpdateInterlocutor = typeof LeadUpdateInterlocutor[keyof typeof LeadUpdateInterlocutor];
+
+
+export const LeadUpdateInterlocutor = {
+  dentista_dono: 'dentista_dono',
+  equipe: 'equipe',
+  assistente_virtual: 'assistente_virtual',
+  nao_sei: 'nao_sei',
+} as const;
+
 export interface LeadUpdate {
   name?: string;
   funnelStage?: LeadUpdateFunnelStage;
@@ -121,6 +142,7 @@ export interface LeadUpdate {
   status?: LeadUpdateStatus;
   notes?: string;
   handoffRequested?: boolean;
+  interlocutor?: LeadUpdateInterlocutor;
   /** @nullable */
   pausedUntil?: null;
 }

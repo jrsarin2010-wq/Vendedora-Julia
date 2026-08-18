@@ -1666,7 +1666,55 @@ ${comoUsar}`;
 function dor(pain: string | null): string | null {
   if (!pain) return null;
   const limpa = pain.trim().replace(/[.!?;,\s]+$/, "").toLowerCase();
-  return limpa.length > 0 ? limpa : null;
+  if (limpa.length === 0) return null;
+  // A dor NARRADA em terceira pessoa não entra em texto nenhum — ver
+  // `pareceNarracao`. Melhor o toque genérico do que uma frase que denuncia
+  // que a Júlia está lendo uma ficha.
+  return pareceNarracao(limpa) ? null : limpa;
+}
+
+/**
+ * A "dor" veio como NARRAÇÃO sobre o dentista, em vez do problema dele?
+ *
+ * O caso real: o extrator gravou "Ele quer entender como funciona o atendimento
+ * no WhatsApp", e o toque 1 colou isso depois de "sobre" — saiu "no que você me
+ * contou sobre ele quer entender como funciona o atendimento no whatsapp". Quem
+ * recebeu leu o resumo interno dele, em terceira pessoa, dentro da mensagem.
+ *
+ * A regra é só o COMEÇO da frase, de propósito. É ali que a narração se
+ * denuncia ("ele quer", "o dentista precisa"), e ampliar para o meio do texto
+ * derrubaria dor legítima — "perde paciente que chama fora do horário" tem
+ * verbo e é exatamente o formato que se quer.
+ *
+ * Isto é a CERCA; a regra de formato está no prompt do extrator. As duas, e não
+ * uma: instrução de modelo reduz frequência, não impede — a mesma lição do nome
+ * inventado (lib/interlocutor.ts).
+ */
+export function pareceNarracao(texto: string): boolean {
+  const alvo = texto
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Mn}/gu, "");
+  return /^(ele|ela|eles|elas|o dentista|a dentista|o lead|a lead|o cliente|a cliente|o usuario|a usuaria|o dono|a dona|o doutor|a doutora)\b/.test(
+    alvo,
+  );
+}
+
+/**
+ * A conversa ANDOU antes de parar? Quantas mensagens DELE bastam para o toque 1
+ * não poder mais dizer "acabou ficando pela metade".
+ *
+ * Três, e não uma: com uma resposta só ("oi") a conversa de fato mal começou, e
+ * o texto original está certo. Com três ele já contou alguma coisa — e chamar
+ * isso de "pela metade" é a Júlia desmentindo o que ele acabou de fazer. Numa
+ * conversa real ele respondeu CINCO perguntas e recebeu o mesmo texto de quem
+ * só mandou "oi".
+ */
+export const MENSAGENS_PARA_CONVERSA_PROFUNDA = 3;
+
+export function conversaFoiProfunda(mensagensDele: number): boolean {
+  return mensagensDele >= MENSAGENS_PARA_CONVERSA_PROFUNDA;
 }
 
 /**
@@ -1682,10 +1730,24 @@ function dor(pain: string | null): string | null {
  * chama fora do horário"), e embutir isso numa regência quebraria a gramática.
  */
 export const FOLLOW_UP_TEMPLATES = {
-  1: (leadName: string | null, pain: string | null) =>
-    `${saudacao(leadName)}aqui é a Júlia do CaptaClin 😊 A gente começou a conversar e acabou ficando pela metade. ${
+  // O terceiro parâmetro é a PROFUNDIDADE da conversa, e ele muda a primeira
+  // frase. "Acabou ficando pela metade" é verdade para quem respondeu "oi" e
+  // sumiu; para quem respondeu cinco perguntas é a Júlia desmentindo o que ele
+  // acabou de fazer — e o texto era escolhido só pelo ÍNDICE do toque, então os
+  // dois recebiam o mesmo. Padrão `false` porque o caso raso é o comum e porque
+  // manter a chamada de dois argumentos válida evita mexer em quem já chama.
+  //
+  // A dor entra depois de ":" — APOSTO, como nos toques 2, 3 e 4. Antes vinha
+  // depois de "sobre", que exige complemento nominal, e uma dor com verbo
+  // quebrava a regência na cara do dentista.
+  1: (leadName: string | null, pain: string | null, profunda = false) =>
+    `${saudacao(leadName)}aqui é a Júlia do CaptaClin 😊 ${
+      profunda
+        ? `A gente conversou bastante e acabei te deixando sem resposta.`
+        : `A gente começou a conversar e acabou ficando pela metade.`
+    } ${
       dor(pain)
-        ? `Fiquei pensando no que você me contou sobre ${dor(pain)}.`
+        ? `Fiquei pensando no que você me contou: ${dor(pain)}.`
         : `Posso te fazer só uma pergunta rápida sobre o WhatsApp da sua clínica?`
     } Tem 2 minutinhos? Se preferir olhar por conta antes, tá tudo aqui: https://www.captaclin.com.br`,
 
@@ -2131,6 +2193,16 @@ Etapas possíveis, em ordem:
 Regras:
 - Use null (sem aspas) quando a informação ainda não apareceu.
 - Não invente nada que o dentista não tenha dito ou demonstrado.
+- Em "painPoints", escreva O PROBLEMA, não uma frase sobre ele. O texto é
+  costurado dentro de uma mensagem que a Júlia envia, então tem que caber depois
+  de "você me contou:" e soar como coisa que ELE diria.
+  CERTO:  "perde paciente que chama fora do horário"
+          "ninguém responde o WhatsApp quando está com paciente na cadeira"
+          "as mensagens do fim de semana ficam sem resposta"
+  ERRADO: "Ele quer entender como funciona o atendimento no WhatsApp"
+          "O dentista tem dificuldade com o WhatsApp"
+  NUNCA comece com "ele", "ela", "o dentista" ou "o cliente": isso é relatório
+  para quem lê a ficha, e essa frase sai na mensagem que ele recebe.
 - Em "name", só o primeiro nome, sem "Dr." nem "Dra.".
 - Em "name", SÓ o nome de quem está escrevendo, e só se essa pessoa o disse.
   "Aqui é a Renata" → "Renata". Mas "sou da equipe da Dra. Liliane", "falo pela

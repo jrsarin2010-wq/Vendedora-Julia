@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { LeadUpdateFunnelStage } from './leadUpdateFunnelStage';
+import type { LeadUpdateInterlocutor } from './leadUpdateInterlocutor';
 import type { LeadUpdatePlanInterest } from './leadUpdatePlanInterest';
 import type { LeadUpdateStatus } from './leadUpdateStatus';
 
@@ -18,6 +19,7 @@ export interface LeadUpdate {
   status?: LeadUpdateStatus;
   notes?: string;
   handoffRequested?: boolean;
+  interlocutor?: LeadUpdateInterlocutor;
   /** @nullable */
   pausedUntil?: null;
 }

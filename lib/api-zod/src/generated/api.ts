@@ -47,6 +47,7 @@ export const ListLeadsResponse = zod.object({
   "lastMessageAt": zod.string().nullish(),
   "pausedUntil": zod.string().nullish(),
   "handoffRequested": zod.boolean().optional(),
+  "interlocutor": zod.enum(['dentista_dono', 'equipe', 'assistente_virtual', 'nao_sei']).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })),
@@ -76,6 +77,7 @@ export const GetLeadResponse = zod.object({
   "lastMessageAt": zod.string().nullish(),
   "pausedUntil": zod.string().nullish(),
   "handoffRequested": zod.boolean().optional(),
+  "interlocutor": zod.enum(['dentista_dono', 'equipe', 'assistente_virtual', 'nao_sei']).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -97,6 +99,7 @@ export const UpdateLeadBody = zod.object({
   "status": zod.enum(['hot', 'warm', 'cold', 'closed', 'lost']).optional(),
   "notes": zod.string().optional(),
   "handoffRequested": zod.boolean().optional(),
+  "interlocutor": zod.enum(['dentista_dono', 'equipe', 'assistente_virtual', 'nao_sei']).optional(),
   "pausedUntil": zod.null().optional()
 })
 
@@ -115,6 +118,7 @@ export const UpdateLeadResponse = zod.object({
   "lastMessageAt": zod.string().nullish(),
   "pausedUntil": zod.string().nullish(),
   "handoffRequested": zod.boolean().optional(),
+  "interlocutor": zod.enum(['dentista_dono', 'equipe', 'assistente_virtual', 'nao_sei']).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })

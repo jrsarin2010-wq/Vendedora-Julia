@@ -15,6 +15,7 @@ import {
   FOLLOW_UP_TEMPLATES,
   AVISO_DE_ESPERA,
   buildLeadBriefing,
+  conversaFoiProfunda,
 } from "../julia-persona";
 import {
   comRepique,
@@ -1003,15 +1004,39 @@ router.post("/webhook/whatsapp", async (req, res) => {
       // Confere só contra o que ELE mandou. Incluir as falas da Júlia reabriria
       // o buraco pelo outro lado: ela chuta um nome, o extrator lê a própria
       // fala dela na passada seguinte, e o chute vira fato gravado.
-      if (!lead.name && parsed.name && parsed.name.trim()) {
+      //
+      // E EXISTE CAMINHO DE VOLTA (Rodada 53). O `!lead.name` sozinho fazia um
+      // nome errado ficar errado para sempre: um lead real ficou com o nome da
+      // ASSISTENTE gravado como se fosse o da dentista, e nada no sistema podia
+      // desfazer isso. Agora o nome pode ser corrigido quando QUEM ESTA DO
+      // OUTRO LADO muda nesta mesma passada — que e exatamente o momento em que
+      // se descobre que o nome guardado era de outra pessoa.
+      //
+      // Fora desse momento a trava continua: nome so se grava uma vez. Deixar o
+      // extrator reescrever a cada mensagem trocaria um defeito raro (nome
+      // preso) por um constante (nome oscilando). O outro caminho de correcao e
+      // a mao do dono, pelo PATCH /api/leads/:id.
+      const nomeNovo = parsed.name?.trim();
+      const interlocutorMudou = Boolean(update.interlocutor);
+      const vaiGravarNome =
+        Boolean(nomeNovo) &&
+        (!lead.name || (interlocutorMudou && nomeNovo !== lead.name));
+
+      if (nomeNovo && vaiGravarNome) {
         const ditosPorEle = history
           .filter((m) => m.direction === "inbound")
           .map((m) => m.content);
-        if (nomeFoiDito(parsed.name, ditosPorEle)) {
-          update.name = parsed.name.trim();
+        if (nomeFoiDito(nomeNovo, ditosPorEle)) {
+          update.name = nomeNovo;
+          if (lead.name && lead.name !== nomeNovo) {
+            req.log.info(
+              { leadId: lead.id, de: lead.name, para: nomeNovo },
+              "Nome corrigido: quem esta do outro lado mudou",
+            );
+          }
         } else {
           req.log.warn(
-            { leadId: lead.id, nome: parsed.name.trim() },
+            { leadId: lead.id, nome: nomeNovo },
             "Nome do extrator nao aparece no que ele escreveu — descartado",
           );
         }
@@ -1397,6 +1422,13 @@ router.post("/webhook/whatsapp", async (req, res) => {
       // pergunta o preço troca de cadência aqui, sem passo extra.
       const cadencia = CADENCIA_POR_FAIXA[faixaDaTemperatura(lead.temperatura ?? 0)];
 
+      // A conversa ANDOU? Conta as mensagens DELE, nao o total: as respostas da
+      // Julia inflariam o numero e fariam toda conversa parecer profunda. O
+      // historico ja inclui a mensagem que ele acabou de mandar (gravada na
+      // fase A), entao este numero e o de agora.
+      const mensagensDele = history.filter((m) => m.direction === "inbound").length;
+      const profunda = conversaFoiProfunda(mensagensDele);
+
       const scheduledFollowUps = cadencia.map((hours, idx) => {
         // O ÚLTIMO toque é sempre a despedida (template 4, "essa é minha última
         // mensagem"): numa cadência de dois toques, prometer a última mensagem
@@ -1412,7 +1444,14 @@ router.post("/webhook/whatsapp", async (req, res) => {
           // se decide que estes toques PODEM citar a conversa e a dor, porque
           // chegar neste ponto significa que ele respondeu alguma coisa.
           kind: "conversa" as const,
-          messageTemplate: FOLLOW_UP_TEMPLATES[template](lead.name, lead.painPoints),
+          // A profundidade so muda o toque 1 — os outros tres nunca afirmaram
+          // nada sobre o tamanho da conversa, entao recebem o argumento e o
+          // ignoram.
+          messageTemplate: FOLLOW_UP_TEMPLATES[template](
+            lead.name,
+            lead.painPoints,
+            profunda,
+          ),
           status: "pending" as const,
         };
       });

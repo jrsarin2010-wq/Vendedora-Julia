@@ -307,6 +307,13 @@ components:
           type: ["string", "null"]
         handoffRequested:
           type: boolean
+        # QUEM ESTA DO OUTRO LADO: dentista dono, alguem da equipe ou o
+        # atendimento automatico da clinica. Nulo = ainda nao se sabe. Sai na
+        # leitura para o painel poder MOSTRAR com quem a Julia esta falando;
+        # a edicao esta em LeadUpdate.
+        interlocutor:
+          type: string
+          enum: [dentista_dono, equipe, assistente_virtual, nao_sei]
         createdAt:
           type: string
         updatedAt:
@@ -334,6 +341,18 @@ components:
           type: string
         handoffRequested:
           type: boolean
+        # QUEM ESTA DO OUTRO LADO, editavel a mao.
+        #
+        # Existe porque o extrator nao alcanca todo caso: um lead real ficou com
+        # o nome da ASSISTENTE gravado como se fosse o da dentista, e a correcao
+        # automatica so dispara quando o interlocutor muda numa mensagem nova —
+        # se ela nunca mais disser um nome, nada corrige sozinho.
+        #
+        # Este campo tambem decide se o "Dr./Dra." sai, entao arrumar aqui
+        # arruma o tratamento junto.
+        interlocutor:
+          type: string
+          enum: [dentista_dono, equipe, assistente_virtual, nao_sei]
         # Retomar a Júlia antes do prazo: o painel manda null para limpar a
         # pausa. Só aceita null de propósito — quem PAUSA é o humano falando
         # pelo WhatsApp, não um botão; aqui a única ação é liberar.
