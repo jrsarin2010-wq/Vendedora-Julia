@@ -35,19 +35,34 @@ if (!url) {
   process.exit(1);
 }
 
-function dataDoArgumento(flag) {
+/**
+ * Aceita data (AAAA-MM-DD) OU carimbo completo (2026-08-18T02:57:30Z).
+ *
+ * O carimbo existe porque o corte de verdade e o INSTANTE em que o container
+ * novo passou a atender, e ele quase nunca cai na virada do dia: neste deploy
+ * foi 02:57:30Z. Com corte so por data, as mensagens entre 00:00Z e 02:57Z —
+ * geradas pelo codigo VELHO — cairiam no balde da era NOVA e sujariam
+ * justamente a medicao que se quer limpa.
+ */
+function instanteDoArgumento(flag) {
   const i = process.argv.indexOf(flag);
   if (i === -1) return null;
-  const valor = process.argv[i + 1];
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor ?? "")) {
-    console.error(`${flag} precisa de uma data AAAA-MM-DD`);
+  const valor = process.argv[i + 1] ?? "";
+  const soData = /^\d{4}-\d{2}-\d{2}$/.test(valor);
+  const comHora = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/.test(valor);
+  if (!soData && !comHora) {
+    console.error(`${flag} precisa de AAAA-MM-DD ou AAAA-MM-DDTHH:MM:SSZ`);
+    process.exit(1);
+  }
+  if (Number.isNaN(Date.parse(valor))) {
+    console.error(`${flag}: "${valor}" nao e uma data valida`);
     process.exit(1);
   }
   return valor;
 }
 
-const desde = dataDoArgumento("--desde");
-const ate = dataDoArgumento("--ate");
+const desde = instanteDoArgumento("--desde");
+const ate = instanteDoArgumento("--ate");
 
 /**
  * Os mesmos fragmentos de `src/lib/descoberta.ts`, e a mesma regra de "so conta
