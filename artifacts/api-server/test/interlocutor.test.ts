@@ -23,7 +23,11 @@ import {
   pareceAssistenteVirtual,
   podePontuarTemperatura,
 } from "../src/lib/interlocutor";
-import { buildLeadBriefing, JULIA_EXTRACTION_PROMPT } from "../src/julia-persona";
+import {
+  buildLeadBriefing,
+  JULIA_EXTRACTION_PROMPT,
+  JULIA_SYSTEM_PROMPT,
+} from "../src/julia-persona";
 
 /** Uma extração completa, com os campos novos desta rodada. */
 const extracao = (extra: Record<string, unknown> = {}): string =>
@@ -325,6 +329,83 @@ secao("C9 — a fronteira com o anti-spam: cada um cobre o que o outro nao cobre
     "a MESMA frase, ja com o lead criado, e pega pela lista de robo",
     lead.interlocutor === "assistente_virtual",
     String(lead.interlocutor),
+  );
+}
+
+// ── D — o que a Julia FAZ ao reconhecer outra IA (Rodada 55) ────────────────
+//
+// Ate aqui o reconhecimento so servia para PROTEGER: nao esquentar o lead, nao
+// armar follow-up, nao gravar nome. Tudo negativo. Do lado da conversa a Julia
+// seguia oferecendo descoberta a um robo, porque nenhuma linha dizia o que
+// fazer com a informacao. Este bloco e a parte positiva: ela nomeia o que
+// aconteceu, se revela IA — que aqui deixa de ser confissao e vira o argumento,
+// porque a clinica ja confia o WhatsApp dela a um automatico — e pede o que so
+// pessoa da: alguem da equipe, ou o melhor horario.
+secao("D — diante de outra IA: nomear, se revelar, e pedir a pessoa");
+
+ok(
+  "o vai-e-vem de perguntas com um automatico esta proibido, com o motivo",
+  JULIA_SYSTEM_PROMPT.includes("NUNCA entra em vai-e-vem de perguntas com um automático") &&
+    JULIA_SYSTEM_PROMPT.includes("não tem rotina, não tem dor e não decide nada"),
+);
+ok(
+  "e continua sendo UMA mensagem so, lida pela pessoa depois",
+  JULIA_SYSTEM_PROMPT.includes("É UMA mensagem só, e quem\nvai lê-la é a pessoa, depois"),
+);
+ok(
+  "1) ela nomeia o que aconteceu, com leveza e sem ironia",
+  JULIA_SYSTEM_PROMPT.includes(
+    "diga com leveza, sem ironia, que percebeu que é o atendimento automático",
+  ),
+);
+ok(
+  "2) ela se revela IA, e o prompt diz por que ali isso vira argumento",
+  JULIA_SYSTEM_PROMPT.includes("conte que você também é uma IA") &&
+    JULIA_SYSTEM_PROMPT.includes("aqui ela vira argumento") &&
+    JULIA_SYSTEM_PROMPT.includes("a clínica já confia o\n  WhatsApp dela a um robô"),
+);
+ok(
+  "3) ela pede o que so uma pessoa da: alguem da equipe, ou o horario",
+  JULIA_SYSTEM_PROMPT.includes(
+    "peça o que só uma pessoa dá: falar com alguém da equipe, ou o melhor horário",
+  ),
+);
+ok(
+  "e se o robo responder de novo, ela nao insiste",
+  JULIA_SYSTEM_PROMPT.includes("Se o automático responder de novo, não insista"),
+);
+
+// A CONTRADICAO QUE ESTE BLOCO TERIA CRIADO, se ficasse sozinho. Duas regras
+// antigas dizem o contrario dele, e as duas precisam apontar para a excecao —
+// senao a regra que ficou para tras nao fica so incompleta, vira contradicao, e
+// o modelo obedece a mais categorica (foi o que aconteceu com a reputacao).
+ok(
+  "a secao da revelacao ganhou a excecao, em vez de continuar proibindo",
+  JULIA_SYSTEM_PROMPT.includes("EXCEÇÃO, a única: do outro lado está o atendimento automático") &&
+    JULIA_SYSTEM_PROMPT.includes("conte já na primeira mensagem, sem esperar aprovação"),
+);
+ok(
+  "e a excecao aponta de volta para a secao que descreve o comportamento",
+  JULIA_SYSTEM_PROMPT.includes(
+    "prova tudo. Veja COM QUEM VOCÊ ESTÁ FALANDO",
+  ),
+);
+ok(
+  'a regra de "fale o minimo possivel em IA" tambem sabe que existe excecao',
+  JULIA_SYSTEM_PROMPT.includes("É a exceção à\n  regra de falar pouco em IA"),
+);
+ok(
+  "a revelacao normal continua exigindo aprovacao dele antes",
+  JULIA_SYSTEM_PROMPT.includes("QUANDO CONTAR — só depois de ele demonstrar aprovação"),
+);
+{
+  // A ficha e o prompt tem que usar o MESMO rotulo, senao o comportamento
+  // existe mas nao encontra o caso. Mesmo contrato do "Reputação no Google".
+  const fichaDeRobo = ficha({ interlocutor: "assistente_virtual" });
+  ok(
+    "a ficha manda ver a secao que agora diz o que fazer",
+    fichaDeRobo.includes("veja COM QUEM VOCÊ ESTÁ FALANDO"),
+    fichaDeRobo,
   );
 }
 

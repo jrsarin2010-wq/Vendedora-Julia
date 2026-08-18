@@ -141,7 +141,7 @@ export async function rodarCicloDeAbordagem(
   // rodada — não é motivo para descartá-lo.
   let mensagem: string | null = null;
   try {
-    mensagem = await gerarMensagemDeAbordagem(lead);
+    mensagem = await gerarMensagemDeAbordagem(lead, agora);
   } catch (err) {
     logger.error({ err, leadId: lead.id }, "Falha ao gerar mensagem de abordagem");
     return { enviou: false, motivo: "erro_ao_gerar", leadId: lead.id };

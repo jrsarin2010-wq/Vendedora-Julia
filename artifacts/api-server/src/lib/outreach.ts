@@ -90,6 +90,29 @@ export function momentoEmSaoPaulo(instante: Date): MomentoSP {
   };
 }
 
+export type PeriodoDoDia = "manha" | "tarde" | "noite";
+
+/**
+ * De que período do dia é esta hora — o que decide entre bom dia, boa tarde e
+ * boa noite.
+ *
+ * Existe porque a Júlia abre a mensagem fria pela saudação do horário, e o
+ * horário que vale é o DELE: mesma razão do `momentoEmSaoPaulo`, que é de onde
+ * a hora tem que vir. Um "bom dia" às quatro da tarde não é deslize de copy —
+ * é a prova, na primeira palavra, de que ninguém olhou nada antes de mandar.
+ *
+ * Os cortes são os da fala comum, não os do relógio da janela de disparo (9h
+ * às 18h): meio-dia vira tarde, e a noite começa às 18h — quem escreve às 18h
+ * escreve "boa noite", ainda que o expediente conte aquilo como dia. Antes das
+ * 5h é noite também: a madrugada não tem saudação própria em português, e
+ * "bom dia" às 3h da manhã é pior que "boa noite".
+ */
+export function periodoDoDia(hora: number): PeriodoDoDia {
+  if (hora >= 5 && hora < 12) return "manha";
+  if (hora >= 12 && hora < 18) return "tarde";
+  return "noite";
+}
+
 export type MotivoBloqueio =
   | "desligado"
   | "desligado_no_painel"

@@ -79,7 +79,7 @@ router.get("/leads/:id/outreach-preview", async (req, res) => {
     let mensagem: string | null = null;
     let erroAoGerar: string | null = null;
     try {
-      mensagem = await gerarMensagemDeAbordagem(lead);
+      mensagem = await gerarMensagemDeAbordagem(lead, agora);
     } catch (err) {
       req.log.warn({ err, leadId: id }, "Falha ao gerar prévia de abordagem");
       erroAoGerar = "Não consegui gerar a mensagem agora. Tente de novo.";

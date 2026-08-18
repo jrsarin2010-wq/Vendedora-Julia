@@ -35,6 +35,15 @@ export interface DadosDoLead {
  */
 export async function gerarMensagemDeAbordagem(
   lead: DadosDoLead,
+  /**
+   * O instante do envio — a mensagem abre pela saudação do horário, e o
+   * horário que vale é o da clínica. Entra por parâmetro porque os dois donos
+   * já o têm em mãos: o agendador recebe o instante da rodada, e a prévia usa
+   * o de agora. Um `new Date()` escondido aqui dentro tiraria do teste a
+   * única pergunta que importa — ela abre com bom dia às 9h e com boa tarde
+   * às 15h?
+   */
+  agora: Date,
 ): Promise<string | null> {
   const briefing = buildOutreachBriefing({
     name: lead.name,
@@ -44,6 +53,7 @@ export async function gerarMensagemDeAbordagem(
     origin: lead.origin,
     nota: lead.nota,
     totalAvaliacoes: lead.totalAvaliacoes,
+    agora,
   });
 
   // Repique CURTO (Rodada 43): aqui ninguém está esperando — se falhar de vez,

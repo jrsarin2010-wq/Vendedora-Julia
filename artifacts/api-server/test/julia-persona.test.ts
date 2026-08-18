@@ -15,6 +15,17 @@ import {
 } from "../src/julia-persona";
 import { detectarTratamento, saudacao } from "../src/lib/tratamento";
 
+/**
+ * Terça-feira, 15h em São Paulo. É o instante padrão da ficha fria — a mesma
+ * terça 14h do abordagem.test, uma hora depois, para cair no meio da tarde e
+ * não em cima de nenhuma fronteira de período.
+ */
+const TERCA_15H = new Date("2026-08-11T18:00:00.000Z");
+/** Mesma terça, 9h em São Paulo — manhã. */
+const TERCA_9H = new Date("2026-08-11T12:00:00.000Z");
+/** Mesma terça, 20h em São Paulo — noite (fora da janela, mas a ficha responde). */
+const TERCA_20H = new Date("2026-08-11T23:00:00.000Z");
+
 const ficha = (
   name: string | null,
   origin: string | null = null,
@@ -850,25 +861,15 @@ ok(
   JULIA_OUTREACH_PROMPT.includes("NÃO existe frase certa para isso") &&
     JULIA_OUTREACH_PROMPT.includes("diferente a cada dentista"),
 );
-{
-  // Os quatro exemplos não podem pedir licença do mesmo jeito: três exemplos
-  // repetindo a mesma fórmula reintroduzem o cardápio pela porta dos fundos,
-  // mesmo sem nenhuma frase pronta na instrução.
-  const pedidos = JULIA_OUTREACH_PROMPT.split("\n")
-    .filter((l) => l.startsWith('- "Oi'))
-    .map((l) => {
-      const m = l.match(/(Posso[^?]*\?|Tem um minuto[^?]*\?|Uma pergunta[^:]*:)/);
-      return m ? m[1]!.toLowerCase() : l;
-    });
-  ok(
-    "os quatro exemplos pedem licença de quatro jeitos diferentes",
-    new Set(pedidos).size === 4,
-    pedidos.join(" | "),
-  );
-}
 ok(
-  "manda dizer de onde viu a clínica, usando a ficha",
-  JULIA_OUTREACH_PROMPT.includes("DE ONDE você viu a clínica — está na ficha do lead"),
+  "a licença que ela pede é para UMA PERGUNTA, nunca para apresentar nada",
+  JULIA_OUTREACH_PROMPT.includes("A licença que você pede é para UMA PERGUNTA"),
+);
+ok(
+  "manda dizer de onde tirou o CONTATO dela, usando a ficha",
+  JULIA_OUTREACH_PROMPT.includes(
+    "DE ONDE você tirou o contato dela — está na ficha do lead",
+  ),
 );
 ok(
   "e proíbe inventar quando a ficha não permitir citar",
@@ -923,6 +924,7 @@ ok(
     origin: "maps",
     nota: "4.9",
     totalAvaliacoes: 169,
+    agora: TERCA_15H,
   });
   ok(
     "o rótulo citado no prompt é o mesmo que a ficha escreve",
@@ -937,76 +939,121 @@ ok(
     JULIA_OUTREACH_PROMPT.includes("SE ELE PEDIR PARA PARAR: pare na hora"),
 );
 
-secao("Rodada 34 — os exemplos de tom, escolhidos pela origem e não por preferência");
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 55 — a abertura é DESCRITA, e não existe mais mensagem de exemplo.
+//
+// Três abordagens reais saíram com a mesma abertura, e a causa era a que já
+// tinha sido diagnosticada três vezes neste mesmo prompt: texto pronto para uso
+// dentro dele vira texto transcrito do outro lado, e "VARIE SEMPRE" perde para
+// o texto concreto todas as vezes. As duas primeiras ocorrências (a frase de
+// pedir licença, a linha de origem já redigida) já tinham sido trocadas por
+// descrição; os quatro exemplos eram a pedra que faltava — e eram os quatro que
+// abriam com "Oi! Aqui é a Júlia, do CaptaClin".
+//
+// A asserção que importa aqui é a NEGATIVA: nenhuma mensagem inteira e copiável
+// pode voltar ao prompt. As positivas descrevem as partes que a substituem.
+// ─────────────────────────────────────────────────────────────────────────────
+secao("Rodada 55 — a abertura descrita: nenhuma mensagem pronta para copiar");
 {
-  const exemplos = JULIA_OUTREACH_PROMPT.split("\n").filter((l) => l.startsWith('- "Oi'));
-  ok("são quatro exemplos", exemplos.length === 4, exemplos.join(" | "));
+  // Uma linha de exemplo é UMA mensagem inteira entre aspas: o bullet abre a
+  // aspa, escreve a mensagem e fecha. A linha das proibições também tem aspas
+  // ("tudo bem?", "espero que esteja bem", ...), e por isso o corte são os dois
+  // critérios juntos — um único par de aspas, e conteúdo do tamanho de uma
+  // mensagem. Lista de expressões proibidas tem três pares; exemplo tem um.
+  const copiaveis = JULIA_OUTREACH_PROMPT.split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^- ".{60,}"$/.test(l) && (l.match(/"/g) ?? []).length === 2);
   ok(
-    "e nenhum deles vende (preço, plano ou link)",
-    !exemplos.some((e) => /R\$|plano|captaclin\.com\.br/i.test(e)),
-    exemplos.join(" | "),
-  );
-  ok(
-    "todos pedem licença ou fazem uma pergunta",
-    exemplos.every((e) => e.includes("?")),
+    "nenhuma mensagem de exemplo sobrou no prompt",
+    copiaveis.length === 0,
+    copiaveis.join(" | "),
   );
 }
+ok(
+  "e a ausência é declarada, com o motivo (frase pronta sai igual do outro lado)",
+  JULIA_OUTREACH_PROMPT.includes("AQUI NÃO EXISTE EXEMPLO PARA COPIAR") &&
+    JULIA_OUTREACH_PROMPT.includes("a frase pronta saiu igual do outro lado"),
+);
+ok(
+  "a etiqueta de bot que abria os quatro exemplos sumiu",
+  !JULIA_OUTREACH_PROMPT.includes("Aqui é a Júlia, do CaptaClin"),
+);
 ok(
   "manda VARIAR SEMPRE, e diz por quê (eles comparam print)",
   JULIA_OUTREACH_PROMPT.includes("VARIE SEMPRE") &&
     JULIA_OUTREACH_PROMPT.includes("comparam print em grupo de WhatsApp"),
 );
 ok(
-  "os exemplos são declarados como TOM, não como modelo para copiar",
-  JULIA_OUTREACH_PROMPT.includes("são de TOM, não\nmodelos para copiar"),
-);
-// A REPETIÇÃO DAS 6 PRÉVIAS (lead 33). Seis gerações saíram quase idênticas
-// porque o prompt mandava "comece pelo primeiro exemplo" e o primeiro exemplo é
-// uma frase literal — de origem Instagram, com vocativo, servindo mal a um lead
-// de Maps sem nome. O modelo fazia a EDIÇÃO MÍNIMA daquela frase, e edição
-// mínima a partir de uma âncora fixa dá sempre o mesmo texto.
-//
-// A âncora não pode voltar: é ela que anula o "VARIE SEMPRE" logo acima.
-ok(
-  "NÃO existe exemplo preferido nem exemplo por onde começar",
-  !JULIA_OUTREACH_PROMPT.includes("comece por ele") &&
-    !JULIA_OUTREACH_PROMPT.includes("formato preferido, porque") &&
-    JULIA_OUTREACH_PROMPT.includes("Não existe formato\npreferido"),
+  "e diz O QUE varia de uma mensagem para a outra, em vez de mandar variar e calar",
+  JULIA_OUTREACH_PROMPT.includes("O QUE MUDA DE UMA MENSAGEM PARA A OUTRA"),
 );
 ok(
-  "a escolha do exemplo é feita pela ORIGEM declarada na ficha",
-  JULIA_OUTREACH_PROMPT.includes("use o exemplo da ORIGEM QUE A FICHA DECLAROU"),
+  "o que NÃO varia é o esqueleto: saudação abre, pergunta fecha",
+  JULIA_OUTREACH_PROMPT.includes(
+    "a saudação do horário abre, e a pergunta fecha",
+  ),
 );
 ok(
-  "e manda reescrever com as próprias palavras, não copiar o exemplo",
-  JULIA_OUTREACH_PROMPT.includes("ESCREVA COM AS SUAS PALAVRAS") &&
-    JULIA_OUTREACH_PROMPT.includes("puder ser confundida com o\nexemplo, ela está errada"),
+  "e o teste que ela aplica ao próprio texto é a comparação com a anterior",
+  JULIA_OUTREACH_PROMPT.includes("pudesse ser mandada, igualzinha, para\na clínica anterior"),
+);
+
+secao("Rodada 55 — as quatro partes novas da abertura");
+ok(
+  "1) a saudação do horário abre a mensagem, e vem da ficha",
+  JULIA_OUTREACH_PROMPT.includes("A SAUDAÇÃO DO HORÁRIO, e ela abre a mensagem") &&
+    JULIA_OUTREACH_PROMPT.includes("A ficha diz que horas são na"),
 );
 ok(
-  "o que elogia só vale com Instagram na ficha",
-  JULIA_OUTREACH_PROMPT.includes("só quando a ficha trouxer Instagram de verdade"),
+  'e "oi"/"olá" solto está nomeado como o que ele é',
+  JULIA_OUTREACH_PROMPT.includes('"oi" ou "olá" solto'),
 );
 ok(
-  "o terceiro é para quando não dá para dizer de onde viu",
-  JULIA_OUTREACH_PROMPT.includes("quando a ficha NÃO permitir dizer de onde\n  você viu a clínica"),
+  "2) a apresentação é em primeira pessoa, como gente se apresenta",
+  JULIA_OUTREACH_PROMPT.includes("QUEM VOCÊ É, em primeira pessoa") &&
+    JULIA_OUTREACH_PROMPT.includes("seu\n   nome é Júlia e você é do CaptaClin"),
 );
-{
-  // O exemplo que faltava, e cuja ausência causou a repetição: Maps + sem nome.
-  // Sem ele o modelo cai no exemplo de Instagram e o adapta sempre igual.
-  const quarto = JULIA_OUTREACH_PROMPT.split("\n").filter((l) =>
-    l.startsWith('- "Oi'),
-  )[3] as string;
-  ok("o quarto exemplo é de Google Maps", quarto.includes("no Google Maps"), quarto);
-  ok(
-    "e não tem vocativo, porque clínica do Maps não traz o nome do dentista",
-    !/Dr\.|Dra\./.test(quarto),
-    quarto,
-  );
-  ok(
-    "a regra explica por que ele não tem vocativo",
-    JULIA_OUTREACH_PROMPT.includes("não tem vocativo, porque"),
-  );
-}
+ok(
+  "e a identificação em terceira pessoa é proibida por ser assinatura de robô",
+  JULIA_OUTREACH_PROMPT.includes("Não anuncie a si mesma em terceira pessoa"),
+);
+ok(
+  "3) meia linha do que ela resolve, com o mal-entendido que ela evita",
+  JULIA_OUTREACH_PROMPT.includes("MEIA LINHA dizendo o que você resolve") &&
+    JULIA_OUTREACH_PROMPT.includes("não perder o\n   paciente que chama no WhatsApp") &&
+    JULIA_OUTREACH_PROMPT.includes("acha que é paciente querendo marcar"),
+);
+ok(
+  'e "apresentar o projeto" está proibido, com o motivo ("manda por e-mail")',
+  JULIA_OUTREACH_PROMPT.includes('NUNCA peça para "apresentar"') &&
+    JULIA_OUTREACH_PROMPT.includes('a resposta a\n   um pedido de reunião é "manda por e-mail"'),
+);
+ok(
+  "a meia linha não abre porta para preço, link ou lista de recurso",
+  JULIA_OUTREACH_PROMPT.includes("nada de preço, link, nome\n   de recurso"),
+);
+ok(
+  "e ela não vira o diagnóstico proibido: o que VOCÊ faz não é o que ELE perde",
+  JULIA_OUTREACH_PROMPT.includes("dizer o que VOCÊ faz é se apresentar") &&
+    JULIA_OUTREACH_PROMPT.includes("diagnosticar uma clínica que você nunca viu"),
+);
+ok(
+  "4) no Maps ela achou o CONTATO, e não a clínica",
+  JULIA_OUTREACH_PROMPT.includes("foi atrás DO CONTATO daquela clínica") &&
+    JULIA_OUTREACH_PROMPT.includes('Não diga que estava "procurando clínica"'),
+);
+ok(
+  "com o motivo: procurar clínica é o que um PACIENTE faz",
+  JULIA_OUTREACH_PROMPT.includes("é o que um PACIENTE faz"),
+);
+ok(
+  "e a regra do vocativo explica por que o lead de Maps costuma não ter nome",
+  JULIA_OUTREACH_PROMPT.includes("de lá vem o contato, quase nunca o nome do dentista"),
+);
+ok(
+  "o tamanho continua declarado, e agora diz o que cortar quando não couber",
+  JULIA_OUTREACH_PROMPT.includes("corte adjetivo, não corte parte"),
+);
 {
   // Rede no espírito das Rodadas 31 e 32: nenhuma linha do prompt pode oferecer
   // preço, link ou promoção como coisa a dizer. As únicas ocorrências toleradas
@@ -1027,6 +1074,7 @@ const fichaFria = (over: Partial<Parameters<typeof buildOutreachBriefing>[0]> = 
     city: null,
     instagram: null,
     origin: "import",
+    agora: TERCA_15H,
     ...over,
   });
 ok(
@@ -1049,18 +1097,31 @@ ok(
   ),
   fichaFria({ instagram: "@odontovida" }),
 );
+// O QUE ELA ACHOU NO MAPS É O CONTATO (Rodada 55). "Estava vendo clínicas de
+// odontologia em Fortaleza" descreve o que um PACIENTE faz — e foi assim que
+// três clínicas leram a abordagem, respondendo com horário de atendimento. O
+// fato verdadeiro não é ambíguo, e a cidade sai junto: era o "em Fortaleza"
+// que dava à frase o formato de busca por dentista.
 ok(
-  'origin "maps" continua citável, dizendo a cidade',
+  'origin "maps": ela foi atrás do CONTATO desta clínica',
   fichaFria({ origin: "maps", city: "Fortaleza" }).includes(
-    "você estava vendo clínicas de odontologia em Fortaleza no Google Maps",
+    "você foi atrás do contato desta clínica no Google Maps",
   ),
   fichaFria({ origin: "maps", city: "Fortaleza" }),
 );
 ok(
-  'maps sem cidade não deixa um "em " pendurado',
+  "e a ficha não descreve mais uma busca por clínica (que é o que o paciente faz)",
+  !fichaFria({ origin: "maps", city: "Fortaleza" }).includes("vendo clínicas") &&
+    !fichaFria({ origin: "maps", city: "Fortaleza" }).includes(
+      "clínicas de odontologia",
+    ),
+  fichaFria({ origin: "maps", city: "Fortaleza" }),
+);
+ok(
+  "com ou sem cidade, a linha é a mesma — a cidade já tem linha própria",
   fichaFria({ origin: "maps", city: null }).includes(
-    "você estava vendo clínicas de odontologia no Google Maps",
-  ) && !fichaFria({ origin: "maps", city: null }).includes(" em  "),
+    "você foi atrás do contato desta clínica no Google Maps",
+  ) && fichaFria({ origin: "maps", city: "Fortaleza" }).includes("- Cidade: Fortaleza"),
   fichaFria({ origin: "maps", city: null }),
 );
 
@@ -1088,13 +1149,47 @@ ok(
   );
 }
 ok(
-  "o quarto exemplo resolve a origem em poucas palavras, como manda a regra",
-  (JULIA_OUTREACH_PROMPT.split("\n").filter((l) => l.startsWith('- "Oi'))[3] as string)
-    .includes("no Google Maps aqui de Fortaleza"),
-);
-ok(
   "e quando é citável não vem o aviso de não inventar",
   !fichaFria({ instagram: "@odontovida" }).includes("NÃO SABEMOS"),
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rodada 55 — QUE HORAS SÃO NA CLÍNICA.
+//
+// A abertura passou a ser a saudação do horário, e a hora que vale é a do
+// dentista, não a do servidor: a Railway roda em UTC, e sem o fuso de São Paulo
+// a Júlia daria bom dia às seis da manhã dele. A ficha declara o fato; escolher
+// entre as três saudações é do prompt.
+// ─────────────────────────────────────────────────────────────────────────────
+secao("Rodada 55 — a ficha diz que horas são na clínica, no fuso dela");
+ok(
+  "15h em São Paulo é de tarde",
+  fichaFria({ agora: TERCA_15H }).includes(
+    "- Que horas são na clínica agora: 15h — é de tarde.",
+  ),
+  fichaFria({ agora: TERCA_15H }).split("\n")[2],
+);
+ok(
+  "9h é de manhã",
+  fichaFria({ agora: TERCA_9H }).includes(
+    "- Que horas são na clínica agora: 9h — é de manhã.",
+  ),
+  fichaFria({ agora: TERCA_9H }).split("\n")[2],
+);
+ok(
+  "20h é de noite",
+  fichaFria({ agora: TERCA_20H }).includes(
+    "- Que horas são na clínica agora: 20h — é de noite.",
+  ),
+  fichaFria({ agora: TERCA_20H }).split("\n")[2],
+);
+ok(
+  "e a hora é a PRIMEIRA linha da ficha, porque é a primeira palavra da mensagem",
+  fichaFria()
+    .split("\n")
+    .filter((l) => l.startsWith("- "))[0]
+    ?.startsWith("- Que horas são na clínica agora:") === true,
+  fichaFria(),
 );
 
 secao("Reputação do Google na ficha — só nota alta COM volume é citável");

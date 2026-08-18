@@ -12,6 +12,7 @@ import {
   podeDispararAgora,
   leadElegivel,
   momentoEmSaoPaulo,
+  periodoDoDia,
   contarEnvios,
   sortearIntervalo,
   type ConfigOutreach,
@@ -63,6 +64,25 @@ ok(
 // 2h UTC de terça = 23h de segunda em SP. Sem o fuso, a janela cairia errado.
 const viraDia = momentoEmSaoPaulo(new Date("2026-08-11T02:00:00.000Z"));
 ok("02h UTC = 23h do dia anterior em SP", viraDia.hora === 23 && viraDia.dia === "2026-08-10", JSON.stringify(viraDia));
+
+// Rodada 55 — a abordagem abre pela saudação do horário, e é este corte que
+// decide qual delas. As fronteiras são as da fala comum, não as da janela de
+// disparo: meio-dia já é tarde, e 18h já é noite, mesmo com o expediente
+// contando aquela hora como dia.
+secao("período do dia — o que decide entre bom dia, boa tarde e boa noite");
+ok("9h é manhã", periodoDoDia(9) === "manha");
+ok("11h ainda é manhã", periodoDoDia(11) === "manha");
+ok("meio-dia já é tarde", periodoDoDia(12) === "tarde");
+ok("17h ainda é tarde", periodoDoDia(17) === "tarde");
+ok("18h já é noite, mesmo dentro da janela de disparo", periodoDoDia(18) === "noite");
+ok("23h é noite", periodoDoDia(23) === "noite");
+ok("meia-noite é noite", periodoDoDia(0) === "noite");
+ok("3h da madrugada é noite, não manhã", periodoDoDia(3) === "noite");
+ok("5h já é manhã", periodoDoDia(5) === "manha");
+ok(
+  "e ele lê a hora do fuso da clínica, não a do servidor",
+  periodoDoDia(momentoEmSaoPaulo(new Date("2026-08-11T23:00:00.000Z")).hora) === "noite",
+);
 
 secao("TRAVA MESTRA — nada dispara com OUTREACH_ENABLED desligado");
 ok(
