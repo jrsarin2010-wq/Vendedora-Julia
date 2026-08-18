@@ -89,6 +89,36 @@ secao("status desconhecido é recusado, não ignorado");
 r = await chamarRota(listaHandler, { query: { status: "inventado" } });
 ok("400", r.status === 400, JSON.stringify(r.body));
 
+/*
+ * O filtro rápido da tela ("A trabalhar" e "Já resolvidas") manda VÁRIOS
+ * status de uma vez. O que este bloco protege é o recorte continuar sendo do
+ * servidor: se a lista virasse um OR frouxo, ou se só o primeiro status
+ * contasse, a tela mostraria menos clínica do que existe embaixo de um total
+ * que diz outra coisa — e ninguém descobre isso olhando a página 1.
+ */
+secao("filtro por VÁRIOS status — a lista separada por vírgula");
+r = await chamarRota(listaHandler, { query: { status: "novo,sem_telefone" } });
+ok("4 itens (3 novas + 1 sem telefone)", (r.body as Lista).itens.length === 4, JSON.stringify(nomes(r)));
+ok("total acompanha", (r.body as Lista).total === 4);
+r = await chamarRota(listaHandler, { query: { status: "sem_telefone,apto" } });
+ok(
+  "só a de Recife — 'apto' não tem ninguém e não alarga o resultado",
+  nomes(r).join() === "Dental Recife",
+  JSON.stringify(nomes(r)),
+);
+
+secao("espaço em volta da vírgula não quebra a lista");
+r = await chamarRota(listaHandler, { query: { status: "novo , sem_telefone" } });
+ok("4 itens", (r.body as Lista).itens.length === 4, JSON.stringify(nomes(r)));
+
+secao("um status inválido no meio derruba a lista inteira");
+r = await chamarRota(listaHandler, { query: { status: "novo,inventado" } });
+ok("400, e não uma lista mais larga do que a pedida", r.status === 400, JSON.stringify(r.body));
+
+secao("lista combinada com UF — o AND vale para o grupo inteiro");
+r = await chamarRota(listaHandler, { query: { uf: "PE", status: "novo,sem_telefone" } });
+ok("só a de Recife", nomes(r).join() === "Dental Recife", JSON.stringify(nomes(r)));
+
 secao("filtro por UF, isolado — e aceita minúscula");
 r = await chamarRota(listaHandler, { query: { uf: "pe" } });
 ok("1 item", (r.body as Lista).itens.length === 1, JSON.stringify(nomes(r)));

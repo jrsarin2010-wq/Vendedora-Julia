@@ -76,6 +76,34 @@ const UFS = [
   "SE", "SP", "TO",
 ];
 
+/**
+ * O FILTRO RÁPIDO — os dois únicos recortes que decidem o dia.
+ *
+ * "A trabalhar" é quem ainda pode virar dentista. "Já resolvidas" é histórico:
+ * a clínica não sai da tabela, só sai da fila de trabalho. Sem essa separação
+ * a lista fica IGUAL antes e depois do trabalho feito, e a única forma de
+ * saber quem falta é ler linha por linha.
+ *
+ * Só "A trabalhar" é escrita à mão; "Já resolvidas" é TODO O RESTO, calculado
+ * a partir dela. Duas listas fechadas deixariam um status fora das duas — e
+ * uma clínica invisível nos dois filtros é pior que uma no grupo errado. Foi
+ * o que aconteceria com `na_fila`, que é o instante entre "apta" e
+ * "promovida" e não estava em nenhuma das duas listas pensadas.
+ */
+const A_TRABALHAR: StatusProspeccao[] = ["novo", "apto", "sem_telefone"];
+
+type Grupo = "a_trabalhar" | "resolvidas";
+
+const GRUPOS: Record<Grupo, { rotulo: string; statuses: StatusProspeccao[] }> = {
+  a_trabalhar: { rotulo: "A trabalhar", statuses: A_TRABALHAR },
+  resolvidas: {
+    rotulo: "Já resolvidas",
+    statuses: (Object.keys(PROSPECCAO_PT) as StatusProspeccao[]).filter(
+      (s) => !A_TRABALHAR.includes(s),
+    ),
+  },
+};
+
 const dinheiro = (v: number) =>
   `US$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -555,6 +583,19 @@ function ConcentracaoPorBairro() {
                 <strong className="font-mono text-foreground">{data.telefoneInvalido}</strong>{" "}
                 com telefone inválido
               </span>
+              {/*
+                QUANTO DA LISTA JÁ VIROU DENTISTA — o único número aqui que
+                mede trabalho FEITO, e não o que o Maps entregou.
+
+                É `promovido` puro, sem somar `ja_existente`: a que já era lead
+                nunca foi promovida por ninguém, entrou na base por outro
+                caminho. Somar as duas inflaria justamente o número que serve
+                para saber quanto ainda falta.
+              */}
+              <span data-testid="resumo-promovidas">
+                <strong className="font-mono text-foreground">{data.porStatus.promovido}</strong>{" "}
+                já promovidas
+              </span>
             </div>
 
             {/*
@@ -602,7 +643,15 @@ function TabelaDeClinicas() {
 
   const [busca, setBusca] = useState("");
   const buscaAtrasada = useDebounce(busca, 300);
-  const [status, setStatus] = useState<StatusProspeccao | "all">("all");
+  const [grupo, setGrupo] = useState<Grupo>("a_trabalhar");
+  /*
+   * Nasce em "Apta", e não em "todas".
+   *
+   * Esta tela existe para ESCOLHER quem promover. Abrir em "todas" é abrir na
+   * lista inteira — as promovidas de ontem no meio das aptas de hoje — e o
+   * primeiro gesto de todo dia vira filtrar de novo a mesma coisa.
+   */
+  const [status, setStatus] = useState<StatusProspeccao | "all">("apto");
   const [uf, setUf] = useState<string>("all");
   const [pagina, setPagina] = useState(0);
   const [selecionadas, setSelecionadas] = useState<Set<number>>(new Set());
@@ -617,8 +666,27 @@ function TabelaDeClinicas() {
     };
   }
 
+  /*
+   * O grupo é o recorte; o select escolhe DENTRO dele. Por isso "todas" aqui
+   * nunca quer dizer a tabela inteira — quer dizer os status daquele grupo.
+   */
+  const statusFiltrado = status === "all" ? GRUPOS[grupo].statuses : status;
+
+  /*
+   * Trocar de grupo devolve a situação para "todas".
+   *
+   * Não é higiene: "Apta" não existe em "Já resolvidas". Manter a escolha
+   * anterior abriria o grupo novo sem uma linha sequer, e tela vazia por
+   * filtro cruzado se parece com banco vazio.
+   */
+  function trocarGrupo(g: Grupo) {
+    setGrupo(g);
+    setStatus("all");
+    setPagina(0);
+  }
+
   const filtros = {
-    status: status === "all" ? null : status,
+    status: statusFiltrado,
     uf: uf === "all" ? null : uf,
     busca: buscaAtrasada || null,
     limite: POR_PAGINA,
@@ -665,7 +733,7 @@ function TabelaDeClinicas() {
   // diálogo com os nomes existe para impedir.
   useEffect(() => {
     setSelecionadas(new Set());
-  }, [status, uf, buscaAtrasada, pagina]);
+  }, [grupo, status, uf, buscaAtrasada, pagina]);
 
   const escolhidas = itens.filter((c) => selecionadas.has(c.id));
   const paginaInteiraMarcada = itens.length > 0 && escolhidas.length === itens.length;
@@ -726,6 +794,32 @@ function TabelaDeClinicas() {
      * conflito), a tabela fica nos 32rem e a página rola. Nunca zero.
      */
     <div className="flex max-h-[calc(100vh-12rem)] min-h-[32rem] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      {/*
+        O FILTRO RÁPIDO, acima de tudo o resto.
+        Fica em cima da busca de propósito: é ele que diz QUAL lista está sendo
+        olhada, e os outros dois filtros só refinam dentro dela.
+      */}
+      <div
+        className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-muted/30 px-4 py-2"
+        data-testid="filtro-rapido"
+      >
+        {(Object.keys(GRUPOS) as Grupo[]).map((g) => (
+          <Button
+            key={g}
+            size="sm"
+            variant={grupo === g ? "default" : "ghost"}
+            className="h-8"
+            onClick={() => trocarGrupo(g)}
+            data-testid={`filtro-grupo-${g}`}
+          >
+            {GRUPOS[g].rotulo}
+          </Button>
+        ))}
+        <span className="ml-auto text-xs text-muted-foreground">
+          Promovida não some da tabela — sai da fila de trabalho.
+        </span>
+      </div>
+
       <div className="flex shrink-0 flex-col items-center justify-between gap-4 border-b border-border bg-muted/20 p-4 sm:flex-row">
         <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -750,10 +844,14 @@ function TabelaDeClinicas() {
               <SelectValue placeholder="Situação" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todas as situações</SelectItem>
-              {Object.entries(PROSPECCAO_PT).map(([valor, rotulo]) => (
+              {/*
+                "Todas desta lista", e não "todas as situações": o que este
+                item abre é o grupo escolhido acima, nunca a tabela inteira.
+              */}
+              <SelectItem value="all">Todas desta lista</SelectItem>
+              {GRUPOS[grupo].statuses.map((valor) => (
                 <SelectItem key={valor} value={valor}>
-                  {rotulo}
+                  {PROSPECCAO_PT[valor]}
                 </SelectItem>
               ))}
             </SelectContent>

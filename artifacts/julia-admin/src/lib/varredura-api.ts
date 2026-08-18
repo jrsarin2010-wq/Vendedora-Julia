@@ -227,7 +227,13 @@ export interface ClinicaProspect {
 }
 
 export interface FiltrosDeProspects {
-  status?: StatusProspeccao | null;
+  /**
+   * UM status, ou VÁRIOS. A lista existe para o filtro rápido da tela ("A
+   * trabalhar" e "Já resolvidas"), que é um recorte de vários status de uma
+   * vez; vai na querystring separada por vírgula. Lista vazia é o mesmo que
+   * não filtrar — e é isso que o chamador quer dizer quando manda `[]`.
+   */
+  status?: StatusProspeccao | StatusProspeccao[] | null;
   uf?: string | null;
   cidade?: string | null;
   busca?: string | null;
@@ -247,7 +253,10 @@ export async function listarProspects(
   filtros: FiltrosDeProspects = {},
 ): Promise<RespostaDeProspects> {
   const params = new URLSearchParams();
-  if (filtros.status) params.set("status", filtros.status);
+  if (filtros.status) {
+    const lista = Array.isArray(filtros.status) ? filtros.status : [filtros.status];
+    if (lista.length > 0) params.set("status", lista.join(","));
+  }
   if (filtros.uf) params.set("uf", filtros.uf);
   if (filtros.cidade) params.set("cidade", filtros.cidade);
   if (filtros.busca) params.set("busca", filtros.busca);

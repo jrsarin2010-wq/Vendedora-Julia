@@ -13,7 +13,7 @@
  */
 import { Router, type IRouter } from "express";
 import { db, clinicasProspectTable } from "@workspace/db";
-import { eq, and, ilike, sql, desc } from "drizzle-orm";
+import { eq, and, ilike, inArray, sql, desc } from "drizzle-orm";
 import { abordagemLigada } from "../lib/configuracoes";
 
 const router: IRouter = Router();
@@ -150,9 +150,30 @@ router.get("/prospects", async (req, res) => {
   try {
     const q = req.query as Record<string, unknown>;
 
-    const status = typeof q.status === "string" && q.status ? q.status : null;
-    if (status && !STATUS_PROSPECCAO.includes(status as StatusProspeccao)) {
-      return void res.status(400).json({ error: `Status desconhecido: ${status}` });
+    /*
+     * `status` aceita UM valor ou uma LISTA separada por vírgula.
+     *
+     * A lista existe por causa do filtro rápido da tela ("A trabalhar" e "Já
+     * resolvidas"), que é um recorte de vários status de uma vez. Esse recorte
+     * não podia ser feito no navegador: a paginação é daqui, e peneirar a
+     * página depois de recebida mostraria 12 linhas embaixo de um "50 de 810".
+     *
+     * Um status desconhecido no meio da lista continua sendo 400, e não um
+     * item ignorado em silêncio — filtro que descarta o que não entendeu
+     * devolve uma lista mais larga do que a pedida, e nada na tela avisa.
+     */
+    const status =
+      typeof q.status === "string" && q.status
+        ? q.status
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : [];
+    const desconhecido = status.find(
+      (s) => !STATUS_PROSPECCAO.includes(s as StatusProspeccao),
+    );
+    if (desconhecido) {
+      return void res.status(400).json({ error: `Status desconhecido: ${desconhecido}` });
     }
 
     const uf = typeof q.uf === "string" && q.uf ? q.uf.toUpperCase() : null;
@@ -163,9 +184,13 @@ router.get("/prospects", async (req, res) => {
     const offset = inteiro(q.offset, 0, 0, Number.MAX_SAFE_INTEGER);
 
     const condicoes = [];
-    if (status) {
+    if (status.length === 1) {
       condicoes.push(
-        eq(clinicasProspectTable.statusProspeccao, status as StatusProspeccao),
+        eq(clinicasProspectTable.statusProspeccao, status[0] as StatusProspeccao),
+      );
+    } else if (status.length > 1) {
+      condicoes.push(
+        inArray(clinicasProspectTable.statusProspeccao, status as StatusProspeccao[]),
       );
     }
     if (uf) condicoes.push(eq(clinicasProspectTable.uf, uf));
