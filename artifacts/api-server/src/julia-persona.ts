@@ -1618,7 +1618,18 @@ export function buildLeadBriefing(params: {
     const primeiro = params.name.trim().split(/\s+/)[0];
     const capitalizado = primeiro.charAt(0).toUpperCase() + primeiro.slice(1);
     let comoTratar: string;
-    if (quem !== "dentista_dono") {
+    if (quem === "assistente_virtual") {
+      // O NOME DA PLACA (19/08/2026). Antes da cerca do webhook, dois leads
+      // reais gravaram como nome do dentista o que estava escrito no script do
+      // robô: o 43 virou "Dr. Rômulo" a partir de "Bem-vindo ao Consultório Dr.
+      // Rômulo", e o 63 virou "Dra. Gabrielly" a partir de "Sou a Dra.
+      // Gabrielly e será um prazer te atender".
+      //
+      // A cerca impede novos. Esta linha existe para os que já estão gravados:
+      // eles continuam no banco, e sem ela a ficha entregaria o nome à Júlia
+      // como se fosse de alguém — bem no caso em que não há alguém.
+      comoTratar = `NÃO use este nome para tratar ninguém. Ele apareceu dentro de uma mensagem automática, então é o nome da placa da clínica ou do script — não o de quem está digitando, porque não há ninguém digitando`;
+    } else if (quem !== "dentista_dono") {
       comoTratar = `${capitalizado} — NÃO é o dentista, então nada de Dr./Dra.: o título é dele, e dar título a quem não tem soa falso`;
     } else {
       switch (detectarTratamento(params.name)) {
@@ -2445,6 +2456,10 @@ Regras:
   "Aqui é a Renata" → "Renata". Mas "sou da equipe da Dra. Liliane", "falo pela
   Dra. Marina", "o consultório da Dra. Paula" → null: quem escreve citou OUTRA
   pessoa, e o nome dela não é o de quem está falando com você. Na dúvida, null.
+- Em "name", null quando o nome só aparece DENTRO de uma mensagem automática
+  ("Bem-vindo ao Consultório Dr. Rômulo", "Sou a Dra. Gabrielly e será um prazer
+  te atender"): é o nome da placa da clínica ou do script, e não há pessoa
+  nenhuma digitando. Se "interlocutor" for "assistente_virtual", "name" é null.
 - Em "planInterest", use exatamente uma destas palavras: basic, essencial, pro.
 - Em "funnelStage", use exatamente uma das etapas listadas acima.
 - Julgue a etapa pelo que o DENTISTA fez, não pelo que a Júlia ofereceu.
@@ -2511,9 +2526,15 @@ Regras de "interlocutor" (na dúvida, "nao_sei" — nunca "dentista_dono"):
 - "equipe": secretária, recepcionista, gerente, familiar que ajuda. Denuncia-se
   falando do dentista em terceira pessoa ("a doutora não está", "vou passar pra
   ele", "sou da equipe da Dra. X") ou dizendo o cargo.
-- "assistente_virtual": atendimento automático da clínica. Menu numerado, "sou a
-  assistente virtual", "mensagem automática", saudação idêntica repetida,
-  resposta que ignora o que foi perguntado.
+- "assistente_virtual": atendimento automático da clínica. O que decide é o
+  CONTEÚDO ser atendimento a PACIENTE oferecido a VOCÊ, que acabou de se
+  apresentar como vendedora: boas-vindas à clínica, "em que podemos ajudar",
+  "será um prazer te atender", pedido de nome completo / raio-x / plano de
+  saúde, oferta de agendar consulta ou avaliação.
+  Menu numerado, "sou a assistente virtual" e "mensagem automática" também
+  contam, mas NÃO são necessários: o automático mais difícil escreve em primeira
+  pessoa, assina com o nome da dentista e não tem menu nenhum. Somam ainda:
+  saudação idêntica repetida e resposta que ignora o que foi perguntado.
 - "nao_sei": não deu para saber. É o padrão, e não é derrota: presumir que é o
   dono quando não se sabe é o erro que este campo existe para impedir.
 - Vale para a conversa TODA, não só a última mensagem. Se uma pessoa assumiu

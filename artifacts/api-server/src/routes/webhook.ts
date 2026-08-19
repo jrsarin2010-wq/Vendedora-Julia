@@ -71,11 +71,14 @@ import {
 } from "../lib/descoberta";
 import {
   ehPessoa,
+  esperandoAPessoa,
   lerInterlocutor,
   mereceFollowUp,
   nomeFoiDito,
   pareceAssistenteVirtual,
+  podeGravarNome,
   podePontuarTemperatura,
+  textosDePessoa,
   type Interlocutor,
 } from "../lib/interlocutor";
 import {
@@ -584,6 +587,35 @@ router.post("/webhook/whatsapp", async (req, res) => {
       );
     }
 
+    // UMA MENSAGEM SO, E ELA JA SAIU: o automatico respondeu de novo, entao
+    // agora e esperar a pessoa.
+    //
+    // O prompt manda "e UMA mensagem so" e "se o automatico responder de novo,
+    // nao insista" desde 18/08/2026 — e mesmo assim o lead 59 rendeu sete
+    // minutos de ping-pong entre duas IAs. Instrucao nao e trava: enquanto
+    // chegar mensagem, este handler gera resposta, e o modelo obedece ao turno
+    // que tem na frente. A trava e esta, e mora antes da janela de agrupamento
+    // porque a chamada ao modelo e o que ela existe para nao pagar.
+    //
+    // Ela olha o TEXTO que chegou, e nao so a coluna do lead — o porque esta em
+    // `esperandoAPessoa`, e e a parte que importa: quem tira o lead de
+    // "assistente_virtual" e o extrator, e o extrator so roda nos turnos que
+    // produzem resposta. Uma trava que calasse pela coluna mataria a conversa
+    // para sempre, inclusive para a pessoa que assumisse o WhatsApp depois.
+    //
+    // O que ela NAO faz: nao para de gravar a mensagem dele (isso ja aconteceu
+    // acima) nem de rodar a central de vigia. A conversa continua sendo lida —
+    // ela so para de ser respondida.
+    if (
+      esperandoAPessoa(lerInterlocutor(lead.interlocutor), lead.vitrineEnviadaEm, text)
+    ) {
+      req.log.info(
+        { leadId: lead.id, sinal: sinalDeRobo, vitrineEnviadaEm: lead.vitrineEnviadaEm },
+        "Automatico respondeu de novo — a Julia espera a pessoa, nao insiste",
+      );
+      return;
+    }
+
     // A conversa ainda não tem resposta NOSSA nenhuma? Então a janela de
     // silêncio é a curta. A pergunta é feita aqui, com o lead em mãos e a
     // trava na mão, porque logo abaixo ela já não valeria: entre soltar e
@@ -864,6 +896,21 @@ router.post("/webhook/whatsapp", async (req, res) => {
         content: textoLimpo,
         messageType: "text",
       });
+
+      // A VITRINE FOI ENTREGUE. Carimba, e a partir daqui a trava la de cima
+      // cala a Julia ate uma pessoa assumir.
+      //
+      // So depois de ENTREGUE, de proposito: carimbar antes faria uma falha da
+      // Evolution consumir a unica mensagem que esta clinica ia receber. Mesma
+      // regra do historico logo acima, e pelo mesmo motivo.
+      if (lerInterlocutor(lead.interlocutor) === "assistente_virtual") {
+        const agora = new Date();
+        await db
+          .update(leadsTable)
+          .set({ vitrineEnviadaEm: agora, updatedAt: agora })
+          .where(eq(leadsTable.id, lead.id));
+        lead.vitrineEnviadaEm = agora;
+      }
     } else {
       req.log.error(
         { leadId: lead.id, phone },
@@ -1101,6 +1148,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         funnelStage?: FunnelStage;
         duvidaDoSite?: string;
         interlocutor?: Interlocutor;
+        vitrineEnviadaEm?: Date | null;
         descoberta?: string;
         updatedAt?: Date;
       } = {};
@@ -1121,6 +1169,15 @@ router.post("/webhook/whatsapp", async (req, res) => {
       const quemAgora = lerInterlocutor(parsed.interlocutor);
       if (quemAgora !== "nao_sei" && quemAgora !== lerInterlocutor(lead.interlocutor)) {
         update.interlocutor = quemAgora;
+        // A PORTA DE SAIDA da trava do vai-e-vem. Uma pessoa assumiu a
+        // conversa: o carimbo da vitrine cai junto, senao a Julia ficaria muda
+        // para sempre com quem chegou depois do robo — que e o oposto do que a
+        // trava existe para fazer. Se a clinica devolver a conversa ao
+        // automatico mais tarde, ele ganha uma vitrine nova, e isso e certo:
+        // e outro momento, e quem le e outra pessoa.
+        if (quemAgora !== "assistente_virtual" && lead.vitrineEnviadaEm) {
+          update.vitrineEnviadaEm = null;
+        }
       }
 
       if (parsed.painPoints && parsed.painPoints.trim()) {
@@ -1158,10 +1215,24 @@ router.post("/webhook/whatsapp", async (req, res) => {
         Boolean(nomeNovo) &&
         (!lead.name || (interlocutorMudou && nomeNovo !== lead.name));
 
-      if (nomeNovo && vaiGravarNome) {
-        const ditosPorEle = history
-          .filter((m) => m.direction === "inbound")
-          .map((m) => m.content);
+      // E O NOME TEM QUE SER DE UMA PESSOA (19/08/2026). Duas metades, e as
+      // duas nasceram do mesmo defeito em conversas reais: "Bem-vindo ao
+      // Consultorio Dr. Romulo" virou "Dr. Romulo" no lead 43, e "Sou a Dra.
+      // Gabrielly e sera um prazer te atender" virou "Dra. Gabrielly" no 63.
+      // Nos dois o nome estava mesmo escrito — so nao havia ninguem escrevendo.
+      //
+      //   - `textosDePessoa` tira do corpo de prova as mensagens que se
+      //     denunciam como automaticas. E por MENSAGEM: o que a pessoa que
+      //     assumir a conversa escrever depois continua valendo.
+      //   - `podeGravarNome` fecha o resto: enquanto o interlocutor for robo,
+      //     nome nenhum e gravado, nem o que vier numa linha curta e limpa.
+      //
+      // A pergunta do `nomeFoiDito` e "esta escrito?"; esta e "quem escreveu?".
+      const quemAssina = update.interlocutor ?? lerInterlocutor(lead.interlocutor);
+      if (nomeNovo && vaiGravarNome && podeGravarNome(quemAssina)) {
+        const ditosPorEle = textosDePessoa(
+          history.filter((m) => m.direction === "inbound").map((m) => m.content),
+        );
         if (nomeFoiDito(nomeNovo, ditosPorEle)) {
           update.name = nomeNovo;
           if (lead.name && lead.name !== nomeNovo) {
@@ -1173,9 +1244,14 @@ router.post("/webhook/whatsapp", async (req, res) => {
         } else {
           req.log.warn(
             { leadId: lead.id, nome: nomeNovo },
-            "Nome do extrator nao aparece no que ele escreveu — descartado",
+            "Nome do extrator nao aparece no que uma PESSOA escreveu — descartado",
           );
         }
+      } else if (nomeNovo && vaiGravarNome) {
+        req.log.warn(
+          { leadId: lead.id, nome: nomeNovo, interlocutor: quemAssina },
+          "Nome veio de um automatico — nao e o nome de quem esta falando",
+        );
       }
       if (
         parsed.planInterest &&
@@ -1227,6 +1303,7 @@ router.post("/webhook/whatsapp", async (req, res) => {
         // Reflete em memoria: as travas de temperatura e de follow-up logo
         // abaixo leem este campo, e sem isto so valeriam na passada seguinte.
         if (update.interlocutor) lead.interlocutor = update.interlocutor;
+        if (update.vitrineEnviadaEm === null) lead.vitrineEnviadaEm = null;
         if (update.descoberta) lead.descoberta = update.descoberta;
       }
 

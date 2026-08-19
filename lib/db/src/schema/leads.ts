@@ -130,6 +130,22 @@ export const leadsTable = pgTable("leads", {
   // Quem decide o que fazer com cada caso é o prompt, não a coluna — aqui mora
   // o fato. Mesma divisão da `nota` do Google.
   interlocutor: text("interlocutor"),
+  // JA MANDAMOS A UNICA MENSAGEM AO AUTOMATICO DESTA CLINICA?
+  //
+  // Quando `interlocutor` e "assistente_virtual" a Julia responde UMA vez — a
+  // vitrine: ela nomeia o automatico, conta que tambem e uma IA e pede a pessoa
+  // ou o horario — e depois cala. Aqui fica o carimbo de que essa mensagem ja
+  // saiu.
+  //
+  // Por que uma COLUNA e nao uma conta no historico: o contexto e uma janela de
+  // 20 mensagens, e o vai-e-vem de robo com robo (7 minutos no lead 59) empurra
+  // a primeira resposta para fora dela. A trava sumiria justo no caso que ela
+  // existe para cortar. Mesma razao do `demosEnviadas`.
+  //
+  // Nulo = ainda nao falamos. A porta de saida e o proprio interlocutor: quando
+  // uma pessoa assume, o extrator muda o campo, este carimbo e apagado e a
+  // conversa volta ao normal.
+  vitrineEnviadaEm: timestamp("vitrine_enviada_em"),
   // O QUE JA FOI PERGUNTADO NA DESCOBERTA, e o que ele respondeu.
   // Formato "anuncia=instagram;profissionais=2;verba=sem_resposta", mesmo
   // espirito do `sinaisVistos`: lista pequena, vocabulario fechado, validada em

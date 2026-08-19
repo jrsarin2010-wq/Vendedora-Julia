@@ -134,7 +134,16 @@ router.patch("/leads/:id", async (req, res) => {
     // interlocutor MUDA numa mensagem nova, e um lead cuja assistente nunca
     // mais disser um nome ficaria com o nome dela para sempre. Aqui o dono
     // arruma os dois de uma vez — este campo também decide se o "Dr./Dra." sai.
-    if (body.interlocutor !== undefined) updateData.interlocutor = body.interlocutor;
+    //
+    // Mexer aqui derruba o carimbo da vitrine junto (19/08/2026): ele e a
+    // condicao de parada do vai-e-vem com automatico, e so faz sentido em par
+    // com o interlocutor que o gerou. Deixado para tras, ele calaria a Julia
+    // com quem o dono acabou de dizer que e gente — ou a calaria de saida num
+    // automatico que nunca chegou a receber a unica mensagem dela.
+    if (body.interlocutor !== undefined) {
+      updateData.interlocutor = body.interlocutor;
+      updateData.vitrineEnviadaEm = null;
+    }
     // Retomar a Júlia antes dos 5 minutos. O schema só admite null, então isto
     // nunca cria uma pausa pelo painel — quem pausa é o humano respondendo pelo
     // WhatsApp. Aqui a única operação possível é liberar.
