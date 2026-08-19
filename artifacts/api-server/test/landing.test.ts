@@ -29,8 +29,12 @@ import {
   JULIA_EXTRACTION_PROMPT,
   buildLeadBriefing,
 } from "../src/julia-persona";
+import { readFileSync } from "node:fs";
 import {
+  chegouSozinho,
+  ehModoA,
   MENSAGEM_DO_BOTAO_DO_SITE,
+  ORIGENS_DE_QUEM_CHEGOU_SOZINHO,
   ORIGEM_SITE,
   veioDaLanding,
 } from "../src/lib/origem-site";
@@ -471,6 +475,64 @@ secao("GET /stats/duvidas-do-site — sem nada ainda, responde vazio e não queb
   ok("responde 200", r.status === 200, String(r.status));
   ok("lista vazia", Array.isArray(corpo.assuntos) && corpo.assuntos.length === 0, JSON.stringify(corpo));
   ok("total zero", corpo.total === 0, String(corpo.total));
+}
+
+// ── QUEM E MODO A ───────────────────────────────────────────────────────────
+//
+// A regra vivia INLINE dentro do buildLeadBriefing, escrita e usada uma vez so.
+// Virou funcao com nome no dia em que a medicao precisou do MESMO recorte —
+// duas copias da mesma decisao e a forma classica de as duas divergirem sem
+// ninguem perceber (ver a nota sobre regra que existe num lugar so).
+secao("MODO A e MODO B: quem procurou quem");
+
+ok("o botao da landing e MODO A", ehModoA(ORIGEM_SITE));
+ok("quem chegou sozinho pelo WhatsApp tambem", ehModoA("whatsapp"));
+ok("o valor antigo 'inbound' continua valendo", ehModoA("inbound"));
+// Nulo nao e um caso a parte: e "chegou sozinho" escrito de outro jeito, e
+// tratar como MODO B faria a Julia falar como quem abordou quem nunca abordou.
+ok("origem nula e MODO A", ehModoA(null) && ehModoA(undefined));
+ok("maps e MODO B", !ehModoA("maps"));
+ok("import e MODO B", !ehModoA("import"));
+ok("instagram e MODO B", !ehModoA("instagram"));
+ok(
+  "e 'chegouSozinho' NAO inclui o site — quem clicou no botao ja leu a pagina",
+  chegouSozinho("whatsapp") && !chegouSozinho(ORIGEM_SITE),
+);
+
+secao("o script do MODO A nao pode divergir do modulo");
+{
+  // Mesmo desenho do teste que amarra o medir-repeticao aos topicos: o script
+  // roda contra producao sem passar pelo build, entao ele COPIA a regra. Se as
+  // duas divergirem, a medicao passa a contar OUTRO publico — e os dois lados
+  // continuariam "funcionando", que e o que torna esse defeito invisivel.
+  const fonte = readFileSync(new URL("../../scripts/medir-modo-a.mjs", import.meta.url), "utf8");
+  const origens = [ORIGEM_SITE, ...ORIGENS_DE_QUEM_CHEGOU_SOZINHO];
+  const faltando = origens.filter((o) => !fonte.includes(`"${o}"`));
+  ok("o script conhece as mesmas origens", faltando.length === 0, JSON.stringify(faltando));
+  ok("e e somente leitura", !/INSERT|UPDATE|DELETE/i.test(fonte), "o script escreve no banco!");
+
+  // As duas coisas que fazem a medicao valer alguma coisa depois: o criterio
+  // impresso ANTES do resultado, para ninguem ajusta-lo ao numero que saiu, e
+  // o aviso de que aqui o baseline e a PRIMEIRA rodada — nao ha numero cravado,
+  // porque ninguem leu uma conversa do MODO A ainda.
+  ok("declara o criterio antes de medir", fonte.includes("CRITERIO, declarado antes de medir"));
+  ok(
+    "e diz que o baseline e a primeira rodada dele",
+    fonte.includes("A PRIMEIRA") && fonte.includes("rodada deste script E o baseline"),
+  );
+  // A metade que o numero NAO cobre, dita em voz alta em vez de escondida.
+  ok(
+    "admite que nao mede se o motivo esta ligado ao que ele contou",
+    fonte.includes("O QUE ESTE SCRIPT NAO MEDE"),
+  );
+  // O denominador junto do numero: conversa que nunca recomendou some da
+  // mediana, e some por ser o pior caso.
+  ok("mostra tambem quantas NUNCA recomendaram", fonte.includes("NUNCA recomendou"));
+  // "pro" minusculo e "para o" em portugues falado, e esta em todo o prompt.
+  ok(
+    "o plano Pro e conferido com caixa, no texto cru",
+    fonte.includes("const PLANO_PRO = /"+"\\bPro\\b/"),
+  );
 }
 
 fim();

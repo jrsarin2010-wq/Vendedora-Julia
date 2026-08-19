@@ -42,6 +42,37 @@ export const MENSAGEM_DO_BOTAO_DO_SITE =
 export const ORIGEM_SITE = "site";
 
 /**
+ * AS ORIGENS DE QUEM CHEGOU SOZINHO — ele mandou mensagem do nada.
+ *
+ * "whatsapp" e o que o webhook grava quando nao ha assinatura da landing;
+ * "inbound" e o valor antigo, e continua aqui porque lead velho ainda o tem.
+ * Nulo entra junto: e o mesmo caso, escrito de outro jeito.
+ */
+export const ORIGENS_DE_QUEM_CHEGOU_SOZINHO = ["whatsapp", "inbound"] as const;
+
+export function chegouSozinho(origin: string | null | undefined): boolean {
+  return (
+    !origin || (ORIGENS_DE_QUEM_CHEGOU_SOZINHO as readonly string[]).includes(origin)
+  );
+}
+
+/**
+ * ELE VEIO ATE NOS? (MODO A) ou fomos NOS que fomos ate ele? (MODO B)
+ *
+ * A regra vivia INLINE dentro do `buildLeadBriefing`, escrita uma vez e usada
+ * uma vez — e ficou impossivel de conferir de fora no dia em que a medicao
+ * precisou do mesmo recorte. Virou funcao com nome pelo mesmo motivo do
+ * `ehPessoa`: o que decide comportamento tem que ter onde ser lido e testado.
+ *
+ * MODO A e quem nos procurou: chegou sozinho pelo WhatsApp, ou clicou no botao
+ * da landing. MODO B e todo o resto ("maps", "import", "instagram") — origens
+ * que dizem onde NOS o encontramos.
+ */
+export function ehModoA(origin: string | null | undefined): boolean {
+  return chegouSozinho(origin) || origin === ORIGEM_SITE;
+}
+
+/**
  * Minúsculas, sem acento, espaços colapsados. A faixa ̀-ͯ é a dos
  * sinais diacríticos que o NFD separa da letra — mesma limpeza que o webhook
  * já faz nas palavras-chave de handoff.

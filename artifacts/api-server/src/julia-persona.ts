@@ -2,7 +2,7 @@ import { detectarTratamento, saudacao } from "./lib/tratamento";
 import { lerInterlocutor } from "./lib/interlocutor";
 import { respondePorCortesia } from "./lib/sinal-de-cortesia";
 import { blocoDaFicha } from "./lib/descoberta";
-import { ORIGEM_SITE } from "./lib/origem-site";
+import { chegouSozinho as veioSozinho, ehModoA, ORIGEM_SITE } from "./lib/origem-site";
 import { momentoEmSaoPaulo, periodoDoDia } from "./lib/outreach";
 
 /**
@@ -1828,8 +1828,7 @@ export function buildLeadBriefing(params: {
   // viu, porque ele clicou no botão de dentro da página. Ganha linha própria em
   // vez de cair no "pode citar" genérico, porque o que importa aqui não é poder
   // citar a origem — é não recitar de volta a página que ele acabou de ler.
-  const chegouSozinho =
-    !params.origin || params.origin === "whatsapp" || params.origin === "inbound";
+  const chegouSozinho = veioSozinho(params.origin);
   if (params.origin === ORIGEM_SITE) {
     linhas.push(
       `- De onde veio: ele clicou no botão do WhatsApp DENTRO da página do CaptaClin. Ou seja, ele JÁ LEU a página: viu os três planos, os preços e as listas de recursos. NÃO repita isso para ele — o seu valor é dizer qual plano serve para a clínica DELE.`,
@@ -1880,7 +1879,7 @@ export function buildLeadBriefing(params: {
   // Só aparece quando dispara. Linha morta na ficha é ruído, e ruído o modelo
   // preenche com suposição — mesma razão da reputação e do que já foi
   // perguntado.
-  const modoB = !chegouSozinho && params.origin !== ORIGEM_SITE;
+  const modoB = !ehModoA(params.origin);
   if (modoB && respondePorCortesia(params.mensagensDele ?? [])) {
     linhas.push(
       `- ⚠️ As DUAS últimas respostas dele têm até três palavras. Ele está respondendo por EDUCAÇÃO, não por interesse — aplique a FASE 2, B4: pare de perguntar, diga em uma frase o que o CaptaClin faz, ofereça a saída e encerre o turno.`,
