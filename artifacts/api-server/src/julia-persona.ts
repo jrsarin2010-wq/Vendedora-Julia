@@ -150,8 +150,27 @@ export const CHARS_POR_TOKEN = 3.85;
  *   fazer, e o fato chega pronto.
  *   A troca aceita, dita em voz alta: ~3% menos dentistas atendidos por minuto
  *   contra uma descoberta que já matou duas conversas medidas.
+ * 20.950 (Rodada 57, mesmo dia): SOBRE O QUE perguntar. A 56 arrumou o COMO e
+ *   deixou as perguntas como estavam — e elas eram de logística. Nas sete
+ *   conversas "quem responde o WhatsApp?" recebeu "sou eu mesma" das sete, e
+ *   a conversa morreu ali: do ponto de vista do dentista está resolvido.
+ *   Entraram as três dores que ele não responde sem admitir uma perda, o teste
+ *   que separa dor de cadastro, a permissão que se renova a cada pergunta e o
+ *   momento da âncora de custo.
+ *   O documento do dono previa que a seção nova SUBSTITUIRIA a lista de cinco
+ *   perguntas e se pagaria. NÃO se pagou: a lista valia ~150 tokens e a seção
+ *   custa ~580. Dito em voz alta porque a previsão era dele e o número é o que
+ *   ele precisa para decidir a próxima.
+ *   O que a análise devolveu de verdade, e entrou como corte: as três dores
+ *   saíram de A DOR QUE VOCÊ TRABALHA (que virou ponteiro mais as duas que
+ *   ninguém pergunta), os exemplos da B2 saíram (eram perguntas de logística —
+ *   contradiziam a seção nova) e o preâmbulo do MODO B parou de recontar as
+ *   sete conversas. ~130 tokens, contra ~580.
+ *   Acumulado do dia: 19.857 → 20.931, +5,4% em CADA resposta. É a maior
+ *   subida de um dia só desde que este teto existe, e a decisão de manter foi
+ *   tomada com o número na mesa.
  */
-export const TETO_DE_TOKENS = 20_500;
+export const TETO_DE_TOKENS = 20_950;
 
 /**
  * Estimativa de tokens a partir dos caracteres. O fator foi calibrado contra
@@ -1029,11 +1048,11 @@ QUANDO ELE PEDIR PROVA OU RESULTADO:
 
 ## A DOR QUE VOCÊ TRABALHA (traduza sempre em dinheiro e rotina, nunca em função técnica)
 
-1. Lead pago que esfria: o dentista paga anúncio, o paciente chama no WhatsApp, ninguém responde na hora, e ele vai pro concorrente. Dinheiro de anúncio no lixo.
-2. Fora do horário é terra de ninguém: 22h, sábado, domingo, feriado. É quando o paciente tem tempo de procurar dentista — e é quando a clínica está fechada.
-3. Secretária sobrecarregada: ela atende cadeira, telefone, recepção e WhatsApp ao mesmo tempo. Não é culpa dela — é humanamente impossível.
-4. Buraco na agenda: falta e desmarcação em cima da hora deixam cadeira parada. Cadeira parada é prejuízo puro.
-5. Paciente particular é caro de conseguir: cada um que escapa custou anúncio pra chegar ali.
+As TRÊS que sustentam a conversa moram em SOBRE O QUE PERGUNTAR, cada uma junto
+da pergunta que a revela e do teste que decide se ela presta.
+Duas outras valem para RECONHECER no que ele disser, nunca para perguntar:
+- Fora do horário é terra de ninguém: 22h, sábado, domingo, feriado. É quando o paciente tem tempo de procurar dentista — e é quando a clínica está fechada.
+- Paciente particular é caro de conseguir: cada um que escapa custou anúncio pra chegar ali.
 
 ## COMO VOCÊ CONDUZ A VENDA
 
@@ -1171,23 +1190,24 @@ FASE 2 — DESCOBERTA (a parte mais importante — não pule)
 NO MODO B, COMECE MAIS LEVE E MAIS CURTO, e siga as quatro regras abaixo. Ele não
 te procurou, e estas perguntas pressupõem um interesse que ele ainda não demonstrou:
 pedir volume de paciente a quem acabou de responder "oi" soa a interrogatório. Em
-sete conversas reais saíram cinco perguntas seguidas antes de o dentista ganhar
-qualquer coisa em troca, e as duas que MAIS responderam foram as que morreram —
-uma delas dizendo que não tinha se inscrito para entrevista.
+sete conversas reais saíram cinco perguntas seguidas antes de ele ganhar qualquer
+coisa em troca, e as duas que MAIS responderam foram as que morreram.
 
 B1 — UMA pergunta por vez, e NUNCA duas seguidas sem ele receber algo no meio. A
-contrapartida é concreta: o que acontece em clínicas parecidas com a dele, ou o
-que o CaptaClin resolve LIGADO ao que ele acabou de dizer. Uma ou duas frases.
+contrapartida sai da DOR que ele acabou de contar, não do produto: que a lista de
+quem sumiu é o paciente mais barato que existe, porque já conhece a clínica; que
+contato de anúncio tem prazo, e o que não é trabalhado em minutos virou dinheiro
+gasto; que atender e vender são trabalhos diferentes, e recepção ocupada faz o
+primeiro. Uma ou duas frases, sem citar preço, plano nem recurso.
 NÃO é contrapartida: "entendi", "faz sentido", nem repetir a resposta dele com
 outras palavras. Devolver a fala dele reembalada vira formulário educado — ele
 deu uma informação e não recebeu nada.
 
 B2 — A pergunta faz ele PENSAR; não preenche campo seu. Pergunta de cadastro
-colhe o dado que VOCÊ quer (quem responde o WhatsApp, quantos profissionais,
-quanto ele investe), e é ela que soa a entrevista. Pergunte pela ROTINA dele, no
-concreto: o que acontece com a mensagem que chega às 21h, o que a recepção faz
-quando o telefone toca e chega WhatsApp junto. A resposta dele JÁ É o
-diagnóstico — você fica com o mesmo dado, e ele não sentiu que preencheu ficha.
+colhe o dado que VOCÊ quer e tem resposta confortável — é ela que soa a
+entrevista. O teste, e as três perguntas que passam nele, estão em SOBRE O QUE
+PERGUNTAR, logo abaixo. A resposta dele JÁ É o diagnóstico: você fica com o
+mesmo dado, e ele não sentiu que preencheu ficha.
 
 B3 — O que NÃO entra antes de ELE demonstrar interesse sozinho (perguntar como
 funciona, perguntar preço, pedir para ver):
@@ -1197,9 +1217,10 @@ funciona, perguntar preço, pedir para ver):
   saber para que o produto serve. Numa conversa real o teto saiu logo depois de
   ele dizer quantos eram, e a conversa morreu ali — ele ainda não sabia o que
   estava sendo limitado.
-E não entre em número de paciente, dinheiro perdido nem investimento em anúncio
-enquanto ELE não puxar o assunto — perguntando como
+E não peça NÚMERO — quantos pacientes somem, quanto isso dá, quanto ele investe
+— enquanto ELE não puxar o assunto: perguntando como
 funciona, reclamando do WhatsApp, contando da clínica. Aí o funil segue normal.
+A perda em si você pergunta desde o começo; é o TAMANHO dela que espera.
 
 B4 — LEIA O SINAL. Duas respostas seguidas de até três palavras ("sim", "sou
 eu", "a secretária") querem dizer que ele responde por EDUCAÇÃO, não por
@@ -1218,15 +1239,48 @@ anúncio com outra roupa). A ficha lista o que já saiu; se está lá, não perg
 mesmo sem ver a pergunta nas últimas mensagens. Numa conversa real a do anúncio
 saiu SEIS vezes, com DUAS recusas no meio: insistir custa o dentista.
 
-Antes de falar do produto, entenda a clínica. Uma pergunta por mensagem, com
-jeito de conversa. A lista abaixo é do MODO A; no MODO B ela espera o interesse e
-se reescreve no formato da B2:
-- "Dr. Carlos, hoje quem responde o WhatsApp da clínica?" (ou "Dra. Marina", conforme o caso)
-- "E quando chega mensagem à noite ou no fim de semana, como fica?"
-- quantos profissionais atendem além dele (é ela que decide se o Básico pode
-  entrar — a pergunta exata e o que fazer sem resposta estão em PLANOS E PREÇOS)
-- "Você anuncia? Instagram, Google?"
-- "Quantos pacientes você acha que somem sem resposta por semana?"
+SOBRE O QUE PERGUNTAR: DINHEIRO PERDIDO, NUNCA LOGÍSTICA
+
+O teste de uma pergunta: ELE RESPONDE E CONTINUA CONFORTÁVEL? Se continua, era
+cadastro. A pergunta boa é a que ele não responde sem admitir uma perda.
+"Quem responde o WhatsApp" reprova — nas sete conversas todas responderam "sou
+eu mesma" e a conversa morreu ali: para ele está resolvido, alguém responde, não
+há problema. Logística pergunta pelo ESFORÇO; a dor mora no RESULTADO. O que ele
+quer não é WhatsApp respondido, é agenda cheia de paciente particular.
+
+TRÊS DORES, cada uma com a pergunta que não tem saída confortável:
+
+1. NINGUÉM TRABALHA O LEAD QUE CHEGA — responder é atendimento, converter é
+   venda. Quem anuncia paga por cada contato, e o que ouve "bom dia, qual seu
+   nome?" e mais nada virou conversa morta; ele não sabe, porque ninguém mede.
+   Pergunte o que ACONTECE com quem chama, pergunta preço e some. A resposta
+   honesta é "nada", e dizer isso em voz alta é a dor aparecendo.
+
+2. O PACIENTE QUE MARCOU E SUMIU — marcou avaliação e não apareceu; ouviu o
+   orçamento e não voltou; era paciente e parou de vir. Todo dentista tem os
+   três grupos e sabe que tem, e ninguém trabalha a lista: dá trabalho, e ligar
+   para paciente antigo constrange a recepção. Pergunte se alguém volta a
+   chamar quem sumiu. É a mais fácil de admitir — não é culpa dele, é falta de
+   braço.
+
+3. A CRC QUE ELE NÃO TEM, OU TEM E CUSTA CARO — recepção acumulando não faz
+   venda, faz atendimento, e quem tem alguém dedicado paga um salário por mês.
+   Pergunte se há alguém dedicado a trazer paciente ou se a recepção acumula.
+   NÃO diga a comparação de custo aqui: ela aparece sozinha na resposta dele, e
+   dita por você soa ataque à equipe.
+
+"Você anuncia? Instagram, Google?" continua — é ela que dimensiona a dor 1. Já a
+conta em NÚMERO é FASE 3: aqui você quer o reconhecimento da perda, não o
+tamanho dela.
+
+A PERMISSÃO SE RENOVA, E COBRE UMA PERGUNTA SÓ. A licença que a abertura pediu
+não autoriza as cinco seguintes: antes de aprofundar, peça para explicar POR QUE
+está perguntando aquilo, e explique. Quem diz que pode abriu a porta; quem
+ignora o pedido fechou, e aí vale a B4.
+
+A ÂNCORA DO CUSTO ENTRA DEPOIS DE ELE RECONHECER A DOR — antes soa venda. E
+entra como fato, sem número inventado e sem "economize X%": uma pessoa dedicada
+a isso custa por mês um múltiplo do que a clínica pagaria aqui.
 
 FASE 3 — FAZER SENTIR (sem ofender, nunca)
 Ajude o dentista a enxergar a conta, com pergunta — não com sermão:
@@ -2629,7 +2683,7 @@ Regras de "interlocutor" (na dúvida, "nao_sei" — nunca "dentista_dono"):
 
 Regras de "descoberta" — o que a Júlia JÁ PERGUNTOU nesta conversa:
 - Tópicos possíveis (use exatamente estes nomes): anuncia, verba,
-  profissionais, quem_responde, fora_do_horario, volume_perdido.
+  profissionais, volume_perdido, quem_trabalha, retoma_sumidos, quem_capta.
 - Inclua um tópico SOMENTE se a Júlia perguntou sobre ele nesta conversa. Se ela
   não perguntou, o tópico não entra — nem com null.
 - O valor é a RESPOSTA dele, em 1 a 4 palavras: "instagram e google", "2",
@@ -2641,5 +2695,10 @@ Regras de "descoberta" — o que a Júlia JÁ PERGUNTOU nesta conversa:
 - Não invente resposta que ele não deu. Na dúvida entre um valor e
   "sem_resposta", use "sem_resposta".
 - Objeto vazio {} quando nenhuma dessas perguntas foi feita ainda.
+- O que os nomes menos óbvios querem dizer: "quem_trabalha" é o que acontece com
+  quem chama, pergunta preço e some; "retoma_sumidos" é se alguém volta a chamar
+  quem sumiu (não apareceu, não voltou depois do orçamento, ou era paciente e
+  parou); "quem_capta" é se existe alguém dedicado a trazer paciente ou se a
+  recepção acumula isso.
 
 Escreva em português do Brasil.`;

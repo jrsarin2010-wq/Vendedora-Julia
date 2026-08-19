@@ -26,9 +26,10 @@ export const TOPICOS = [
   "anuncia",
   "verba",
   "profissionais",
-  "quem_responde",
-  "fora_do_horario",
   "volume_perdido",
+  "quem_trabalha",
+  "retoma_sumidos",
+  "quem_capta",
 ] as const;
 
 export type Topico = (typeof TOPICOS)[number];
@@ -49,10 +50,27 @@ export const TOPICO_PT: Record<Topico, string> = {
   anuncia: "se anuncia",
   verba: "quanto investe em anuncio",
   profissionais: "quantos profissionais atendem",
-  quem_responde: "quem responde o WhatsApp",
-  fora_do_horario: "o que acontece fora do horario",
   volume_perdido: "quantos pacientes sao perdidos",
+  quem_trabalha: "o que acontece com quem chama e some",
+  retoma_sumidos: "se alguem volta a chamar quem sumiu",
+  quem_capta: "quem cuida de trazer paciente",
 };
+
+/**
+ * OS DOIS TOPICOS QUE SAIRAM, e por que sair foi seguro (19/08/2026).
+ *
+ * `quem_responde` e `fora_do_horario` acompanhavam duas perguntas de LOGISTICA
+ * ("quem responde o WhatsApp?", "e quando chega mensagem a noite?"). Elas foram
+ * removidas do prompt na mesma rodada: nas sete conversas reais as sete
+ * responderam a primeira com "sou eu mesma" e a conversa morreu ali, porque do
+ * ponto de vista do dentista aquilo esta resolvido.
+ *
+ * Topico so existe para impedir que uma pergunta se repita. Sem a pergunta, o
+ * topico nao guarda nada — e os valores que ficaram gravados em leads antigos
+ * viram inertes sozinhos, porque `lerDescoberta` ignora chave desconhecida.
+ * Nao ha migracao a fazer, e e por isso que remover foi barato: a pergunta saiu
+ * ANTES.
+ */
 
 export function ehTopico(valor: unknown): valor is Topico {
   return typeof valor === "string" && (TOPICOS as readonly string[]).includes(valor);
@@ -187,18 +205,31 @@ const PERGUNTAS: Record<Topico, string[]> = {
     "voces sao quantos",
     "sao quantos ai",
   ],
-  quem_responde: [
-    "quem responde o whatsapp",
-    "quem cuida do whatsapp",
-    "quem atende o whatsapp",
-    "quem responde as mensagens",
+  // AS TRES DORES (19/08/2026). Cada fragmento aqui e a pergunta que o dentista
+  // nao responde sem admitir uma perda — e o que separa estas das que sairam.
+  quem_trabalha: [
+    "o que acontece com quem",
+    "o que acontece com esse contato",
+    "o que acontece com esse paciente",
+    "pergunta preco e some",
+    "pergunta o preco e some",
+    "some depois de perguntar",
   ],
-  fora_do_horario: [
-    "quando chega mensagem",
-    "chega mensagem a noite",
-    "como fica no fim de semana",
-    "e no fim de semana",
-    "e quando e de noite",
+  retoma_sumidos: [
+    "alguem volta a chamar",
+    "volta a chamar quem",
+    "alguem chama de volta",
+    "chama de volta quem",
+    "voces retomam",
+    "alguem retoma",
+  ],
+  quem_capta: [
+    "alguem dedicado a trazer",
+    "alguem so para trazer",
+    "alguem cuidando de trazer",
+    "quem cuida de trazer paciente",
+    "a recepcao acumula",
+    "recepcao acumula isso",
   ],
   volume_perdido: [
     "quantos voce acha que somem",

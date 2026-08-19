@@ -88,13 +88,22 @@ const PERGUNTAS = {
     "quantos profissionais", "quantas pessoas atendem", "quantos dentistas",
     "voces sao quantos", "sao quantos ai",
   ],
-  quem_responde: [
-    "quem responde o whatsapp", "quem cuida do whatsapp",
-    "quem atende o whatsapp", "quem responde as mensagens",
+  // AS TRES DORES (19/08/2026), no lugar das duas perguntas de logistica que
+  // sairam do prompt. Copiadas de lib/descoberta.ts como o resto, e ha teste
+  // amarrando as duas listas: divergir aqui faz a medicao medir outra coisa.
+  quem_trabalha: [
+    "o que acontece com quem", "o que acontece com esse contato",
+    "o que acontece com esse paciente", "pergunta preco e some",
+    "pergunta o preco e some", "some depois de perguntar",
   ],
-  fora_do_horario: [
-    "quando chega mensagem", "chega mensagem a noite",
-    "como fica no fim de semana", "e no fim de semana", "e quando e de noite",
+  retoma_sumidos: [
+    "alguem volta a chamar", "volta a chamar quem", "alguem chama de volta",
+    "chama de volta quem", "voces retomam", "alguem retoma",
+  ],
+  quem_capta: [
+    "alguem dedicado a trazer", "alguem so para trazer",
+    "alguem cuidando de trazer", "quem cuida de trazer paciente",
+    "a recepcao acumula", "recepcao acumula isso",
   ],
   volume_perdido: [
     "quantos voce acha que somem", "quantos somem", "quantos pacientes somem",

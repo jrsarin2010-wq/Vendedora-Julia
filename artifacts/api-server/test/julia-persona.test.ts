@@ -235,10 +235,17 @@ secao("FASE 2 no MODO B — descoberta não pode virar interrogatório");
     fase2.includes("pressupõem um interesse que ele ainda não demonstrou"),
   );
   ok(
-    "segura as perguntas de dinheiro e volume até ELE puxar o assunto",
-    fase2.includes("não entre em número de paciente, dinheiro perdido nem") &&
+    "segura o NÚMERO até ELE puxar o assunto",
+    fase2.includes("não peça NÚMERO — quantos pacientes somem, quanto isso dá, quanto ele investe") &&
       fase2.includes("enquanto ELE não puxar o assunto"),
     fase2,
+  );
+  // A distincao que a Rodada 57 obrigou a escrever: antes o assunto "dinheiro
+  // perdido" esperava INTEIRO, e isso teria matado as tres perguntas novas, que
+  // sao exatamente sobre perda. O que espera e o TAMANHO.
+  ok(
+    "mas a perda em si se pergunta desde o começo — é o tamanho dela que espera",
+    fase2.includes("A perda em si você pergunta desde o começo; é o TAMANHO dela que espera"),
   );
   ok(
     "e nomeia o que conta como ele puxar o assunto",
@@ -267,11 +274,22 @@ secao("Rodada 56 — B1: pergunta so anda em troca de alguma coisa");
     fase2.includes("NUNCA duas seguidas sem ele receber algo no meio"),
     fase2,
   );
+  // A contrapartida saiu do PRODUTO e passou para a DOR (Rodada 57): observacao
+  // sobre a clinica dele, ligada ao que ele acabou de contar. Uma por dor.
   ok(
-    "e a contrapartida e concreta: clinica parecida, ou o que o produto resolve no que ele disse",
-    fase2.includes("o que acontece em") &&
-      fase2.includes("clínicas parecidas com a dele") &&
-      fase2.includes("que o CaptaClin resolve LIGADO ao que ele acabou de dizer"),
+    "a contrapartida sai da DOR que ele contou, nao do produto",
+    fase2.includes("contrapartida sai da DOR que ele acabou de contar, não do produto"),
+    fase2,
+  );
+  ok(
+    "e as tres estao escritas, uma por dor",
+    fase2.includes("o paciente mais barato que existe, porque já conhece a clínica") &&
+      fase2.includes("contato de anúncio tem prazo") &&
+      fase2.includes("atender e vender são trabalhos diferentes"),
+  );
+  ok(
+    "nenhuma delas cita preco, plano ou recurso",
+    fase2.includes("sem citar preço, plano nem recurso"),
   );
   // A parte que faltaria se so o "de algo em troca" estivesse escrito: o modelo
   // preencheria a lacuna com o mais barato — um "entendi" e a fala dele
@@ -291,21 +309,28 @@ secao("Rodada 56 — B2: a pergunta faz ele PENSAR, nao preenche campo");
     JULIA_SYSTEM_PROMPT.indexOf("FASE 3 — FAZER SENTIR"),
   );
 
+  // Os exemplos da B2 eram "a mensagem que chega as 21h" e "a recepcao com
+  // telefone e WhatsApp" — perguntas de LOGISTICA, exatamente o que a Rodada 57
+  // proibiu. Sairam: o "sobre o que" passou a morar num lugar so.
   ok(
-    "a pergunta de cadastro esta nomeada COM os exemplos dela",
+    "a pergunta de cadastro e definida pela RESPOSTA CONFORTAVEL, nao por uma lista",
     fase2.includes("Pergunta de cadastro") &&
-      fase2.includes("quem responde o WhatsApp, quantos profissionais"),
+      fase2.includes("tem resposta confortável"),
   );
   ok(
-    "e o que entra no lugar e a rotina dele, no concreto",
-    fase2.includes("Pergunte pela ROTINA dele, no") &&
-      fase2.includes("mensagem que chega às 21h"),
+    "e a B2 aponta para onde o 'sobre o que' mora, em vez de dar exemplo proprio",
+    fase2.includes("O teste, e as três perguntas que passam nele, estão em SOBRE O QUE"),
+  );
+  ok(
+    "nenhum exemplo de logistica sobrou dentro da B2",
+    !fase2.includes("mensagem que chega às 21h") && !fase2.includes("Pergunte pela ROTINA"),
   );
   // O porque, que e o que sustenta a regra quando o modelo estiver com pressa:
   // ele nao esta abrindo mao do dado, esta pegando o MESMO dado por outro lado.
   ok(
     "e o motivo: a resposta dele ja e o diagnostico, e o dado vem junto",
-    fase2.includes("A resposta dele JÁ É o") && fase2.includes("você fica com o mesmo dado"),
+    fase2.includes("A resposta dele JÁ É o diagnóstico") &&
+      fase2.includes("mesmo dado, e ele não sentiu que preencheu ficha"),
   );
 }
 
@@ -352,11 +377,184 @@ secao("Rodada 56 — B3: dimensionamento de plano nao e descoberta");
     "e aponta de volta para a regra que descreve o comportamento",
     JULIA_SYSTEM_PROMPT.includes("interesse por conta própria (FASE 2, B3)"),
   );
-  // A lista de perguntas prontas continua existindo — mas agora tem dono.
+  // A lista de cinco perguntas prontas SAIU inteira na Rodada 57 (era de
+  // logistica). Se ela voltar, volta o defeito que a 57 existe para consertar.
   ok(
-    "a lista de perguntas prontas da FASE 2 e do MODO A, e diz o que o MODO B faz com ela",
-    fase2.includes("A lista abaixo é do MODO A") &&
-      fase2.includes("no MODO B ela espera o interesse e"),
+    "nenhuma das perguntas de logistica sobrou na FASE 2",
+    !fase2.includes("hoje quem responde o WhatsApp da clínica?") &&
+      !fase2.includes("E quando chega mensagem à noite ou no fim de semana"),
+    fase2,
+  );
+}
+
+// ── Rodada 57 — SOBRE O QUE perguntar ──────────────────────────────────────
+//
+// A 56 arrumou o COMO e deixou as perguntas como estavam: eram de LOGISTICA.
+// Nas sete conversas "quem responde o WhatsApp?" recebeu "sou eu mesma" das
+// sete, e a conversa morreu ali — do ponto de vista do dentista esta resolvido,
+// alguem responde, nao ha problema. A dor nao e de esforco, e de dinheiro.
+secao("Rodada 57 — o teste que separa dor de cadastro");
+{
+  const inicio = JULIA_SYSTEM_PROMPT.indexOf("FASE 2 — DESCOBERTA");
+  const fase2 = JULIA_SYSTEM_PROMPT.slice(
+    inicio,
+    JULIA_SYSTEM_PROMPT.indexOf("FASE 3 — FAZER SENTIR"),
+  );
+
+  ok("a secao existe", fase2.includes("SOBRE O QUE PERGUNTAR: DINHEIRO PERDIDO, NUNCA LOGÍSTICA"));
+  // O criterio, escrito como TESTE e nao como preferencia: e o que permite
+  // julgar uma pergunta que ninguem previu.
+  ok(
+    "o teste e o conforto da resposta, e vale para pergunta nenhuma prevista",
+    fase2.includes("ELE RESPONDE E CONTINUA CONFORTÁVEL?") &&
+      fase2.includes("A pergunta boa é a que ele não responde sem admitir uma perda"),
+  );
+  ok(
+    "e a pergunta reprovada esta nomeada, com o que aconteceu nas sete",
+    fase2.includes('"Quem responde o WhatsApp" reprova') && fase2.includes('eu mesma" e a conversa morreu ali'),
+  );
+  // O porque conceitual. Sem ele a regra vira lista de perguntas boas, e lista
+  // nao se aplica a caso novo.
+  ok(
+    "e o motivo: logistica pergunta pelo esforco, a dor mora no resultado",
+    fase2.includes("Logística pergunta pelo ESFORÇO; a dor mora no RESULTADO"),
+  );
+  ok(
+    "com o resultado dito no vocabulario dele",
+    fase2.includes("é agenda cheia de paciente particular"),
+  );
+}
+
+secao("Rodada 57 — as tres dores, cada uma com a pergunta que revela");
+{
+  const inicio = JULIA_SYSTEM_PROMPT.indexOf("FASE 2 — DESCOBERTA");
+  const fase2 = JULIA_SYSTEM_PROMPT.slice(
+    inicio,
+    JULIA_SYSTEM_PROMPT.indexOf("FASE 3 — FAZER SENTIR"),
+  );
+
+  ok("dor 1 — ninguem TRABALHA o lead", fase2.includes("NINGUÉM TRABALHA O LEAD QUE CHEGA"));
+  ok(
+    "e a distincao que ela carrega: responder e atendimento, converter e venda",
+    fase2.includes("responder é atendimento, converter é"),
+  );
+  ok(
+    "a pergunta e o que ACONTECE com quem some, nunca quem responde",
+    fase2.includes("Pergunte o que ACONTECE com quem chama, pergunta preço e some"),
+  );
+  ok(
+    "e diz por que ela funciona: a resposta honesta e 'nada'",
+    fase2.includes('honesta é "nada", e dizer isso em voz alta é a dor aparecendo'),
+  );
+
+  ok("dor 2 — o paciente que marcou e sumiu", fase2.includes("O PACIENTE QUE MARCOU E SUMIU"));
+  ok(
+    "com os tres grupos, que e o que faz ele reconhecer o proprio caso",
+    fase2.includes("marcou avaliação e não apareceu") &&
+      fase2.includes("ouviu o") &&
+      fase2.includes("orçamento e não voltou") &&
+      fase2.includes("era paciente e parou de vir"),
+  );
+  ok(
+    "a pergunta e se alguem volta a chamar quem sumiu",
+    fase2.includes("Pergunte se alguém volta a"),
+  );
+  // Por que esta e a mais facil: nao acusa ninguem.
+  ok(
+    "e por que ela e a mais facil de admitir",
+    fase2.includes("não é culpa dele, é falta de") && fase2.includes("braço"),
+  );
+
+  ok("dor 3 — a CRC que ele nao tem, ou tem e custa caro", fase2.includes("A CRC QUE ELE NÃO TEM, OU TEM E CUSTA CARO"));
+  ok(
+    "com a distincao entre atender e vender",
+    fase2.includes("recepção acumulando não faz") && fase2.includes("venda, faz atendimento"),
+  );
+  ok(
+    "a pergunta e se ha alguem dedicado a trazer paciente",
+    fase2.includes("Pergunte se há alguém dedicado a trazer paciente ou se a recepção"),
+  );
+  // A trava da dor 3: dita por ela, a comparacao de custo vira ataque a equipe
+  // — que e o erro que a secao da CRC ja proibia no outro contexto.
+  ok(
+    "e a comparacao de custo NAO se diz aqui, com o motivo",
+    fase2.includes("NÃO diga a comparação de custo aqui") &&
+      fase2.includes("dita por você soa ataque à equipe"),
+  );
+
+  // O que o documento manda MANTER, e que se perderia num corte apressado.
+  ok(
+    "a pergunta do anuncio fica, porque e ela que dimensiona a dor 1",
+    fase2.includes('"Você anuncia? Instagram, Google?" continua') &&
+      fase2.includes("dimensiona a dor 1"),
+  );
+  ok(
+    "e a conta em numero continua sendo FASE 3, nao aqui",
+    fase2.includes("conta em NÚMERO é FASE 3") &&
+      fase2.includes("o reconhecimento da perda, não o"),
+  );
+}
+
+secao("Rodada 57 — a permissao se renova, e a ancora de custo tem hora");
+{
+  const inicio = JULIA_SYSTEM_PROMPT.indexOf("FASE 2 — DESCOBERTA");
+  const fase2 = JULIA_SYSTEM_PROMPT.slice(
+    inicio,
+    JULIA_SYSTEM_PROMPT.indexOf("FASE 3 — FAZER SENTIR"),
+  );
+
+  // Educacao nao e pedir licenca uma vez e disparar cinco perguntas.
+  ok(
+    "a licenca da abertura cobre UMA pergunta",
+    fase2.includes("A PERMISSÃO SE RENOVA, E COBRE UMA PERGUNTA SÓ"),
+  );
+  ok(
+    "e o pedido novo vem com o motivo, o que devolve o controle a ele",
+    fase2.includes("peça para explicar POR QUE") && fase2.includes("está perguntando aquilo, e explique"),
+  );
+  // A porta de saida: quem ignora o pedido fechou, e ai vale a B4 — a regra nao
+  // fica pendurada sem dizer o que fazer com o silencio.
+  ok(
+    "quem ignora o pedido fechou a porta, e ai vale a B4",
+    fase2.includes("ignora o pedido fechou, e aí vale a B4"),
+  );
+
+  ok(
+    "a ancora de custo so depois de ele reconhecer a dor",
+    fase2.includes("A ÂNCORA DO CUSTO ENTRA DEPOIS DE ELE RECONHECER A DOR"),
+  );
+  ok("e o motivo: antes soa venda", fase2.includes("antes soa venda"));
+  // Sem numero inventado: e a mesma disciplina do resto do prompt sobre nao
+  // afirmar o que nao se sabe.
+  ok(
+    "e entra como fato, sem numero inventado",
+    fase2.includes("sem número inventado e sem \"economize X%\"") &&
+      fase2.includes("um múltiplo do que a clínica pagaria aqui"),
+  );
+}
+
+secao("Rodada 57 — A DOR QUE VOCÊ TRABALHA parou de repetir as tres");
+{
+  const inicio = JULIA_SYSTEM_PROMPT.indexOf("## A DOR QUE VOCÊ TRABALHA");
+  const secaoDor = JULIA_SYSTEM_PROMPT.slice(
+    inicio,
+    JULIA_SYSTEM_PROMPT.indexOf("## COMO VOCÊ CONDUZ A VENDA"),
+  );
+  // As tres saíram daqui porque la elas vem com a pergunta junto — dor sem a
+  // pergunta que a revela e vocabulario, e vocabulario nao conduz conversa.
+  ok(
+    "ela aponta para onde as tres moram agora",
+    secaoDor.includes("moram em SOBRE O QUE PERGUNTAR"),
+    secaoDor,
+  );
+  ok(
+    "e as duas que sobraram sao para RECONHECER, nunca para perguntar",
+    secaoDor.includes("valem para RECONHECER no que ele disser, nunca para perguntar"),
+  );
+  ok(
+    "a duplicata saiu de verdade",
+    !secaoDor.includes("Lead pago que esfria") && !secaoDor.includes("Buraco na agenda"),
+    secaoDor,
   );
 }
 
@@ -782,9 +980,16 @@ ok(
   "a pergunta está escrita, pronta para usar",
   JULIA_SYSTEM_PROMPT.includes('"Quantos profissionais atendem hoje na clínica, além de você?"'),
 );
+// Ela SAIU da descoberta na Rodada 57 (é dimensionamento de plano, não dor), e
+// isso so e seguro porque ela continua alcancavel pelo MODO A. As duas pontas
+// juntas: PLANOS diz quando ela vem, e a FASE 2 diz onde ela nao entra.
 ok(
-  "a pergunta também entra na fase de descoberta, onde a conversa realmente passa",
-  JULIA_SYSTEM_PROMPT.includes("decide se o Básico pode"),
+  "a pergunta continua tendo hora no MODO A, mesmo fora da descoberta",
+  JULIA_SYSTEM_PROMPT.includes('"vocês são quantos profissionais?" vem CEDO no MODO A'),
+);
+ok(
+  "e a FASE 2 diz que na conversa fria ela nao entra",
+  JULIA_SYSTEM_PROMPT.includes("quantos profissionais atendem: é dimensionamento de PLANO, não descoberta"),
 );
 ok(
   "2 ou mais profissionais tira o Básico da mesa",

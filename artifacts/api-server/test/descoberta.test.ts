@@ -128,11 +128,41 @@ ok(
 );
 ok(
   "afirmacao com o mesmo fragmento NAO conta",
-  topicosPerguntados("Hoje quem responde o whatsapp é você, e isso custa paciente.").length === 0,
+  topicosPerguntados("Hoje o que acontece com quem some é nada, e isso custa paciente.").length === 0,
 );
 ok(
   "mas a mesma frase COM interrogacao conta",
-  topicosPerguntados("Hoje quem responde o whatsapp da clínica?").includes("quem_responde"),
+  topicosPerguntados("E o que acontece com quem chama, pergunta preço e some?").includes(
+    "quem_trabalha",
+  ),
+);
+
+// AS TRES DORES (19/08/2026). As perguntas de logistica sairam do prompt, e os
+// topicos delas sairam junto — topico existe para impedir que uma pergunta se
+// repita, e sem a pergunta ele nao guarda nada.
+ok(
+  "a dor 2 e reconhecida",
+  topicosPerguntados("E alguém volta a chamar quem sumiu?").includes("retoma_sumidos"),
+);
+ok(
+  "a dor 3 tambem",
+  topicosPerguntados("Tem alguém dedicado a trazer paciente, ou a recepção acumula isso?").includes(
+    "quem_capta",
+  ),
+);
+ok(
+  "as duas perguntas de logistica nao sao mais rastreadas",
+  topicosPerguntados("Hoje quem responde o whatsapp da clínica?").length === 0 &&
+    topicosPerguntados("E quando chega mensagem à noite, como fica?").length === 0,
+);
+// A contrapartida da B1 fala de recepcao e de quem sumiu em AFIRMACAO. Se ela
+// contasse como pergunta, a Julia seria acusada de repetir o que nunca
+// perguntou — e a cerca do "uma vez so" barraria a pergunta de verdade depois.
+ok(
+  "a contrapartida sobre a recepcao NAO conta como pergunta",
+  topicosPerguntados(
+    "Atender e vender são trabalhos diferentes, e recepção ocupada faz o primeiro.",
+  ).length === 0,
 );
 ok("mensagem sem pergunta nenhuma", topicosPerguntados("Boa noite! Fico à disposição.").length === 0);
 
@@ -337,6 +367,30 @@ secao("F — o script de medicao nao pode divergir do modulo");
   const fonte = readFileSync(new URL("../../scripts/medir-repeticao.mjs", import.meta.url), "utf8");
   const faltando = TOPICOS.filter((t) => !fonte.includes(`${t}:`));
   ok("o script conhece os mesmos topicos", faltando.length === 0, JSON.stringify(faltando));
+
+  // O SEGUNDO script (19/08/2026) copia a MESMA lista, e pelo mesmo motivo —
+  // ele usa as perguntas ao contrario, para DESCONTAR a mencao de perda que
+  // veio porque a Julia acabou de perguntar. Divergir aqui faria a medicao
+  // contar resposta como se fosse reconhecimento espontaneo, que e justamente
+  // a diferenca que ela existe para medir.
+  const dor = readFileSync(
+    new URL("../../scripts/medir-dor-espontanea.mjs", import.meta.url),
+    "utf8",
+  );
+  const faltandoNaDor = TOPICOS.filter((t) => !dor.includes(`${t}:`));
+  ok(
+    "o script da dor espontanea conhece os mesmos topicos",
+    faltandoNaDor.length === 0,
+    JSON.stringify(faltandoNaDor),
+  );
+  ok("e ele tambem e somente leitura", !/INSERT|UPDATE|DELETE/i.test(dor), "o script escreve!");
+  // O criterio impresso ANTES de medir, para ninguem ajusta-lo ao resultado
+  // depois — e com o baseline dito, que e o unico jeito de a comparacao valer.
+  ok("declara o criterio junto do baseline", dor.includes("baseline: ZERO em sete conversas"));
+  ok(
+    "e separa mencao espontanea de resposta a pergunta",
+    dor.includes("ultimaNossaPerguntou") && dor.includes("nao contam"),
+  );
   ok(
     "e usa a mesma regra de 'so dentro de pergunta'",
     fonte.includes("dentroDePergunta"),
