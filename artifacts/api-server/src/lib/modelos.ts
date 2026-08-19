@@ -84,7 +84,11 @@ export const TETO_RESPOSTA = 512;
 export const TETO_EXTRACAO = 800;
 
 /**
- * ABORDAGEM. Era 200 e quebrou em produção em 18/08/2026; ver o histórico no
- * topo. São no máximo 40 mensagens por dia, então não há o que economizar aqui.
+ * ABORDAGEM — e, desde 19/08/2026, também os dois TOQUES de quem não respondeu,
+ * que deixaram de ser texto fixo e passaram a nascer do modelo.
+ *
+ * Era 200 e quebrou em produção em 18/08/2026; ver o histórico no topo. São no
+ * máximo 15 mensagens frias por dia (o ritmo caiu de 40 no mesmo dia em que os
+ * toques passaram a ser gerados), então não há o que economizar aqui.
  */
 export const TETO_ABORDAGEM = 1024;

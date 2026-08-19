@@ -4,14 +4,15 @@
  */
 import { ok, secao, fim } from "./assert";
 import {
-  ABORDAGEM_TOQUES,
   FOLLOW_UP_TEMPLATES,
   JULIA_SYSTEM_PROMPT,
   JULIA_OUTREACH_PROMPT,
+  JULIA_TOQUE_PROMPT,
   TETO_DE_TOKENS,
   tamanhoEmTokens,
   buildLeadBriefing,
   buildOutreachBriefing,
+  buildToqueBriefing,
 } from "../src/julia-persona";
 import { detectarTratamento, saudacao } from "../src/lib/tratamento";
 
@@ -1682,28 +1683,124 @@ secao("Rodada 38 — emoji nos templates fixos: a maioria não tem");
   // automática é a assinatura mais óbvia de robô, e estas são justamente as
   // mensagens que o dentista recebe sem pedir.
   const EMOJI = /\p{Extended_Pictographic}/u;
+  //
+  // Os dois toques de abordagem SAÍRAM desta lista em 19/08/2026: deixaram de
+  // ser texto fixo e passaram a nascer do modelo, então não há string para
+  // medir aqui. O emoji deles é governado pelo prompt, e a asserção mudou de
+  // endereço — está logo abaixo, junto das outras do JULIA_TOQUE_PROMPT.
   const fixos = [
     FOLLOW_UP_TEMPLATES[1]("Marina", null),
     FOLLOW_UP_TEMPLATES[2]("Marina", null),
     FOLLOW_UP_TEMPLATES[3]("Marina", null),
     FOLLOW_UP_TEMPLATES[4]("Marina", null),
-    ABORDAGEM_TOQUES[1]("Marina"),
-    ABORDAGEM_TOQUES[2]("Marina"),
   ];
   const comEmoji = fixos.filter((t) => EMOJI.test(t));
   ok(
-    "dos 6 textos fixos, no máximo 2 têm emoji",
+    "dos 4 textos fixos, no máximo 2 têm emoji",
     comEmoji.length <= 2,
     comEmoji.join(" | "),
   );
   ok(
-    "nenhum toque de abordagem fria tem emoji (emoji de estranho soa forçado)",
-    !EMOJI.test(ABORDAGEM_TOQUES[1]("Marina")) &&
-      !EMOJI.test(ABORDAGEM_TOQUES[2]("Marina")),
-  );
-  ok(
     "nenhum texto fixo tem mais de um emoji",
     fixos.every((t) => (t.match(/\p{Extended_Pictographic}/gu) ?? []).length <= 1),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19/08/2026 — os dois toques de quem nunca respondeu deixaram de ser texto
+// fixo. Eram duas sentenças idênticas para todo dentista, e a segunda levava o
+// link do site: o maior sinal de robô que sobrava depois de o dono baixar o
+// ritmo de 40 para 15 por dia. Cota não muda o fato de N números receberem a
+// MESMA frase.
+//
+// O que se testa aqui é o PROMPT, porque é ele que virou a regra — do mesmo
+// jeito que já se testa o JULIA_OUTREACH_PROMPT algumas seções acima.
+// ─────────────────────────────────────────────────────────────────────────────
+secao("os toques de abordagem nascem do modelo, e o prompt é que os governa");
+ok(
+  "o prompt proíbe link, e diz que vale para os DOIS toques",
+  /LINK\. Nenhum, nem o do site, nem em nenhum dos dois toques/.test(JULIA_TOQUE_PROMPT),
+);
+ok(
+  "nenhuma URL sobrou dentro do próprio prompt",
+  !/https?:\/\//.test(JULIA_TOQUE_PROMPT),
+  (JULIA_TOQUE_PROMPT.match(/https?:\/\/\S+/g) ?? []).join(" | "),
+);
+ok(
+  "o toque 1 continua obrigado a dar a saída fácil (é o que vira opt-out em vez de denúncia)",
+  JULIA_TOQUE_PROMPT.includes("SAÍDA FÁCIL"),
+);
+ok(
+  "o toque 2 se anuncia como a última e não faz pergunta",
+  JULIA_TOQUE_PROMPT.includes("esta é a última vez que você procura") &&
+    JULIA_TOQUE_PROMPT.includes("sem pergunta nenhuma"),
+);
+ok(
+  "o prompt proíbe afirmar passado que não existe (o erro que a cadência própria existe para evitar)",
+  JULIA_TOQUE_PROMPT.includes("Afirmar QUALQUER coisa que ele nunca disse"),
+);
+ok(
+  "o prompt proíbe cobrar o silêncio",
+  JULIA_TOQUE_PROMPT.includes("Cobrança pelo silêncio"),
+);
+ok("o prompt trava preço e plano", /Preço, plano, trial, garantia/.test(JULIA_TOQUE_PROMPT));
+ok(
+  "emoji: no máximo um, e nenhum é resposta legítima",
+  JULIA_TOQUE_PROMPT.includes("Um emoji no máximo, e nenhum é uma resposta legítima"),
+);
+ok(
+  "manda ler o que já foi enviado antes de escrever (senão 'não repita' é incumprível)",
+  JULIA_TOQUE_PROMPT.includes("não pode repetir as palavras da anterior"),
+);
+{
+  // A armadilha registrada três vezes neste arquivo: frase pronta dentro do
+  // prompt sai transcrita do outro lado. Foi o que aconteceu com o pedido de
+  // licença, com a linha de origem e com os quatro exemplos da abertura.
+  const exemplos = JULIA_TOQUE_PROMPT.match(/^\s*(Exemplo|Ex\.|Modelo)\b/gim) ?? [];
+  ok("nenhum exemplo para copiar", exemplos.length === 0, exemplos.join(" | "));
+  ok(
+    "e ele diz por que não tem",
+    JULIA_TOQUE_PROMPT.includes("AQUI NÃO EXISTE EXEMPLO PARA COPIAR"),
+  );
+}
+
+secao("a ficha do toque declara o fato, e mostra o que já foi mandado");
+{
+  const AGORA_10H = new Date("2026-08-11T13:00:00.000Z"); // 10h em SP
+  const ficha1 = buildToqueBriefing({
+    toque: 1,
+    name: "Marina",
+    clinicName: "Odonto Vida",
+    city: "Fortaleza",
+    diasDesdeAAbordagem: 3,
+    jaEnviadas: ["Bom dia, Dra. Marina! Aqui é a Júlia."],
+    agora: AGORA_10H,
+  });
+  ok("diz que horas são na clínica", ficha1.includes("10h") && ficha1.includes("de manhã"), ficha1);
+  ok("diz QUAL toque é", ficha1.includes("TOQUE 1"), ficha1);
+  ok("resolve o tratamento, sem deixar para o modelo chutar", ficha1.includes("Dra. Marina"), ficha1);
+  ok("mostra o que já foi mandado", ficha1.includes("Aqui é a Júlia"), ficha1);
+  ok("diz há quantos dias", ficha1.includes("3 dia(s)"), ficha1);
+
+  const ficha2 = buildToqueBriefing({
+    toque: 2,
+    name: null,
+    clinicName: null,
+    city: null,
+    diasDesdeAAbordagem: null,
+    jaEnviadas: [],
+    agora: AGORA_10H,
+  });
+  ok("o toque 2 se anuncia como o último na ficha", ficha2.includes("ÚLTIMA"), ficha2);
+  ok(
+    "sem nome, manda falar com a clínica em vez de inventar",
+    ficha2.includes("não sei") && ficha2.includes('sem "Dr(a)."'),
+    ficha2,
+  );
+  ok(
+    "sem mensagem anterior, a seção nem aparece (nada de bloco vazio)",
+    !ficha2.includes("O QUE VOCÊ JÁ MANDOU"),
+    ficha2,
   );
 }
 

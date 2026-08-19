@@ -15,6 +15,9 @@ import {
   periodoDoDia,
   contarEnvios,
   sortearIntervalo,
+  atrasoDaLargada,
+  LARGADA_MAXIMA_MINUTOS,
+  EXPLICACAO_BLOQUEIO,
   type ConfigOutreach,
 } from "../src/lib/outreach";
 import { rodarCicloDeAbordagem } from "../src/lib/outreach-scheduler";
@@ -104,6 +107,42 @@ ok('só o texto exato "true" liga', lerConfig().habilitado === true);
 delete process.env.OUTREACH_ENABLED;
 ok("sem a variável, começa desligado", lerConfig().habilitado === false);
 
+// ---------------------------------------------------------------------------
+// O RITMO PADRÃO (19/08/2026) — decisão do dono: de 40/8/180 para 15/2/1200.
+//
+// Estes números vivem em variável de ambiente e mudam no Railway sem deploy, o
+// que torna tentador deixar o default do código como estava. Não pode: o
+// default é o que vale no ambiente que sobe sem as variáveis, e "o código diz
+// 40" é a mentira que reaparece no dia em que alguém criar um serviço novo.
+// ---------------------------------------------------------------------------
+secao("o ritmo padrão do código é o que foi decidido, não o antigo");
+{
+  for (const chave of [
+    "OUTREACH_PER_HOUR",
+    "OUTREACH_PER_DAY",
+    "OUTREACH_MIN_GAP_SECONDS",
+  ]) {
+    delete process.env[chave];
+  }
+  const padrao = lerConfig();
+  ok("15 por dia (era 40)", padrao.porDia === 15, String(padrao.porDia));
+  ok("2 por hora (era 8)", padrao.porHora === 2, String(padrao.porHora));
+  ok(
+    "1200s de intervalo mínimo (era 180) — sorteado, vira 20 a 40 minutos",
+    padrao.intervaloMinimoSegundos === 1200,
+    String(padrao.intervaloMinimoSegundos),
+  );
+  ok(
+    "o intervalo é grande o bastante para as 15 do dia caberem nas 9h da janela sem rajada",
+    (padrao.intervaloMinimoSegundos * 1.5 * padrao.porDia) / 3600 <= 9,
+    String((padrao.intervaloMinimoSegundos * 1.5 * padrao.porDia) / 3600),
+  );
+  // A variável continua mandando — é ela que permite corrigir sem deploy.
+  process.env.OUTREACH_PER_DAY = "7";
+  ok("e a env continua tendo a palavra final", lerConfig().porDia === 7);
+  delete process.env.OUTREACH_PER_DAY;
+}
+
 secao("janela de horário");
 ok("14h passa", estado().pode);
 for (const [horaUTC, rotulo] of [
@@ -115,13 +154,86 @@ for (const [horaUTC, rotulo] of [
   ok(`${rotulo} → bloqueado`, estado({ agora: new Date(horaUTC) }).motivo === "fora_da_janela");
 }
 ok(
-  "09h SP (abertura) passa",
-  estado({ agora: new Date("2026-08-11T12:00:00.000Z") }).pode,
-);
-ok(
   "17h59 SP ainda passa",
   estado({ agora: new Date("2026-08-11T20:59:00.000Z") }).pode,
 );
+
+// ---------------------------------------------------------------------------
+// A LARGADA DO DIA (19/08/2026).
+//
+// Até aqui, 09h SP em ponto passava — e passava TODO dia útil, porque à
+// meia-noite o contador zera e o último envio já tem quinze horas, então o
+// intervalo mínimo também já venceu. O resultado era a primeira mensagem
+// saindo entre 09:00 e 09:01 todo santo dia. Número que começa a trabalhar no
+// mesmo minuto todos os dias não é operado por gente.
+// ---------------------------------------------------------------------------
+secao("largada do dia — a janela abre 9h, mas o primeiro envio é sorteado");
+{
+  const NOVE_EM_PONTO = new Date("2026-08-11T12:00:00.000Z");
+  const atraso = atrasoDaLargada("2026-08-11");
+
+  ok(
+    "o atraso de hoje cabe na faixa (0 a 45 minutos)",
+    atraso >= 0 && atraso <= LARGADA_MAXIMA_MINUTOS,
+    String(atraso),
+  );
+  ok(
+    "9h em ponto NÃO passa mais — a menos que o sorteio de hoje tenha dado zero",
+    atraso === 0
+      ? estado({ agora: NOVE_EM_PONTO }).pode
+      : estado({ agora: NOVE_EM_PONTO }).motivo === "largada_do_dia",
+    `${atraso} — ${JSON.stringify(estado({ agora: NOVE_EM_PONTO }))}`,
+  );
+  ok(
+    "passada a largada, libera",
+    estado({
+      agora: new Date(NOVE_EM_PONTO.getTime() + (atraso + 1) * 60 * 1000),
+    }).pode,
+  );
+  ok(
+    "e um minuto antes dela, ainda não",
+    atraso === 0 ||
+      estado({
+        agora: new Date(NOVE_EM_PONTO.getTime() + (atraso - 1) * 60 * 1000),
+      }).motivo === "largada_do_dia",
+  );
+
+  // O ponto inteiro da função: ESTÁVEL dentro do dia, DIFERENTE entre dias.
+  // Se variasse dentro do dia, o ciclo de 60 segundos acharia um sorteio baixo
+  // em poucos minutos e a mensagem sairia às 9h de qualquer jeito.
+  ok(
+    "o sorteio não muda dentro do mesmo dia",
+    atrasoDaLargada("2026-08-11") === atraso &&
+      atrasoDaLargada("2026-08-11") === atraso,
+  );
+  const trintaDias = Array.from({ length: 30 }, (_, i) =>
+    atrasoDaLargada(`2026-09-${String(i + 1).padStart(2, "0")}`),
+  );
+  ok(
+    "mas muda de um dia para o outro — em 30 dias, pelo menos 10 largadas diferentes",
+    new Set(trintaDias).size >= 10,
+    trintaDias.join(","),
+  );
+  ok(
+    "nenhuma delas estoura a faixa",
+    trintaDias.every((m) => m >= 0 && m <= LARGADA_MAXIMA_MINUTOS),
+    trintaDias.join(","),
+  );
+
+  // Fora da primeira hora ela não tem o que fazer — 14h passa como sempre.
+  ok("às 14h a largada já passou faz tempo", estado().pode);
+
+  // E ela vem DEPOIS da janela: 8h da manhã continua sendo "fora da janela",
+  // que é a frase que o dono precisa ler, não "a largada ainda não saiu".
+  ok(
+    "8h SP continua dizendo fora_da_janela, não largada_do_dia",
+    estado({ agora: new Date("2026-08-11T11:00:00.000Z") }).motivo === "fora_da_janela",
+  );
+  ok(
+    "e o painel tem o que dizer sobre ela",
+    EXPLICACAO_BLOQUEIO.largada_do_dia.includes("assinatura de robô"),
+  );
+}
 
 secao("fim de semana");
 ok(

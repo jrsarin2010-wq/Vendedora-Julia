@@ -34,7 +34,7 @@ import {
   registrarFalhaDeEnvio,
 } from "./restricao";
 import { gerarMensagemDeAbordagem } from "./outreach-message";
-import { ABORDAGEM_TOQUES, ABORDAGEM_DELAYS_HOURS } from "../julia-persona";
+import { ABORDAGEM_DELAYS_HOURS } from "../julia-persona";
 
 /** De quanto em quanto tempo o ciclo roda. */
 const INTERVALO_DO_CICLO_MS = 60 * 1000;
@@ -254,14 +254,20 @@ export async function rodarCicloDeAbordagem(
   // primeira resposta dele: o webhook cancela TODOS os follow-ups pendentes
   // antes de armar a leva de conversa, então quem responde troca de cadência
   // sem que ninguém precise saber que a de abordagem existia.
+  //
+  // SEM TEXTO (19/08/2026), como a fila de reativação: o toque nasce do modelo
+  // na hora do envio. Pré-renderizar aqui era o que produzia a frase idêntica
+  // para todo mundo — e, mesmo já gerando por modelo, escrever agora um texto
+  // que só sai daqui a três ou dez dias erraria a saudação do horário e não
+  // teria como não repetir a abertura, que ainda nem foi escrita quando esta
+  // linha roda.
   await db.insert(followUpsTable).values(
     ABORDAGEM_DELAYS_HOURS.map((horas, i) => ({
       leadId: lead.id,
       scheduledAt: new Date(agora.getTime() + horas * 60 * 60 * 1000),
       touchNumber: i + 1,
       kind: "abordagem" as const,
-      messageTemplate:
-        ABORDAGEM_TOQUES[(i + 1) as keyof typeof ABORDAGEM_TOQUES](lead.name),
+      messageTemplate: null,
       status: "pending" as const,
     })),
   );
@@ -296,10 +302,19 @@ export function startOutreachScheduler(): void {
     try {
       const r = await rodarCicloDeAbordagem();
       // Só registra o que é útil: "desligado" a cada minuto seria só ruído.
+      // `largada_do_dia` entra na lista pelo mesmo motivo do `intervalo_minimo`:
+      // é condição normal e esperada, e ela vale por até 45 ciclos seguidos toda
+      // manhã — 45 linhas diárias dizendo que o sistema está funcionando.
       if (
         !r.enviou &&
         r.motivo &&
-        !["desligado", "desligado_no_painel", "fila_vazia", "intervalo_minimo"].includes(r.motivo)
+        ![
+          "desligado",
+          "desligado_no_painel",
+          "fila_vazia",
+          "intervalo_minimo",
+          "largada_do_dia",
+        ].includes(r.motivo)
       ) {
         const explicacao =
           EXPLICACAO_BLOQUEIO[r.motivo as keyof typeof EXPLICACAO_BLOQUEIO] ?? r.motivo;

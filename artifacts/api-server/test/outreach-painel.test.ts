@@ -388,7 +388,12 @@ secao("status — com o intervalo mínimo correndo, a previsão vem em minutos")
 limpar();
 abordagemNoPainel(true);
 naFila();
-// Uma abordagem saiu 60s atrás; o mínimo é 180s, então faltam 2 minutos.
+// Uma abordagem saiu 60s atrás; o mínimo passou a ser 1200s em 19/08/2026
+// (o ritmo caiu de 40/8/180 para 15/2/1200), então faltam 19 minutos.
+//
+// O número está cravado de propósito, e não calculado a partir do config: é
+// esta linha que quebra no dia em que alguém mexer no ritmo sem perceber que a
+// tela do dono promete um horário para o próximo envio.
 state.leads.push({
   id: state.nextId++,
   phone: "5585911119999",
@@ -397,7 +402,7 @@ state.leads.push({
   outreachSentAt: new Date(TERCA_14H.getTime() - 60 * 1000),
 });
 s = (await montarStatusDaAbordagem(TERCA_14H)) as Status;
-ok("faltam 2 minutos", s.proximoEnvioEm === 2, String(s.proximoEnvioEm));
+ok("faltam 19 minutos", s.proximoEnvioEm === 19, String(s.proximoEnvioEm));
 
 secao("status — fila vazia não promete envio nenhum");
 limpar();

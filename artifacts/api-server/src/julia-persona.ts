@@ -1857,23 +1857,6 @@ function abrir(leadName: string | null, corpo: string): string {
 }
 
 /**
- * OS DOIS TOQUES DE QUEM NUNCA RESPONDEU À ABORDAGEM.
- *
- * Cadência própria, separada de FOLLOW_UP_TEMPLATES, porque aqueles textos
- * dizem "a gente começou a conversar" e "o que você me contou" — verdade para
- * quem conversou, mentira para quem só recebeu uma mensagem e ficou calado. É a
- * mesma classe de erro das Rodadas 30-32: afirmar sem base.
- *
- * Por que só DOIS: insistir com quem nunca respondeu não é persistência, é
- * spam. Da terceira mensagem sem resposta em diante o dentista denuncia o
- * número — e a denúncia derruba o número inteiro, levando junto todas as
- * conversas boas.
- *
- * Repare no que o toque 1 NÃO tem: link. Ele não deu licença para nada ainda.
- * E no que TEM: a saída fácil ("é só me dizer que eu não incomodo mais"). Não é
- * gentileza — é o que transforma uma denúncia em um opt-out.
- */
-/**
  * O AVISO DE ESPERA (Rodada 43) — a mensagem que sai quando a IA está
  * recusando e a última tentativa ainda vai acontecer.
  *
@@ -1893,19 +1876,163 @@ function abrir(leadName: string | null, corpo: string): string {
 export const AVISO_DE_ESPERA = (leadName: string | null): string =>
   abrir(leadName, `só um instante — já te respondo.`);
 
-export const ABORDAGEM_TOQUES = {
-  1: (leadName: string | null) =>
-    abrir(
-      leadName,
-      `passei por aqui de novo. Se não fizer sentido, é só me dizer que eu não incomodo mais. Mas se o WhatsApp da clínica for uma dor de cabeça aí, acho que vale dois minutos de conversa.`,
-    ),
+/**
+ * OS DOIS TOQUES DE QUEM NUNCA RESPONDEU À ABORDAGEM.
+ *
+ * Cadência própria, separada de FOLLOW_UP_TEMPLATES, porque aqueles textos
+ * dizem "a gente começou a conversar" e "o que você me contou" — verdade para
+ * quem conversou, mentira para quem só recebeu uma mensagem e ficou calado. É a
+ * mesma classe de erro das Rodadas 30-32: afirmar sem base.
+ *
+ * Por que só DOIS: insistir com quem nunca respondeu não é persistência, é
+ * spam. Da terceira mensagem sem resposta em diante o dentista denuncia o
+ * número — e a denúncia derruba o número inteiro, levando junto todas as
+ * conversas boas.
+ *
+ * ATÉ 19/08/2026 ESTES DOIS TEXTOS ERAM LITERAIS — duas frases fixas, iguais
+ * para todo dentista, com só o nome mudando, e a segunda ainda levava o
+ * endereço do site. Eram, disparado, o maior risco de detecção que sobrava
+ * depois de baixar o volume: reduzir a cota não muda em nada o fato de N
+ * números receberem a MESMA sentença, e é isso que um antifraude compara. E
+ * dentista compara também — eles se conhecem e mandam print um para o outro.
+ *
+ * Agora nascem do modelo, como a abertura, e pela mesma disciplina: o prompt
+ * descreve o COMPORTAMENTO, nunca a frase. Toda vez que uma frase pronta entrou
+ * num destes textos, ela saiu igual do outro lado.
+ *
+ * O LINK SAIU DOS DOIS. Ele já não estava no toque 1 (ele não deu licença para
+ * nada ainda); saiu também do toque 2 porque link em mensagem fria repetida é
+ * dos sinais de spam mais fortes que existem — e o dentista que quiser achar o
+ * CaptaClin acha pelo nome.
+ *
+ * O que NÃO mudou: a saída fácil do toque 1. Não é gentileza — é o que
+ * transforma uma denúncia em um opt-out.
+ */
+export const JULIA_TOQUE_PROMPT = `Você é a Júlia, do CaptaClin. Vai mandar mais uma mensagem para um dentista que você já procurou e que NUNCA respondeu.
 
-  2: (leadName: string | null) =>
-    abrir(
-      leadName,
-      `essa é minha última mensagem, prometo. Deixo o endereço aqui caso um dia faça sentido: https://www.captaclin.com.br — sucesso com a clínica!`,
-    ),
-};
+Silêncio não é hostilidade, mas também não é permissão. Quem insiste com quem não respondeu não parece persistente: parece robô — e da terceira mensagem sem resposta em diante o dentista denuncia o número, o que derruba o número inteiro e leva junto todas as conversas boas.
+
+A ficha diz QUAL toque é este. Só existem dois, e eles têm objetivos diferentes:
+
+TOQUE 1 — o único que ainda tenta.
+- Reconheça, sem cobrar, que já escreveu antes e não teve retorno. Sem culpa, sem "não sei se você viu", sem ironia.
+- Dê a SAÍDA FÁCIL, e ela é a parte mais importante da mensagem: deixe explícito que basta ele dizer que não quer, e você não procura mais. É isso que transforma uma denúncia em um "não, obrigado" — quem tem uma porta de saída usa a porta.
+- Reapresente, em MEIA LINHA, o que você resolve: a clínica não perder o paciente que chama no WhatsApp. Sem nome de recurso, sem lista.
+- UMA pergunta fácil, ou nenhuma. Duas perguntas não existem aqui.
+
+TOQUE 2 — a despedida. Este NÃO tenta mais nada.
+- Diga que esta é a última vez que você procura. É uma promessa, e ela vai ser cumprida: depois desta o sistema nunca mais manda nada para ele.
+- Deixe a porta aberta pelo lado dele — se um dia fizer sentido, ele que procure. Sem pedir resposta, sem "me avisa", sem pergunta nenhuma.
+- Deseje bem à clínica e saia. Uma despedida boa é curta.
+
+O QUE NÃO ENTRA EM NENHUM DOS DOIS:
+- LINK. Nenhum, nem o do site, nem em nenhum dos dois toques. Ele não pediu, e link em mensagem repetida para quem nunca respondeu é o que faz o WhatsApp tratar o número como spam
+- Preço, plano, trial, garantia, nome de funcionalidade
+- Qualquer número NOSSO — resultado, caso de sucesso, quantas clínicas usam
+- Urgência, escassez, promoção, "última chance", "vagas limitadas"
+- Cobrança pelo silêncio: "não obtive retorno", "estou aguardando", "acho que você não viu"
+- Afirmar QUALQUER coisa que ele nunca disse. Ele não contou nenhuma dor, não teve nenhuma conversa com você, não pediu nada — e é falando de um passado que não existe que estas mensagens costumam mentir
+- Mais de uma pergunta. No toque 2, nenhuma
+
+O QUE ENTRA NOS DOIS:
+1. A SAUDAÇÃO DO HORÁRIO abre a mensagem. A ficha diz que horas são na clínica agora: de manhã é bom dia, de tarde é boa tarde, de noite é boa noite.
+2. O TRATAMENTO que a ficha já resolveu (Dr., Dra. ou só o primeiro nome). Sem nome na ficha, sem tratamento nenhum — você fala com a clínica.
+
+TAMANHO: duas linhas curtas, e o toque 2 pode ser uma só. Um emoji no máximo, e nenhum é uma resposta legítima. Zero markdown.
+
+VOCÊ JÁ ESCREVEU PARA ELE, e a ficha traz o que você mandou. Leia antes de escrever: a mensagem nova não pode repetir as palavras da anterior. Repetir a própria frase é a prova de que do outro lado não tem ninguém lendo nada — e é o erro que o dentista percebe primeiro, porque as duas mensagens estão uma embaixo da outra na tela dele.
+
+AQUI NÃO EXISTE EXEMPLO PARA COPIAR, e isso é de propósito. Estes dois toques foram texto FIXO até 19/08/2026, e é por isso que eles estão sendo reescritos: a mesma sentença saiu para dezenas de dentistas, e eles comparam print em grupo de WhatsApp. Você tem o objetivo do toque e as partes. A frase é sua, e nasce nova a cada dentista.
+
+Se a mensagem que você acabou de escrever pudesse ser mandada, igualzinha, para a clínica anterior, ela está errada.
+
+Responda SOMENTE com o texto da mensagem, sem aspas e sem nenhum comentário.`;
+
+/**
+ * A ficha do toque. Enxuta de propósito, e diferente da ficha da abertura em
+ * duas coisas que importam.
+ *
+ * NÃO traz a origem do contato: ela já foi dita na abertura, e repeti-la é
+ * justamente a repetição que este arquivo passou a existir para evitar.
+ *
+ * TRAZ o que já mandamos. É o único jeito de "não repita a frase anterior" ser
+ * uma instrução cumprível — sem o texto à vista, o modelo só pode adivinhar o
+ * que já disse, e adivinhar errado é reescrever a mesma coisa. Mesma disciplina
+ * do resto: a ficha declara o FATO, a frase é do modelo.
+ */
+export function buildToqueBriefing(params: {
+  toque: 1 | 2;
+  name: string | null;
+  clinicName: string | null;
+  city: string | null;
+  /** Dias corridos desde a primeira mensagem. Só para ele saber que faz tempo. */
+  diasDesdeAAbordagem: number | null;
+  /** O que a Júlia já mandou para este dentista, da mais antiga para a mais nova. */
+  jaEnviadas: string[];
+  /** O instante do envio — a saudação é a do relógio da clínica. */
+  agora: Date;
+}): string {
+  const linhas: string[] = [];
+
+  const momento = momentoEmSaoPaulo(params.agora);
+  const periodo = periodoDoDia(momento.hora);
+  linhas.push(
+    `- Que horas são na clínica agora: ${momento.hora}h — é ${
+      periodo === "manha" ? "de manhã" : periodo === "tarde" ? "de tarde" : "de noite"
+    }.`,
+  );
+
+  linhas.push(
+    params.toque === 1
+      ? `- Este é o TOQUE 1: a segunda vez que você procura. Ainda tenta uma resposta, e oferece a saída fácil.`
+      : `- Este é o TOQUE 2: a ÚLTIMA mensagem. Não tenta mais nada, se despede e sai. Depois dela o sistema nunca mais procura este dentista.`,
+  );
+
+  if (params.diasDesdeAAbordagem !== null) {
+    linhas.push(
+      `- Faz ${params.diasDesdeAAbordagem} dia(s) que você mandou a primeira mensagem, e ele não respondeu nenhuma.`,
+    );
+  }
+
+  if (params.name) {
+    const primeiro = params.name.trim().split(/\s+/)[0];
+    const capitalizado = primeiro.charAt(0).toUpperCase() + primeiro.slice(1);
+    let comoTratar: string;
+    switch (detectarTratamento(params.name)) {
+      case "dr":
+        comoTratar = `Dr. ${capitalizado}`;
+        break;
+      case "dra":
+        comoTratar = `Dra. ${capitalizado}`;
+        break;
+      default:
+        comoTratar = `${capitalizado} — nome ambíguo, use só o primeiro nome, sem Dr./Dra.`;
+    }
+    linhas.push(`- Nome: ${params.name}  (trate como: ${comoTratar})`);
+  } else {
+    linhas.push(
+      `- Nome: não sei. Fale com a clínica, sem inventar nome e sem "Dr(a)."`,
+    );
+  }
+
+  linhas.push(
+    params.clinicName
+      ? `- Clínica: ${params.clinicName}`
+      : `- Clínica: não sei o nome`,
+  );
+  if (params.city) linhas.push(`- Cidade: ${params.city}`);
+
+  if (params.jaEnviadas.length > 0) {
+    linhas.push(
+      `- O QUE VOCÊ JÁ MANDOU PARA ELE (da mais antiga para a mais nova). Está na tela dele, logo acima do que você vai escrever agora — não repita estas palavras:`,
+    );
+    for (const texto of params.jaEnviadas) {
+      linhas.push(`  · ${texto}`);
+    }
+  }
+
+  return linhas.join("\n");
+}
 
 /**
  * Horas contadas a partir da ABORDAGEM: o primeiro toque 3 dias depois, o

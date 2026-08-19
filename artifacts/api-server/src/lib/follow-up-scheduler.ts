@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { followUpsTable, leadsTable, leadMessagesTable } from "@workspace/db";
-import { eq, lte, and, desc } from "drizzle-orm";
+import { eq, lte, and, asc, desc } from "drizzle-orm";
 import { enviarWhatsAppComDiagnostico } from "./integrations";
 import { logger } from "./logger";
 import { saudacao } from "./tratamento";
@@ -15,6 +15,7 @@ import {
   contarEnvios,
   foraDoHorarioDeConversa,
   momentoEmSaoPaulo,
+  sortearIntervalo,
   EXPLICACAO_BLOQUEIO,
 } from "./outreach";
 import { datasDeEnviosFrios } from "./ritmo-frio";
@@ -28,11 +29,11 @@ import {
   registrarFalhaDeEnvio,
 } from "./restricao";
 import {
-  ABORDAGEM_TOQUES,
   ABORDAGEM_DELAYS_HOURS,
   TOQUES_REATIVACAO,
   REATIVACAO_DELAYS_DIAS,
 } from "../julia-persona";
+import { gerarMensagemDeToque } from "./outreach-message";
 import {
   LIMITE_REATIVACOES_POR_DIA,
   EXPLICACAO_FORA,
@@ -80,9 +81,14 @@ interface RitmoFrio {
  * Os contadores vão CHEIOS (Rodada 51): o toque bebe do mesmo balde de
  * OUTREACH_PER_HOUR/PER_DAY que as aberturas — antes ele saía por fora da
  * cota, e um dia de pico somava as aberturas MAIS os toques vencidos, o dobro
- * do volume calibrado. O intervalo mínimo vai CRAVADO, sem sorteio: o ciclo de
- * 5 minutos já espaça mais que o dobro do mínimo, então o sorteio não mudaria
- * o comportamento — só tornaria a decisão irreproduzível num teste.
+ * do volume calibrado.
+ *
+ * O intervalo mínimo agora vai SORTEADO, como na abordagem (19/08/2026). Ia
+ * cravado, e a justificativa escrita aqui era que o ciclo de 5 minutos já
+ * espaçava mais que o dobro do mínimo — verdade com 180s, falsa desde que o
+ * mínimo virou 1200s. Cravado, o toque frio passaria a sair no primeiro tique
+ * de 5 minutos depois dos 20 exatos: um grid, que é a regularidade que o
+ * sorteio existe para desfazer.
  */
 function toqueFrioPodeSair(
   agora: Date,
@@ -96,7 +102,7 @@ function toqueFrioPodeSair(
     enviadosNaUltimaHora: ritmo.naUltimaHora,
     enviadosHoje: ritmo.hoje,
     ultimoEnvio: ritmo.ultimo,
-    intervaloExigidoSegundos: config.intervaloMinimoSegundos,
+    intervaloExigidoSegundos: sortearIntervalo(config.intervaloMinimoSegundos),
   });
   if (!decisao.pode) return { pode: false, motivo: decisao.motivo };
   // Depois da env, como nos outros dois agendadores.
@@ -407,6 +413,7 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       // liberada — mesmo tratamento da pausa humana logo acima, e pelo mesmo
       // motivo (perder o toque é pior que atrasá-lo).
       const ehAbordagem = followUp.kind === "abordagem";
+      let mensagemDeToqueFrio: string | null = null;
       if (ehAbordagem) {
         if (toquesFriosNesteCiclo >= TOQUES_FRIOS_POR_CICLO) continue;
 
@@ -425,24 +432,88 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
           );
           continue;
         }
+
+        // O TEXTO NASCE AQUI (19/08/2026), como o da reativação. Até então os
+        // dois toques eram frase fixa, igual para todo dentista, e a segunda
+        // ainda levava o link do site — o maior sinal de robô que sobrava
+        // depois de baixar o volume. O porquê inteiro está em
+        // `JULIA_TOQUE_PROMPT` (julia-persona.ts).
+        //
+        // O modelo precisa ver O QUE JÁ MANDAMOS, senão "não repita a frase
+        // anterior" é uma instrução que ninguém tem como cumprir. São no
+        // máximo duas mensagens (a abertura e o toque 1), porque quem chega
+        // aqui nunca respondeu nada.
+        const jaEnviadas = (
+          await db
+            .select()
+            .from(leadMessagesTable)
+            .where(eq(leadMessagesTable.leadId, lead.id))
+            .orderBy(asc(leadMessagesTable.createdAt))
+        )
+          .filter((m) => m.direction === "outbound")
+          .map((m) => m.content);
+
+        const dias = lead.outreachSentAt
+          ? Math.max(
+              0,
+              Math.round(
+                (now.getTime() - new Date(lead.outreachSentAt).getTime()) /
+                  (24 * 60 * 60 * 1000),
+              ),
+            )
+          : null;
+
+        try {
+          mensagemDeToqueFrio = await gerarMensagemDeToque(
+            lead,
+            followUp.touchNumber >= 2 ? 2 : 1,
+            jaEnviadas,
+            dias,
+            now,
+          );
+        } catch (err) {
+          logger.error(
+            { err, leadId: lead.id, touchNumber: followUp.touchNumber },
+            "Falha ao gerar o toque de abordagem — segue pendente",
+          );
+          continue;
+        }
+
+        // Falhou de gerar: o toque fica PENDING e a próxima rodada (5 min)
+        // tenta de novo, mesmo tratamento de todo o resto deste laço. Não
+        // existe texto de reserva de propósito — um fallback fixo aqui seria a
+        // porta dos fundos por onde a frase idêntica voltaria, e ela voltaria
+        // justamente no dia em que a OpenAI estivesse instável, ou seja, para
+        // vários leads de uma vez.
+        //
+        // E NÃO conta contra o lead: erro nosso não gasta a chance dele.
+        if (!mensagemDeToqueFrio) {
+          logger.error(
+            { leadId: lead.id, touchNumber: followUp.touchNumber },
+            "Toque de abordagem veio vazio do modelo — segue pendente",
+          );
+          continue;
+        }
       }
 
-      // Rede de segurança: só cai aqui se o follow-up foi criado sem template.
-      // Tom igual ao dos templates: curto, usa o mesmo saudacao() dos demais
-      // (Dr./Dra. conforme o nome, ou só o nome quando ambíguo) e não promete
-      // nada — só abre a porta e deixa o link.
+      // Rede de segurança: só cai aqui se um follow-up de CONVERSA foi criado
+      // sem template. Tom igual ao dos templates: curto, usa o mesmo saudacao()
+      // dos demais (Dr./Dra. conforme o nome, ou só o nome quando ambíguo) e
+      // não promete nada — só abre a porta e deixa o link.
       //
-      // O padrão MUDA conforme a cadência, e não é detalhe: o texto de conversa
-      // diz "ainda te incomoda", que pressupõe que ele contou que incomoda.
-      // Para quem nunca respondeu isso é falso, e é justamente o erro que a
-      // cadência de abordagem existe para corrigir — a rede de segurança não
-      // pode ser a porta dos fundos por onde ele volta.
+      // O texto diz "ainda te incomoda", que pressupõe que ele contou que
+      // incomoda — verdade só para quem conversou. Para a abordagem esta rede
+      // não existe mais: o toque frio ou nasce do modelo, ou não sai.
+      //
+      // Repare na ordem: o toque de abordagem vem ANTES do `messageTemplate`,
+      // e é de propósito. As linhas gravadas antes de 19/08/2026 ainda carregam
+      // a frase fixa antiga no banco — respeitá-la faria os toques já agendados
+      // saírem com o texto idêntico que esta mudança existe para eliminar.
       const message =
         mensagemDeReativacao ??
+        mensagemDeToqueFrio ??
         followUp.messageTemplate ??
-        (ehAbordagem
-          ? ABORDAGEM_TOQUES[followUp.touchNumber >= 2 ? 2 : 1](lead.name)
-          : `${saudacao(lead.name)}aqui é a Júlia do CaptaClin 😊 Passando pra saber se o WhatsApp da sua clínica ainda te incomoda. Se quiser dar uma olhada por conta: https://www.captaclin.com.br`);
+        `${saudacao(lead.name)}aqui é a Júlia do CaptaClin 😊 Passando pra saber se o WhatsApp da sua clínica ainda te incomoda. Se quiser dar uma olhada por conta: https://www.captaclin.com.br`;
 
       const envio = await enviarWhatsAppComDiagnostico(lead.phone, message);
 

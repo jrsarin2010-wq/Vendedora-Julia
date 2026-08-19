@@ -30,6 +30,35 @@ function numeroDoAmbiente(chave: string, padrao: number): number {
 }
 
 /**
+ * O RITMO PADRÃO — 15 por dia, 2 por hora, 20 minutos de intervalo mínimo.
+ *
+ * Era 40/8/180 até 19/08/2026. A decisão de reduzir é do dono, e o motivo é o
+ * do cabeçalho deste arquivo: o Evolution é ferramenta não oficial, e a API
+ * oficial da Meta está descartada — então o único jeito de baixar o risco de
+ * banimento é mandar menos e mandar irregular.
+ *
+ * Por que os três números mudam JUNTOS, e não só a cota: com 2 por hora e o
+ * intervalo velho de 180s, as duas mensagens da hora sairiam coladas (3 a 6
+ * minutos entre si) e depois viriam 54 minutos de silêncio. Isso é a rajada
+ * seguida de silêncio que o cabeçalho do agendador diz estar evitando — trocar
+ * um padrão detectável por outro não é reduzir risco.
+ *
+ * 1200s de mínimo dá um sorteio real de 20 a 40 minutos (média 30), que
+ * espalha as 15 mensagens pelas 9 horas da janela sem buraco nenhum. Nesse
+ * ritmo o teto por hora vira ~3 naturalmente, e o `porHora` de 2 fica como
+ * cinto de segurança — não como o que dita a cadência.
+ *
+ * Estes são os DEFAULTS do código, não a configuração viva: as três variáveis
+ * de ambiente continuam mandando, e mudá-las no Railway pega no ciclo seguinte
+ * (≤60s) sem deploy. O default existe para o ambiente que sobe sem elas — e é
+ * por isso que ele tem que dizer a verdade do que foi decidido, senão o próximo
+ * serviço novo nasce mandando 40 por dia sem ninguém ter pedido.
+ */
+const PADRAO_POR_HORA = 2;
+const PADRAO_POR_DIA = 15;
+const PADRAO_INTERVALO_MINIMO_SEGUNDOS = 1200;
+
+/**
  * Lê a configuração do ambiente A CADA chamada, e não uma vez no carregamento
  * do módulo. Assim o valor efetivo é sempre o que está no ambiente agora, e o
  * teste consegue ligar e desligar a trava sem recarregar nada.
@@ -41,18 +70,28 @@ function numeroDoAmbiente(chave: string, padrao: number): number {
 export function lerConfig(): ConfigOutreach {
   return {
     habilitado: (process.env.OUTREACH_ENABLED ?? "false").trim().toLowerCase() === "true",
-    porHora: numeroDoAmbiente("OUTREACH_PER_HOUR", 8),
-    porDia: numeroDoAmbiente("OUTREACH_PER_DAY", 40),
+    porHora: numeroDoAmbiente("OUTREACH_PER_HOUR", PADRAO_POR_HORA),
+    porDia: numeroDoAmbiente("OUTREACH_PER_DAY", PADRAO_POR_DIA),
     horaInicio: numeroDoAmbiente("OUTREACH_START_HOUR", 9),
     horaFim: numeroDoAmbiente("OUTREACH_END_HOUR", 18),
     soDiasUteis: (process.env.OUTREACH_WEEKDAYS_ONLY ?? "true").trim().toLowerCase() !== "false",
-    intervaloMinimoSegundos: numeroDoAmbiente("OUTREACH_MIN_GAP_SECONDS", 180),
+    intervaloMinimoSegundos: numeroDoAmbiente(
+      "OUTREACH_MIN_GAP_SECONDS",
+      PADRAO_INTERVALO_MINIMO_SEGUNDOS,
+    ),
   };
 }
 
 export interface MomentoSP {
   /** Hora do dia (0-23) no fuso de São Paulo. */
   hora: number;
+  /**
+   * Minuto da hora (0-59) no fuso de São Paulo.
+   *
+   * Só a largada do dia precisa dele (ver `atrasoDaLargada`): todas as outras
+   * travas raciocinam em horas cheias.
+   */
+  minuto: number;
   /** Data no formato AAAA-MM-DD, no fuso de São Paulo. */
   dia: string;
   /** true de segunda a sexta. */
@@ -73,6 +112,7 @@ export function momentoEmSaoPaulo(instante: Date): MomentoSP {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
+    minute: "2-digit",
     weekday: "short",
   }).formatToParts(instante);
 
@@ -85,6 +125,7 @@ export function momentoEmSaoPaulo(instante: Date): MomentoSP {
 
   return {
     hora,
+    minuto: Number(pegar("minute")) % 60,
     dia: `${pegar("year")}-${pegar("month")}-${pegar("day")}`,
     diaUtil: !["Sat", "Sun"].includes(diaSemana),
   };
@@ -118,6 +159,7 @@ export type MotivoBloqueio =
   | "desligado_no_painel"
   | "fim_de_semana"
   | "fora_da_janela"
+  | "largada_do_dia"
   | "limite_hora"
   | "limite_dia"
   | "intervalo_minimo";
@@ -134,6 +176,8 @@ export const EXPLICACAO_BLOQUEIO: Record<MotivoBloqueio, string> = {
     "A abordagem está pausada no painel — ninguém novo é abordado. Conversas em andamento seguem normais.",
   fim_de_semana: "Fim de semana: a Júlia não aborda ninguém.",
   fora_da_janela: "Fora do horário comercial configurado.",
+  largada_do_dia:
+    "A janela já abriu, mas a largada de hoje foi sorteada para alguns minutos depois — começar 9h em ponto todo dia é assinatura de robô.",
   limite_hora: "Limite de mensagens desta hora já foi atingido.",
   limite_dia: "Limite de mensagens de hoje já foi atingido.",
   intervalo_minimo: "Ainda não passou o intervalo mínimo desde a última mensagem.",
@@ -209,6 +253,60 @@ export function janelaFechada(
 }
 
 /**
+ * O ATRASO MÁXIMO DA LARGADA, em minutos. 45 sobre uma janela de 9 horas: o
+ * bastante para o horário de início mudar de dia para dia, longe o bastante de
+ * comer a janela.
+ */
+export const LARGADA_MAXIMA_MINUTOS = 45;
+
+/**
+ * Espalha os caracteres de um texto num inteiro sem sinal (FNV-1a). Não é
+ * criptografia: é só o que transforma "2026-08-19" num número que não tem
+ * relação óbvia com "2026-08-20".
+ */
+function embaralhar(texto: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < texto.length; i++) {
+    h ^= texto.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * QUANTOS MINUTOS DEPOIS DA ABERTURA A PRIMEIRA MENSAGEM DO DIA PODE SAIR.
+ *
+ * O defeito que isto conserta: à meia-noite o contador do dia zera e o último
+ * envio já tem umas quinze horas, então o intervalo mínimo também já venceu.
+ * Resultado — a primeira mensagem saía no primeiro ciclo depois das 9h, todo
+ * dia útil, entre 09:00 e 09:01. Um número que começa a trabalhar no mesmo
+ * minuto todo santo dia é um número que não é operado por gente.
+ *
+ * SORTEADO PELO DIA, e não por `Math.random()`. É o ponto inteiro da função, e
+ * um `Math.random()` aqui não só seria pior — seria inútil: o ciclo roda a cada
+ * 60 segundos, então em poucos minutos algum sorteio sairia baixo e a mensagem
+ * iria embora de qualquer jeito. Só um valor ESTÁVEL dentro do dia atrasa a
+ * largada de verdade.
+ *
+ * E derivado do DIA, não guardado em memória, para sobreviver a restart: um
+ * deploy às 9h05 não pode redesenhar a largada e liberar o envio que o sorteio
+ * de hoje tinha adiado — mesmo motivo pelo qual as cotas se contam no banco.
+ */
+export function atrasoDaLargada(dia: string): number {
+  return embaralhar(dia) % (LARGADA_MAXIMA_MINUTOS + 1);
+}
+
+/**
+ * Já passou a largada sorteada de hoje? Recebe o momento já traduzido para São
+ * Paulo, e só faz sentido com a janela aberta — quem chama garante isso.
+ */
+function antesDaLargada(config: ConfigOutreach, momento: MomentoSP): boolean {
+  const minutosDesdeAAbertura =
+    (momento.hora - config.horaInicio) * 60 + momento.minuto;
+  return minutosDesdeAAbertura < atrasoDaLargada(momento.dia);
+}
+
+/**
  * Decide se uma mensagem de abordagem pode sair NESTE instante.
  *
  * A ordem das checagens importa para o diagnóstico: a primeira coisa
@@ -226,6 +324,23 @@ export function podeDispararAgora(estado: EstadoDeRitmo): Decisao {
 
   const fechada = janelaFechada(config, estado.agora);
   if (fechada) return { pode: false, motivo: fechada };
+
+  // A LARGADA DO DIA vem logo depois da janela, e SEPARADA dela de propósito.
+  //
+  // Podia ter entrado no `janelaFechada`, e seria menos código. Mas aquela
+  // função também responde ao painel (`dentroDaJanela`), e às 9h10 a tela
+  // passaria a dizer "fora do horário comercial" logo abaixo de "janela
+  // 9h–18h" — uma contradição na mesma caixa. Aqui o painel continua dizendo a
+  // verdade sobre a janela, e o bloqueio ganha a frase que explica o que está
+  // de fato acontecendo.
+  //
+  // Fica fora do `foraDoHorarioDeConversa` pelo mesmo motivo das outras travas
+  // frias: quem já respondeu não é volume frio, e adiar o toque dele por causa
+  // de um sorteio de largada seria proteger o número às custas de uma conversa
+  // viva.
+  if (antesDaLargada(config, momentoEmSaoPaulo(estado.agora))) {
+    return { pode: false, motivo: "largada_do_dia" };
+  }
 
   if (estado.enviadosNaUltimaHora >= config.porHora) {
     return { pode: false, motivo: "limite_hora" };
@@ -246,7 +361,12 @@ export function podeDispararAgora(estado: EstadoDeRitmo): Decisao {
 /**
  * Sorteia o intervalo exigido entre duas mensagens: entre o mínimo e o dobro
  * dele. Cadência exata é assinatura de robô — se sair uma mensagem a cada
- * 180 segundos cravados, qualquer antifraude do WhatsApp enxerga isso.
+ * 1200 segundos cravados, qualquer antifraude do WhatsApp enxerga isso.
+ *
+ * Vale para os DOIS agendadores desde 19/08/2026. O de follow-up usava o
+ * mínimo cravado, com a justificativa de que o ciclo de 5 minutos já espaçava
+ * mais que o dobro do mínimo — verdade quando o mínimo era 180s, mentira desde
+ * que ele virou 1200s.
  */
 export function sortearIntervalo(minimoSegundos: number): number {
   return minimoSegundos + Math.random() * minimoSegundos;

@@ -19,9 +19,9 @@ import { ctrl } from "./stubs/openai.mjs";
 import { rodarCicloDeAbordagem } from "../src/lib/outreach-scheduler";
 import { rodarCicloDeFollowUp } from "../src/lib/follow-up-scheduler";
 import {
-  ABORDAGEM_TOQUES,
   ABORDAGEM_DELAYS_HOURS,
   FOLLOW_UP_TEMPLATES,
+  JULIA_TOQUE_PROMPT,
 } from "../src/julia-persona";
 import { leadElegivel, EXPLICACAO_INELEGIVEL } from "../src/lib/outreach";
 import { abordagemNoPainel } from "./painel";
@@ -32,6 +32,20 @@ const HORA = 60 * 60 * 1000;
 const depois = (horas: number) => new Date(TERCA_14H.getTime() + horas * HORA);
 
 const NUMERO = "5585999997777";
+
+/**
+ * QUANTO O TESTE PRECISA AVANÇAR para que a próxima mensagem fria possa sair.
+ *
+ * 41 minutos, e o número é escolhido: o intervalo mínimo virou 1200s em
+ * 19/08/2026 e é SORTEADO entre o mínimo e o dobro dele, então o maior valor
+ * que o sorteio pode exigir é 40 minutos. Avançar 41 passa sempre, por qualquer
+ * sorteio — e é isso que mantém este arquivo determinístico sem precisar
+ * cravar o intervalo nem congelar o `Math.random`.
+ *
+ * Se o dia chegar em que os 41 minutos não bastem, não é este número que está
+ * errado: é o `OUTREACH_MIN_GAP_SECONDS` que subiu, e a conta é 2× ele + 1min.
+ */
+const PASSO_DO_RITMO = 41 * 60 * 1000;
 
 const toques = () => state.followUps.filter((f: any) => f.kind === "abordagem");
 const pendentes = () => state.followUps.filter((f: any) => f.status === "pending");
@@ -87,43 +101,34 @@ const AFIRMACOES_SEM_BASE = [
   "voltando ao que",
 ];
 
-for (const t of [1, 2] as const) {
-  const texto = ABORDAGEM_TOQUES[t]("Marina");
-  const achadas = AFIRMACOES_SEM_BASE.filter((f) =>
-    texto.toLowerCase().includes(f.toLowerCase()),
-  );
-  ok(`toque ${t}: não afirma nada sobre um passado que não existe`, achadas.length === 0, achadas.join(" | "));
-  ok(`toque ${t}: sem nome, ainda assim começa em maiúscula`, /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(ABORDAGEM_TOQUES[t](null)), ABORDAGEM_TOQUES[t](null));
-  ok(`toque ${t}: com nome, trata como Dra. Marina`, texto.startsWith("Dra. Marina, "), texto);
-}
-
+/**
+ * 19/08/2026 — os dois toques deixaram de ser texto fixo.
+ *
+ * Eram duas sentenças literais, idênticas para todo dentista (só o nome
+ * mudava), e a segunda ainda carregava o link do site. Depois que o dono baixou
+ * o ritmo de 40 para 15 por dia, isto virou o maior sinal de robô que sobrava:
+ * cota não muda em nada o fato de N números receberem a MESMA frase.
+ *
+ * O que este arquivo pode testar mudou junto. A lista `AFIRMACOES_SEM_BASE`
+ * media uma string que existia; agora o texto nasce do modelo e não existe até
+ * a hora do envio. As asserções de CONTEÚDO mudaram de endereço — estão em
+ * julia-persona.test.ts, medindo o `JULIA_TOQUE_PROMPT`, que é onde a regra
+ * passou a morar. Aqui ficou o que só este arquivo consegue provar: a FIAÇÃO —
+ * que o toque nasce sem texto, que o texto é pedido na hora do envio, e que o
+ * prompt usado é o dos toques e não outro.
+ */
 ok(
-  "a dor não tem por onde entrar: o toque só recebe o nome",
-  ABORDAGEM_TOQUES[1].length === 1 && ABORDAGEM_TOQUES[2].length === 1,
-);
-ok(
-  "e a cadência de conversa continua sendo a que afirma a conversa (é por isso que são duas)",
+  "a cadência de conversa continua sendo a que afirma a conversa (é por isso que são duas)",
   FOLLOW_UP_TEMPLATES[1]("Marina", null).includes("começou a conversar"),
 );
-
-secao("o desenho dos dois toques");
 ok(
-  "toque 1 dá a saída fácil (é o que vira opt-out em vez de denúncia)",
-  ABORDAGEM_TOQUES[1]("Marina").includes("é só me dizer que eu não incomodo mais"),
+  "e as frases que ela pode dizer seguem proibidas no prompt do toque frio",
+  AFIRMACOES_SEM_BASE.every((f) => !JULIA_TOQUE_PROMPT.toLowerCase().includes(f.toLowerCase())),
 );
 ok(
-  "toque 1 NÃO manda link — ele ainda não deu licença para nada",
-  !ABORDAGEM_TOQUES[1]("Marina").includes("captaclin.com.br"),
+  "o prompt do toque não tem link nenhum dentro dele (nem para o modelo copiar)",
+  !/captaclin\.com\.br/.test(JULIA_TOQUE_PROMPT),
 );
-ok(
-  "toque 2 se anuncia como a última",
-  ABORDAGEM_TOQUES[2]("Marina").includes("última mensagem"),
-);
-ok(
-  "toque 2 deixa o endereço e sai",
-  ABORDAGEM_TOQUES[2]("Marina").includes("https://www.captaclin.com.br"),
-);
-ok("nenhum dos dois vende preço ou plano", ![1, 2].some((t) => /R\$|plano|trial|garantia/i.test(ABORDAGEM_TOQUES[t as 1 | 2]("Marina"))));
 
 secao("são DOIS toques, e o segundo é sete dias depois do primeiro");
 ok("a cadência tem exatamente dois", ABORDAGEM_DELAYS_HOURS.length === 2, JSON.stringify(ABORDAGEM_DELAYS_HOURS));
@@ -151,12 +156,11 @@ ok(
     toques()[1].scheduledAt.getTime() === depois(240).getTime(),
   toques().map((f: any) => f.scheduledAt.toISOString()).join(" | "),
 );
-{
-  const achadas = toques().flatMap((f: any) =>
-    AFIRMACOES_SEM_BASE.filter((frase) => f.messageTemplate.toLowerCase().includes(frase.toLowerCase())),
-  );
-  ok("e o texto gravado neles não afirma nada sem base", achadas.length === 0, achadas.join(" | "));
-}
+ok(
+  "e NENHUM nasce com texto gravado — pré-renderizar é o que produzia a frase idêntica para todo mundo",
+  toques().every((f: any) => f.messageTemplate === null),
+  JSON.stringify(toques().map((f: any) => f.messageTemplate)),
+);
 
 secao("a abordagem que NÃO saiu não arma cadência nenhuma");
 filaCom();
@@ -176,23 +180,50 @@ await rodarCicloDeFollowUp(depois(71));
 ok("71h depois, nada saiu ainda", wa.enviadas.length === enviadasNaAbordagem);
 ok("os dois seguem pendentes", pendentes().length === 2);
 
-// Toque 1.
+// A ABERTURA que acabou de sair — é ela que o toque não pode repetir, e é por
+// isso que o teste guarda o texto.
+const ABERTURA = wa.enviadas[wa.enviadas.length - 1].message;
+
+// Toque 1. O texto vem do modelo AGORA, e o stub devolve o que o teste mandar:
+// um sentinela diferente da abertura é o que prova que houve geração nova, e
+// não a frase fixa de antes nem o texto gravado na fila.
+ctrl.reply = "TOQUE 1 GERADO AGORA";
 await rodarCicloDeFollowUp(depois(72));
 ok(
-  "72h depois sai o toque 1",
-  wa.enviadas[wa.enviadas.length - 1].message === ABORDAGEM_TOQUES[1]("Marina"),
+  "72h depois sai o toque 1, com o texto gerado na hora",
+  wa.enviadas[wa.enviadas.length - 1].message === "TOQUE 1 GERADO AGORA",
   wa.enviadas[wa.enviadas.length - 1].message,
 );
+{
+  const [sistema, ficha] = ctrl.mensagens[ctrl.mensagens.length - 1];
+  ok("e foi o prompt DOS TOQUES que governou (não o da abertura)", sistema.content === JULIA_TOQUE_PROMPT);
+  ok("a ficha diz que é o toque 1", ficha.content.includes("TOQUE 1"), ficha.content);
+  ok(
+    "e mostra a abertura que já foi mandada — sem isso 'não repita' é incumprível",
+    ficha.content.includes(ABERTURA),
+    ficha.content,
+  );
+}
 ok("só o toque 1 (o 2 ainda não venceu)", pendentes().length === 1);
 ok("o lead continua 'sent' — ainda pode responder", state.leads[0].outreachStatus === "sent");
 
 // Toque 2.
+ctrl.reply = "TOQUE 2 GERADO AGORA";
 await rodarCicloDeFollowUp(depois(240));
 ok(
   "10 dias depois sai o toque 2",
-  wa.enviadas[wa.enviadas.length - 1].message === ABORDAGEM_TOQUES[2]("Marina"),
+  wa.enviadas[wa.enviadas.length - 1].message === "TOQUE 2 GERADO AGORA",
   wa.enviadas[wa.enviadas.length - 1].message,
 );
+{
+  const [, ficha] = ctrl.mensagens[ctrl.mensagens.length - 1];
+  ok("a ficha diz que é o ÚLTIMO", ficha.content.includes("TOQUE 2") && ficha.content.includes("ÚLTIMA"), ficha.content);
+  ok(
+    "e mostra as DUAS mensagens anteriores",
+    ficha.content.includes(ABERTURA) && ficha.content.includes("TOQUE 1 GERADO AGORA"),
+    ficha.content,
+  );
+}
 ok("no total, a abordagem + 2 toques", wa.enviadas.length === enviadasNaAbordagem + 2, JSON.stringify(wa.enviadas.map((e: any) => e.message)));
 ok("não sobrou nada pendente", pendentes().length === 0, JSON.stringify(state.followUps));
 ok(
@@ -285,7 +316,7 @@ secao("um toque frio por rodada (vinte textos idênticos no mesmo segundo é ass
       touchNumber: 1,
       kind: "abordagem",
       scheduledAt: depois(1),
-      messageTemplate: ABORDAGEM_TOQUES[1]("Marina"),
+      messageTemplate: null,
     });
   }
   await rodarCicloDeFollowUp(depois(72));
@@ -297,15 +328,14 @@ secao("um toque frio por rodada (vinte textos idênticos no mesmo segundo é ass
   // com o resto do ritmo frio, então rodada no MESMO instante não escoa nada
   // (é o comportamento certo: dois toques no mesmo segundo é o bloco que este
   // teste existe para impedir).
-  const MIN = 60 * 1000;
-  await rodarCicloDeFollowUp(new Date(depois(72).getTime() + 5 * MIN));
-  await rodarCicloDeFollowUp(new Date(depois(72).getTime() + 10 * MIN));
+  await rodarCicloDeFollowUp(new Date(depois(72).getTime() + PASSO_DO_RITMO));
+  await rodarCicloDeFollowUp(new Date(depois(72).getTime() + 2 * PASSO_DO_RITMO));
   ok("duas rodadas depois, três saíram", wa.enviadas.length === 3);
   ok("e dois seguem na fila", pendentes().length === 2);
 
   // A prova do intervalo: uma rodada extra no MESMO instante da anterior não
   // solta o quarto toque — ainda não passou o mínimo desde o terceiro.
-  await rodarCicloDeFollowUp(new Date(depois(72).getTime() + 10 * MIN));
+  await rodarCicloDeFollowUp(new Date(depois(72).getTime() + 2 * PASSO_DO_RITMO));
   ok("no mesmo instante, o quarto não sai", wa.enviadas.length === 3);
   ok("mas segue pendente, não perdido", pendentes().length === 2);
 }
@@ -335,7 +365,7 @@ secao("toque frio CONSOME a cota do dia (Rodada 51 — antes saía por fora)");
     touchNumber: 1,
     kind: "abordagem",
     scheduledAt: new Date(TERCA_14H.getTime() - 1000),
-    messageTemplate: ABORDAGEM_TOQUES[1]("Marina"),
+    messageTemplate: null,
   });
   // 40 aberturas hoje, duas horas atrás (12h SP — mesmo dia, fora da última hora).
   for (let i = 0; i < 40; i++) {
@@ -374,7 +404,7 @@ secao("toque frio espera o intervalo mínimo desde a ÚLTIMA mensagem fria — d
     touchNumber: 1,
     kind: "abordagem",
     scheduledAt: new Date(TERCA_14H.getTime() - 1000),
-    messageTemplate: ABORDAGEM_TOQUES[1]("Marina"),
+    messageTemplate: null,
   });
   // Uma ABERTURA (do outro agendador) saiu 30 segundos atrás.
   state.leads.push({
@@ -388,9 +418,9 @@ secao("toque frio espera o intervalo mínimo desde a ÚLTIMA mensagem fria — d
   ok("30s depois de uma abertura, o toque espera", wa.enviadas.length === 0, JSON.stringify(wa.enviadas));
   ok("segue pendente", pendentes().length === 1);
 
-  // Cinco minutos depois (o ciclo seguinte de verdade), sai.
-  await rodarCicloDeFollowUp(new Date(TERCA_14H.getTime() + 5 * 60 * 1000));
-  ok("no ciclo seguinte, sai", wa.enviadas.length === 1, JSON.stringify(wa.enviadas));
+  // Passado o intervalo (sorteado, no máximo 40 minutos), sai.
+  await rodarCicloDeFollowUp(new Date(TERCA_14H.getTime() + PASSO_DO_RITMO));
+  ok("passado o intervalo, sai", wa.enviadas.length === 1, JSON.stringify(wa.enviadas));
 }
 
 secao("número que rejeita 3 envios: a cadência inteira morre e o Telegram avisa");
@@ -419,7 +449,7 @@ secao("número que rejeita 3 envios: a cadência inteira morre e o Telegram avis
     touchNumber: 1,
     kind: "abordagem",
     scheduledAt: new Date(TERCA_14H.getTime() - 1000),
-    messageTemplate: ABORDAGEM_TOQUES[1]("Marina"),
+    messageTemplate: null,
   });
   state.followUps.push({
     id: state.nextId++,
@@ -428,7 +458,7 @@ secao("número que rejeita 3 envios: a cadência inteira morre e o Telegram avis
     touchNumber: 2,
     kind: "abordagem",
     scheduledAt: depois(200), // ainda no futuro
-    messageTemplate: ABORDAGEM_TOQUES[2]("Marina"),
+    messageTemplate: null,
   });
 
   wa.entrega = false;
@@ -587,11 +617,17 @@ secao("ele responde: sai da cadência de abordagem e entra na de conversa");
   ok("todos os pendentes agora são de conversa", pendentes().every((f: any) => f.kind === "conversa"));
 
   // O ciclo seguinte não pode ressuscitar um toque frio.
-  const antesDoCiclo = wa.enviadas.length;
+  //
+  // O toque frio não tem mais texto fixo para procurar entre as enviadas. O que
+  // o identifica agora é o PROMPT com que ele seria gerado: se nenhuma chamada
+  // nova ao modelo usou o `JULIA_TOQUE_PROMPT`, nenhum toque frio saiu — e essa
+  // prova é mais forte que a antiga, porque pega inclusive o toque que fosse
+  // gerado e não entregue.
+  const chamadasAntesDoCiclo = ctrl.mensagens.length;
   await rodarCicloDeFollowUp(depois(240));
-  const friosDepois = wa.enviadas
-    .slice(antesDoCiclo)
-    .filter((e: any) => e.message === ABORDAGEM_TOQUES[1]("Marina") || e.message === ABORDAGEM_TOQUES[2]("Marina"));
+  const friosDepois = ctrl.mensagens
+    .slice(chamadasAntesDoCiclo)
+    .filter((msgs: any) => msgs[0]?.content === JULIA_TOQUE_PROMPT);
   ok("e nenhum toque frio sai depois disso", friosDepois.length === 0, JSON.stringify(friosDepois));
   ok(
     "o lead não é marcado como 'nao_respondeu' — ele respondeu",
