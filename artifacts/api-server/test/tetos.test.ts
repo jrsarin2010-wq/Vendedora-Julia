@@ -24,6 +24,7 @@ import {
   TETO_ABORDAGEM,
 } from "../src/lib/modelos";
 import { JULIA_EXTRACTION_PROMPT } from "../src/julia-persona";
+import { SINAIS_QUE_EXIGEM_PROVA } from "../src/lib/peneira-de-sinais";
 
 /**
  * Tokens a partir de caracteres, DE PROPÓSITO mais pessimista que o
@@ -71,6 +72,19 @@ secao("EXTRAÇÃO — a ficha CHEIA cabe no teto, com folga para o raciocínio")
     sinais,
     interlocutor: "dentista_dono",
     descoberta: Object.fromEntries(topicos.map((t) => [t, "instagram e google"])),
+    // Os trechos de prova (18/08/2026). Lidos da LISTA do módulo, e não
+    // escritos à mão aqui, pela mesma razão dos sinais e dos tópicos: se um
+    // terceiro sinal passar a exigir prova, a medição tem que crescer junto —
+    // senão o teto continua sendo conferido contra um JSON que não existe mais.
+    //
+    // A citação é longa de propósito: o extrator copia a frase dele inteira, e
+    // é a frase inteira que paga token.
+    trechos: Object.fromEntries(
+      SINAIS_QUE_EXIGEM_PROVA.map((s) => [
+        s,
+        "me manda o link pra eu assinar isso ai hoje ainda",
+      ]),
+    ),
   };
   const json = JSON.stringify(pior);
   const visivel = tokensDeJson(json);

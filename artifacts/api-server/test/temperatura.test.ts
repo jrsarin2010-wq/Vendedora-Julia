@@ -111,9 +111,25 @@ ok(
 // ── O webhook de ponta a ponta ──────────────────────────────────────────────
 
 const EXTRACAO_NEUTRA = ctrl.extraction;
+/**
+ * Um extrator SINCERO: junto de cada sinal, manda a prova que a peneira exige
+ * (lib/peneira-de-sinais.ts). Antes desta rodada o ajudante afirmava sinal sem
+ * prova nenhuma — modelava justamente o extrator que o lead 49 revelou, e por
+ * isso a fixture parou de passar quando a peneira entrou.
+ *
+ * O trecho de prova tem que existir na mensagem que o cenário POSTA: é a fala
+ * dele que sustenta o sinal, e é ela que o código vai procurar.
+ */
+const PROVA: Record<string, string> = {
+  pediu_link: "me manda o link",
+  perguntou_como_assinar: "como faço pra assinar",
+};
+
 const extracao = (sinais: string[]): string =>
   JSON.stringify({
-    painPoints: null,
+    painPoints: sinais.includes("contou_a_dor")
+      ? "ninguém responde o whatsapp quando está com paciente"
+      : null,
     mainObjection: null,
     name: null,
     planInterest: null,
@@ -121,6 +137,10 @@ const extracao = (sinais: string[]): string =>
     isCustomer: false,
     wantsToStop: false,
     sinais,
+    descoberta: sinais.includes("disse_quantos_prof") ? { profissionais: "2" } : {},
+    trechos: Object.fromEntries(
+      sinais.filter((s) => s in PROVA).map((s) => [s, PROVA[s]]),
+    ),
   });
 
 secao("webhook — os sinais do extrator viram temperatura e status");
@@ -186,7 +206,10 @@ secao("webhook — extração falhou? o respondeu_algo ainda conta");
 secao("webhook — cliente e perdido não mudam de status pela temperatura");
 {
   ctrl.extraction = extracao(["pediu_link", "perguntou_como_assinar", "perguntou_contrato"]);
-  await post(evento("primeira mensagem pra criar o lead"));
+  // A fala dele PRECISA conter os trechos de prova: sem eles a peneira derruba
+  // os dois sinais de 30 e o lead nunca chega a fervendo — que é o estado que
+  // este cenário existe para montar.
+  await post(evento("como faço pra assinar? me manda o link"));
   state.leads[0].status = "closed";
   ctrl.extraction = extracao(["perguntou_seguranca"]);
   await chamar(evento("é seguro pagar?"));

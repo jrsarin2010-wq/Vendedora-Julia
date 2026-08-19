@@ -65,8 +65,23 @@ export const TETO_RESPOSTA = 512;
  * engajado, que respondeu muita coisa. O modo de falhar escolhia o melhor lead
  * da lista, e falhava calado: um `warn` de "seguindo sem", a ficha parada, e a
  * `descoberta` — que é o que impede a mesma pergunta de voltar — nunca gravada.
+ *
+ * 600 -> 800 em 18/08/2026, quando entrou o `trechos` da peneira de sinais. O
+ * JSON cheio subiu de ~248 para 316 tokens medidos, e o teste exige o dobro:
+ * 632. NÃO ficou em 632.
+ *
+ * A folga é deliberada, e o motivo é o mesmo dia: o teto da abordagem estava
+ * colado no necessário, o prompt cresceu, e o estouro saiu como 400 numa ponta
+ * e como resposta VAZIA na outra — duas caras que pareciam dois defeitos. Aqui
+ * o modo de falhar é ainda mais traiçoeiro, porque é silencioso e escolhe
+ * justamente o melhor lead da lista.
+ *
+ * E economizar aqui não economiza NADA: `max_completion_tokens` é teto, não
+ * gasto. Só se paga o que o modelo de fato gerar. Um teto folgado custa zero
+ * enquanto ninguém precisa dele, e o teto apertado só cobra a conta no dia em
+ * que o lead é bom.
  */
-export const TETO_EXTRACAO = 600;
+export const TETO_EXTRACAO = 800;
 
 /**
  * ABORDAGEM. Era 200 e quebrou em produção em 18/08/2026; ver o histórico no

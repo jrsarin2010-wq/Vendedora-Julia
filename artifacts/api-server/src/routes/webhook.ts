@@ -57,6 +57,7 @@ import {
   statusDaFaixa,
   CADENCIA_POR_FAIXA,
 } from "../lib/temperatura";
+import { peneirarSinais } from "../lib/peneira-de-sinais";
 import {
   REPLY_MODEL,
   EXTRACTION_MODEL,
@@ -1051,13 +1052,45 @@ router.post("/webhook/whatsapp", async (req, res) => {
         sinais?: string[];
         interlocutor?: string | null;
         descoberta?: Record<string, unknown> | null;
+        trechos?: Record<string, unknown> | null;
       };
 
-      // Sinais de temperatura. A validação de nome fica em registrarSinais
-      // (sinal desconhecido é descartado); aqui só garantimos que é uma lista
-      // de strings, porque o modelo às vezes inventa formato.
+      // SINAIS DE TEMPERATURA, agora peneirados (lib/peneira-de-sinais.ts).
+      //
+      // Três camadas, e cada uma responde uma pergunta diferente:
+      //   - aqui, o FORMATO: é mesmo uma lista de strings? (o modelo às vezes
+      //     inventa formato);
+      //   - a peneira, o FATO: o sinal se sustenta no que ele escreveu?
+      //   - registrarSinais, o NOME: existe na tabela de pontos?
+      //
+      // A do meio é nova, e é a que faltava: o lead 49 recebeu 40 dos 53
+      // pontos de dois sinais que nunca aconteceram, e as outras duas camadas
+      // deixaram passar porque o formato estava certo e o nome existia.
       if (Array.isArray(parsed.sinais)) {
-        sinaisDaConversa = parsed.sinais.filter((s) => typeof s === "string");
+        const peneira = peneirarSinais(
+          parsed.sinais.filter((s): s is string => typeof s === "string"),
+          {
+            descoberta: parsed.descoberta,
+            painPoints: parsed.painPoints,
+            trechos: parsed.trechos,
+            // SÓ o que ELE escreveu. É o que faz a citação da Júlia reprovar
+            // sozinha, sem precisar de regra própria para autoria.
+            mensagensDele: history
+              .filter((m) => m.direction === "inbound")
+              .map((m) => m.content),
+          },
+        );
+        sinaisDaConversa = peneira.aceitos;
+
+        if (peneira.descartados.length > 0) {
+          // Vai para o log SEMPRE, e com o motivo: sinal descartado em
+          // silêncio viraria "a temperatura está baixa e ninguém sabe por quê"
+          // — o espelho exato do defeito que a peneira conserta.
+          req.log.warn(
+            { leadId: lead.id, descartados: peneira.descartados },
+            "Sinais de temperatura descartados: o extrator não sustentou",
+          );
+        }
       }
 
       const update: {

@@ -2288,7 +2288,7 @@ Extraia, do ponto de vista de quem está escrevendo:
 12. O que já foi PERGUNTADO na descoberta, e o que ele respondeu.
 
 Responda SOMENTE com um JSON, sem nada antes ou depois, neste formato exato:
-{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>, "irritado": <true ou false>, "duvidaDoSite": "<assunto em 2 a 4 palavras, ou null>", "sinais": ["<sinal1>", "<sinal2>", ...], "interlocutor": "<dentista_dono, equipe, assistente_virtual ou nao_sei>", "descoberta": {"<topico>": "<resposta curta ou sem_resposta>"}}
+{"painPoints": "<dor em uma frase curta, ou null>", "mainObjection": "<objeção em uma frase curta, ou null>", "name": "<primeiro nome, ou null>", "planInterest": "<basic, essencial, pro ou null>", "funnelStage": "<uma das etapas abaixo, ou null>", "isCustomer": <true ou false>, "wantsToStop": <true ou false>, "irritado": <true ou false>, "duvidaDoSite": "<assunto em 2 a 4 palavras, ou null>", "sinais": ["<sinal1>", "<sinal2>", ...], "interlocutor": "<dentista_dono, equipe, assistente_virtual ou nao_sei>", "descoberta": {"<topico>": "<resposta curta ou sem_resposta>"}, "trechos": {"<sinal>": "<palavras literais dele>"}}
 
 Etapas possíveis, em ordem:
 - new: mal começou, ainda não se sabe nada da clínica dele.
@@ -2361,6 +2361,12 @@ Regras de "sinais":
   quando recusou. "Não é pra mim" NÃO é vou pensar: um é recusa, o outro é
   quase-fechamento.
 - Array vazio quando nada disso apareceu.
+- "pediu_link" e "perguntou_como_assinar" exigem PROVA. Para esses dois — e só
+  para esses dois — copie em "trechos" as palavras LITERAIS dele que mostram o
+  sinal, tiradas de uma mensagem DELE. Sem trecho, ou com trecho que não está
+  na fala dele, o sinal é jogado fora. Eles valem 30 pontos e levam o lead de
+  frio direto a quente numa mensagem só: é por isso que estes pedem prova e os
+  outros não. "trechos" fica {} quando nenhum dos dois apareceu.
 
 Regras de "duvidaDoSite":
 - Preencha SOMENTE quando o dentista veio do site e a primeira coisa que ele

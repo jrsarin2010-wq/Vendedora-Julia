@@ -51,9 +51,25 @@ ok(
 
 // ── O webhook armando a leva ────────────────────────────────────────────────
 
+/**
+ * Um extrator SINCERO: junto de cada sinal, manda a prova que a peneira exige
+ * (lib/peneira-de-sinais.ts). Antes desta rodada o ajudante afirmava sinal sem
+ * prova nenhuma — modelava justamente o extrator que o lead 49 revelou, e por
+ * isso a fixture parou de passar quando a peneira entrou.
+ *
+ * O trecho de prova tem que existir na mensagem que o cenário POSTA: é a fala
+ * dele que sustenta o sinal, e é ela que o código vai procurar.
+ */
+const PROVA: Record<string, string> = {
+  pediu_link: "me manda o link",
+  perguntou_como_assinar: "como faço pra assinar",
+};
+
 const extracao = (sinais: string[]): string =>
   JSON.stringify({
-    painPoints: null,
+    painPoints: sinais.includes("contou_a_dor")
+      ? "ninguém responde o whatsapp quando está com paciente"
+      : null,
     mainObjection: null,
     name: null,
     planInterest: null,
@@ -61,6 +77,10 @@ const extracao = (sinais: string[]): string =>
     isCustomer: false,
     wantsToStop: false,
     sinais,
+    descoberta: sinais.includes("disse_quantos_prof") ? { profissionais: "2" } : {},
+    trechos: Object.fromEntries(
+      sinais.filter((s) => s in PROVA).map((s) => [s, PROVA[s]]),
+    ),
   });
 
 const pendentes = () => state.followUps.filter((f: any) => f.status === "pending");
