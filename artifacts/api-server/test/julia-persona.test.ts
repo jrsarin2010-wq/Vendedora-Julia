@@ -125,9 +125,13 @@ secao('"que produto é esse?" — a pergunta do lead que nunca ouviu falar do Ca
     "manda caber em uma ou duas frases",
     secaoProduto.includes("em uma ou duas frases"),
   );
+  // A pergunta que fecha a resposta deixou de ser de logistica (Rodada 57):
+  // ela vem da secao unica, e e a que ele nao responde sem admitir uma perda.
   ok(
-    "e devolver UMA pergunta que dimensione a situação dele",
-    secaoProduto.includes("UMA pergunta que dimensione a situação dele"),
+    "e devolver UMA pergunta, a de PERDA e nao a de logistica",
+    secaoProduto.includes("UMA pergunta das de SOBRE O QUE PERGUNTAR") &&
+      secaoProduto.includes("nunca a de logística"),
+    secaoProduto,
   );
   ok(
     "sem link, sem plano, sem valor — nada disso foi perguntado",
@@ -198,9 +202,12 @@ secao("recusa comercial no MODO B — a resposta mais provável de quem não ped
       portao.includes("NÃO\nfaça mais uma pergunta"),
     portao,
   );
+  // O link do SITE continua barrado. O que ganhou excecao nomeada foi so o
+  // Instagram, porque perfil nao pede nada dele — e a excecao esta travada na
+  // secao propria, junto com o "continua sendo o fim".
   ok(
-    "e nem o link de consolação",
-    portao.includes('NÃO deixe o link "caso mude de ideia"'),
+    "e nem o link de consolação do site",
+    portao.includes('NÃO deixe o link do site "caso mude de ideia"'),
   );
   ok(
     "é inegociável no MODO B, com o motivo (denúncia derruba o número inteiro)",
@@ -530,6 +537,101 @@ secao("Rodada 57 — a permissao se renova, e a ancora de custo tem hora");
     "e entra como fato, sem numero inventado",
     fase2.includes("sem número inventado e sem \"economize X%\"") &&
       fase2.includes("um múltiplo do que a clínica pagaria aqui"),
+  );
+}
+
+secao("O Instagram e recurso, nao resposta a uma pergunta");
+{
+  // Ele ja estava no prompt, mas so como resposta a "voces tem Instagram?" —
+  // uma linha, num lugar so. Vira recurso com os quatro momentos e os dois
+  // "nunca", nos DOIS modos: e material para olhar, e a duvida de quem quer
+  // olhar de fora nao depende de onde o lead veio.
+  ok(
+    "o perfil continua escrito por extenso",
+    JULIA_SYSTEM_PROMPT.includes("Instagram: @captaclin.ia"),
+  );
+  ok(
+    "e agora e material para olhar, nos dois modos",
+    JULIA_SYSTEM_PROMPT.includes("O INSTAGRAM É MATERIAL PARA OLHAR, não resposta") &&
+      JULIA_SYSTEM_PROMPT.includes("vale nos dois modos"),
+  );
+
+  const momentos = [
+    "ele pede referência, site, ou onde vê mais sobre vocês",
+    "ele desconfia que a empresa seja real",
+    "ele diz que vai pensar ou falar com o sócio",
+    "no encerramento cordial de quem disse não",
+  ];
+  const faltando = momentos.filter((m) => !JULIA_SYSTEM_PROMPT.includes(m));
+  ok("os quatro momentos estao escritos", faltando.length === 0, JSON.stringify(faltando));
+
+  // As duas travas. A primeira e a mesma decisao que tirou o link do toque 2 —
+  // e ela esta dita COM esse motivo, para nao virar preferencia de estilo.
+  ok(
+    "nunca em mensagem fria, e com o motivo que ja custou o link do toque 2",
+    JULIA_SYSTEM_PROMPT.includes("NUNCA na primeira mensagem do MODO B nem em toque frio") &&
+      JULIA_SYSTEM_PROMPT.includes("sinal de spam, e é por isso que ele já saiu do toque 2"),
+  );
+  ok(
+    "e nunca no lugar de uma resposta",
+    JULIA_SYSTEM_PROMPT.includes("NUNCA no lugar de uma") &&
+      JULIA_SYSTEM_PROMPT.includes("se ele perguntou alguma coisa, quem responde é você"),
+  );
+  ok(
+    "fora dos quatro, vale a disciplina do contrato: nao se oferece sozinha",
+    JULIA_SYSTEM_PROMPT.includes("vale a mesma disciplina do CONTRATO E TERMO"),
+  );
+
+  // A CONTRADICAO QUE O QUARTO MOMENTO TERIA ENCONTRADO. A regra da RECUSA
+  // proibia link "caso mude de ideia" sem excecao, e proibicao categorica vence
+  // permissao condicional — o quarto momento nunca aconteceria, e ninguem
+  // saberia por que. Terceira vez neste arquivo que este par aparece.
+  ok(
+    "a recusa ganhou a excecao nomeada, em vez de continuar proibindo tudo",
+    JULIA_SYSTEM_PROMPT.includes("UMA EXCEÇÃO, e é só ela: o Instagram cabe nessa linha de despedida"),
+  );
+  ok(
+    "e a excecao nao reabre a conversa",
+    JULIA_SYSTEM_PROMPT.includes("continua sendo o fim — não é gancho para reabrir"),
+  );
+  // O que a excecao NAO liberou: o link do site continua proibido ali.
+  ok(
+    "o link do SITE continua barrado na recusa",
+    JULIA_SYSTEM_PROMPT.includes('NÃO deixe o link do site "caso mude de ideia"'),
+  );
+}
+
+secao("Rodada 57 — nenhuma pergunta de logistica sobrou FORA da FASE 2");
+{
+  // O que quase escapou: a Rodada 57 trocou a lista da FASE 2 e deixou duas
+  // prescricoes de logistica em OUTRAS secoes, sem modo nenhum — a resposta ao
+  // "que negocio e esse?" e o desvio da trava de preco para quem nao anuncia.
+  //
+  // E o buraco era pior do que parece: os topicos `quem_responde` e
+  // `fora_do_horario` sairam na mesma rodada, entao se a Julia fizesse essas
+  // perguntas a memoria do "uma vez so" nem registraria — ela poderia repetir
+  // a vontade, que e o defeito que a coluna `descoberta` existe para matar.
+  const proibidas = [
+    "quem responde o WhatsApp hoje",
+    "hoje quem responde o WhatsApp da clínica?",
+    "o que acontece com a mensagem que chega de noite",
+    "E quando chega mensagem à noite ou no fim de semana",
+  ];
+  const sobreviventes = proibidas.filter((f) => JULIA_SYSTEM_PROMPT.includes(f));
+  ok(
+    "nenhuma pergunta de logistica manda ser feita em lugar nenhum do prompt",
+    sobreviventes.length === 0,
+    JSON.stringify(sobreviventes),
+  );
+  // E os dois lugares que as usavam continuam tendo o que perguntar: apontam
+  // para a secao unica, em vez de carregar exemplo proprio.
+  ok(
+    "a resposta ao 'que negocio e esse?' manda usar as perguntas de perda",
+    JULIA_SYSTEM_PROMPT.includes("UMA pergunta das de SOBRE O QUE PERGUNTAR"),
+  );
+  ok(
+    "e o desvio da trava de preco tambem",
+    JULIA_SYSTEM_PROMPT.includes("SOBRE O QUE PERGUNTAR, como o que acontece com quem chama, pergunta preço"),
   );
 }
 
