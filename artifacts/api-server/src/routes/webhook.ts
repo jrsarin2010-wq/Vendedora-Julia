@@ -722,6 +722,13 @@ router.post("/webhook/whatsapp", async (req, res) => {
       origin: lead.origin,
       interlocutor: lead.interlocutor,
       descoberta: lead.descoberta,
+      // SÓ o que ELE mandou, em ordem. A ficha usa isto para ler o sinal de
+      // cortesia (FASE 2, B4) — duas respostas seguidas de até três palavras.
+      // Passar as falas da Júlia junto contaria as perguntas dela como
+      // respostas curtas dele, e o sinal dispararia sozinho.
+      mensagensDele: history
+        .filter((m) => m.direction === "inbound")
+        .map((m) => m.content),
     });
 
     const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [

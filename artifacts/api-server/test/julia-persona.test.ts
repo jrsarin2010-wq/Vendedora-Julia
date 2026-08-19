@@ -247,6 +247,167 @@ secao("FASE 2 no MODO B — descoberta não pode virar interrogatório");
   ok("uma pergunta por vez", fase2.includes("UMA pergunta por vez"));
 }
 
+// ── Rodada 56 — a FASE 2 do MODO B deixou de ser entrevista ─────────────────
+//
+// Sete conversas reais: cinco perguntas seguidas antes de o dentista receber
+// qualquer coisa em troca. As duas que MAIS responderam foram as que morreram —
+// o lead 44 respondeu 4 e parou quando ouviu o teto de 5 agendas logo depois de
+// dizer quantos eram; o 49 respondeu 5 e disse que nao tinha se inscrito para
+// entrevista. Cada bloco abaixo trava uma das quatro regras que entraram.
+secao("Rodada 56 — B1: pergunta so anda em troca de alguma coisa");
+{
+  const inicio = JULIA_SYSTEM_PROMPT.indexOf("FASE 2 — DESCOBERTA");
+  const fase2 = JULIA_SYSTEM_PROMPT.slice(
+    inicio,
+    JULIA_SYSTEM_PROMPT.indexOf("FASE 3 — FAZER SENTIR"),
+  );
+
+  ok(
+    "nunca duas perguntas seguidas sem ele receber algo no meio",
+    fase2.includes("NUNCA duas seguidas sem ele receber algo no meio"),
+    fase2,
+  );
+  ok(
+    "e a contrapartida e concreta: clinica parecida, ou o que o produto resolve no que ele disse",
+    fase2.includes("o que acontece em") &&
+      fase2.includes("clínicas parecidas com a dele") &&
+      fase2.includes("que o CaptaClin resolve LIGADO ao que ele acabou de dizer"),
+  );
+  // A parte que faltaria se so o "de algo em troca" estivesse escrito: o modelo
+  // preencheria a lacuna com o mais barato — um "entendi" e a fala dele
+  // devolvida em outras palavras, que e o que o dentista ja escreveu.
+  ok(
+    "e o que NAO conta como contrapartida esta nomeado",
+    fase2.includes('NÃO é contrapartida: "entendi", "faz sentido", nem repetir a resposta dele') &&
+      fase2.includes("vira formulário educado"),
+  );
+}
+
+secao("Rodada 56 — B2: a pergunta faz ele PENSAR, nao preenche campo");
+{
+  const inicio = JULIA_SYSTEM_PROMPT.indexOf("FASE 2 — DESCOBERTA");
+  const fase2 = JULIA_SYSTEM_PROMPT.slice(
+    inicio,
+    JULIA_SYSTEM_PROMPT.indexOf("FASE 3 — FAZER SENTIR"),
+  );
+
+  ok(
+    "a pergunta de cadastro esta nomeada COM os exemplos dela",
+    fase2.includes("Pergunta de cadastro") &&
+      fase2.includes("quem responde o WhatsApp, quantos profissionais"),
+  );
+  ok(
+    "e o que entra no lugar e a rotina dele, no concreto",
+    fase2.includes("Pergunte pela ROTINA dele, no") &&
+      fase2.includes("mensagem que chega às 21h"),
+  );
+  // O porque, que e o que sustenta a regra quando o modelo estiver com pressa:
+  // ele nao esta abrindo mao do dado, esta pegando o MESMO dado por outro lado.
+  ok(
+    "e o motivo: a resposta dele ja e o diagnostico, e o dado vem junto",
+    fase2.includes("A resposta dele JÁ É o") && fase2.includes("você fica com o mesmo dado"),
+  );
+}
+
+secao("Rodada 56 — B3: dimensionamento de plano nao e descoberta");
+{
+  const inicio = JULIA_SYSTEM_PROMPT.indexOf("FASE 2 — DESCOBERTA");
+  const fase2 = JULIA_SYSTEM_PROMPT.slice(
+    inicio,
+    JULIA_SYSTEM_PROMPT.indexOf("FASE 3 — FAZER SENTIR"),
+  );
+
+  ok(
+    "o gatilho e ELE demonstrar interesse sozinho, e esta dito o que conta",
+    fase2.includes("antes de ELE demonstrar interesse sozinho") &&
+      fase2.includes("perguntar como") &&
+      fase2.includes("funciona, perguntar preço, pedir para ver"),
+  );
+  ok(
+    "quantos profissionais sai da conversa fria, e com o motivo",
+    fase2.includes("quantos profissionais atendem: é dimensionamento de PLANO, não descoberta") &&
+      fase2.includes("está fora da conversa fria"),
+  );
+  // O que matou a conversa do lead 44: o teto chegou antes de ele saber o que
+  // estava sendo limitado.
+  ok(
+    "o teto de 5 agendas nunca chega antes de ele saber para que o produto serve",
+    fase2.includes("o teto de 5 agendas e qualquer outro limite do produto") &&
+      fase2.includes("nunca antes de ele") &&
+      fase2.includes("saber para que o produto serve"),
+  );
+  ok(
+    "e o caso real esta escrito, para a regra nao virar preferencia de estilo",
+    fase2.includes("ele ainda não sabia o que"),
+  );
+
+  // A regra velha dizia "vem CEDO", sem modo. Deixada assim ela venceria a
+  // nova, que e condicional — e o modelo obedece a mais categorica.
+  ok(
+    "o dimensionamento em PLANOS E PREÇOS ganhou o modo, em vez de continuar dizendo CEDO",
+    JULIA_SYSTEM_PROMPT.includes('"vocês são quantos profissionais?" vem CEDO no MODO A') &&
+      JULIA_SYSTEM_PROMPT.includes("No MODO B ela NÃO é descoberta e não"),
+  );
+  ok(
+    "e aponta de volta para a regra que descreve o comportamento",
+    JULIA_SYSTEM_PROMPT.includes("interesse por conta própria (FASE 2, B3)"),
+  );
+  // A lista de perguntas prontas continua existindo — mas agora tem dono.
+  ok(
+    "a lista de perguntas prontas da FASE 2 e do MODO A, e diz o que o MODO B faz com ela",
+    fase2.includes("A lista abaixo é do MODO A") &&
+      fase2.includes("no MODO B ela espera o interesse e"),
+  );
+}
+
+secao("Rodada 56 — B4: duas respostas curtas encerram a descoberta");
+{
+  const inicio = JULIA_SYSTEM_PROMPT.indexOf("FASE 2 — DESCOBERTA");
+  const fase2 = JULIA_SYSTEM_PROMPT.slice(
+    inicio,
+    JULIA_SYSTEM_PROMPT.indexOf("FASE 3 — FAZER SENTIR"),
+  );
+
+  ok("o sinal esta definido em numero, nao em impressao", fase2.includes("Duas respostas seguidas de até três palavras"));
+  ok(
+    "e traduzido: ele responde por educacao, nao por interesse",
+    fase2.includes("ele responde por EDUCAÇÃO, não por"),
+  );
+  // Sem esta linha o sinal viraria mais um argumento para tentar de novo — que
+  // e exatamente o reflexo que ele existe para cortar.
+  ok(
+    "e dito que NAO e convite para tentar outro angulo",
+    fase2.includes("não convite para") && fase2.includes("tentar outro ângulo"),
+  );
+  ok(
+    "o que ela faz: uma frase do que o produto faz, a saida, e encerra o turno",
+    fase2.includes("Ali você PARA de perguntar") &&
+      fase2.includes("diga em uma frase o que o") &&
+      fase2.includes("ofereça a") &&
+      fase2.includes("saída sem cobrar nada dele, e encerre o turno"),
+  );
+  ok(
+    "e as tres saidas pela tangente estao fechadas",
+    fase2.includes("Não") && fase2.includes("insista, não reformule, não faça mais uma pergunta"),
+  );
+  // Porta de saida: sem ela o sinal calaria a Julia para sempre com quem so
+  // demorou a engatar.
+  ok(
+    "e existe volta quando ele escrever de verdade",
+    fase2.includes("a conversa recomeça normal"),
+  );
+
+  // A CONTRADICAO QUE A B1 TERIA CRIADO. O bloco de quem vem do site manda
+  // fazer "duas perguntas rapidas" numa mensagem so — exemplo pronto, que puxa
+  // muito mais que uma regra abstrata. Deixado sem modo, ele venceria a B1
+  // exatamente como o "qualquer numero" venceu a reputacao do Google.
+  ok(
+    "as duas perguntas juntas ganharam o modo, em vez de continuar valendo em todo lugar",
+    JULIA_SYSTEM_PROMPT.includes("As duas juntas") &&
+      JULIA_SYSTEM_PROMPT.includes("valem aqui, no MODO A; no MODO B é uma por vez — FASE 2, B1."),
+  );
+}
+
 secao("Rodada 28 — dois modos de abertura");
 ok("existe MODO A (ele chamou)", JULIA_SYSTEM_PROMPT.includes("MODO A — ELE CHAMOU VOCÊ"));
 ok("existe MODO B (ela chamou)", JULIA_SYSTEM_PROMPT.includes("MODO B — VOCÊ CHAMOU ELE"));

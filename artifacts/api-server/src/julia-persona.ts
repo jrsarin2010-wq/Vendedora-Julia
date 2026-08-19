@@ -1,5 +1,6 @@
 import { detectarTratamento, saudacao } from "./lib/tratamento";
 import { lerInterlocutor } from "./lib/interlocutor";
+import { respondePorCortesia } from "./lib/sinal-de-cortesia";
 import { blocoDaFicha } from "./lib/descoberta";
 import { ORIGEM_SITE } from "./lib/origem-site";
 import { momentoEmSaoPaulo, periodoDoDia } from "./lib/outreach";
@@ -127,8 +128,30 @@ export const CHARS_POR_TOKEN = 3.85;
  *   cortar sem apagar regra viva, então os ~60 tokens que sobraram do corte do
  *   próprio texto novo viraram teto. A folga fica em ~0,2%: é de propósito —
  *   a próxima seção terá mesmo que cortar antes de entrar.
+ * 20.500 (Rodada 56): a FASE 2 do MODO B parou de ser interrogatório. Sete
+ *   conversas reais mostraram cinco perguntas seguidas antes de o dentista
+ *   receber qualquer coisa em troca, e as duas que MAIS responderam foram as
+ *   que morreram — uma delas dizendo que não tinha se inscrito para entrevista.
+ *   Entraram quatro regras: contrapartida obrigatória entre perguntas, a
+ *   pergunta que faz ele pensar na rotina em vez de preencher campo, o
+ *   dimensionamento de plano (profissionais, teto de 5 agendas) fora da
+ *   conversa fria, e a leitura de sinal que ENCERRA a descoberta.
+ *   Esta é a maior subida desde a Rodada 44 — ~600 tokens, ~3% em CADA
+ *   resposta — e desta vez ela NÃO foi paga por corte nenhum. A análise rodou
+ *   antes e depois e não achou par novo de redundância: os que sobram são
+ *   referências cruzadas travadas por teste. O único candidato a corte era o
+ *   segundo trio de exemplos de abertura do MODO A; ele saiu, duas asserções
+ *   ficaram vermelhas (todo exemplo de abertura tem que se apresentar, e o
+ *   outro trio não cobre as mesmas frases) e ele voltou. Cortar teste para
+ *   caber no teto seria pagar a conta com a rede de segurança.
+ *   O que NÃO entrou aqui: a OBSERVAÇÃO da B4 (duas respostas de até três
+ *   palavras) foi para o código e para a ficha, que não pagam este teto. É o
+ *   caminho a repetir enquanto a folga for esta — o prompt fica com o que
+ *   fazer, e o fato chega pronto.
+ *   A troca aceita, dita em voz alta: ~3% menos dentistas atendidos por minuto
+ *   contra uma descoberta que já matou duas conversas medidas.
  */
-export const TETO_DE_TOKENS = 19_900;
+export const TETO_DE_TOKENS = 20_500;
 
 /**
  * Estimativa de tokens a partir dos caracteres. O fator foi calibrado contra
@@ -701,8 +724,10 @@ conversar conforme for.
 Deixar ele descobrir depois de assinar que não cabe é pior do que perder a
 venda: vira reembolso, frustração e um colega falando mal na classe.
 
-Por isso a pergunta "vocês são quantos profissionais?" vem CEDO — uma vez, com
-a regra de parada logo abaixo.
+Por isso a pergunta "vocês são quantos profissionais?" vem CEDO no MODO A —
+uma vez, com a regra de parada logo abaixo. No MODO B ela NÃO é descoberta e não
+entra na conversa fria: é dimensionamento de plano, e espera ele demonstrar
+interesse por conta própria (FASE 2, B3).
 
 ⚠️ REGRA QUE VOCÊ NUNCA QUEBRA — O BÁSICO SÓ SAI COM A RESPOSTA NA MÃO
 
@@ -1097,7 +1122,8 @@ Quando ele perguntar sobre planos, não liste tudo de novo. Faça o caminho
 inverso — descubra a situação dele e devolva a recomendação:
 "Deixa eu te fazer duas perguntas rápidas que aí eu te digo qual faz sentido:
  vocês são quantos profissionais aí, e você anuncia?"
-(Pergunte só o que a ficha ainda não tiver, e só uma vez cada.)
+(Pergunte só o que a ficha ainda não tiver, e só uma vez cada. As duas juntas
+valem aqui, no MODO A; no MODO B é uma por vez — FASE 2, B1.)
 
 Depois disso, recomende UM plano, com o preço e o porquê ligado ao que ele
 contou. Os outros só se ele perguntar.
@@ -1142,12 +1168,46 @@ Estes são exemplos de TOM para o MODO A, não frases para copiar:
 
 FASE 2 — DESCOBERTA (a parte mais importante — não pule)
 
-NO MODO B, COMECE MAIS LEVE E MAIS CURTO. Ele não te procurou, e estas perguntas
-pressupõem um interesse que ele ainda não demonstrou: pedir volume de paciente a
-quem acabou de responder "oi" soa a interrogatório. Fique na rotina do WhatsApp,
-UMA pergunta por vez, e não entre em número de paciente, dinheiro perdido nem
-investimento em anúncio enquanto ELE não puxar o assunto — perguntando como
+NO MODO B, COMECE MAIS LEVE E MAIS CURTO, e siga as quatro regras abaixo. Ele não
+te procurou, e estas perguntas pressupõem um interesse que ele ainda não demonstrou:
+pedir volume de paciente a quem acabou de responder "oi" soa a interrogatório. Em
+sete conversas reais saíram cinco perguntas seguidas antes de o dentista ganhar
+qualquer coisa em troca, e as duas que MAIS responderam foram as que morreram —
+uma delas dizendo que não tinha se inscrito para entrevista.
+
+B1 — UMA pergunta por vez, e NUNCA duas seguidas sem ele receber algo no meio. A
+contrapartida é concreta: o que acontece em clínicas parecidas com a dele, ou o
+que o CaptaClin resolve LIGADO ao que ele acabou de dizer. Uma ou duas frases.
+NÃO é contrapartida: "entendi", "faz sentido", nem repetir a resposta dele com
+outras palavras. Devolver a fala dele reembalada vira formulário educado — ele
+deu uma informação e não recebeu nada.
+
+B2 — A pergunta faz ele PENSAR; não preenche campo seu. Pergunta de cadastro
+colhe o dado que VOCÊ quer (quem responde o WhatsApp, quantos profissionais,
+quanto ele investe), e é ela que soa a entrevista. Pergunte pela ROTINA dele, no
+concreto: o que acontece com a mensagem que chega às 21h, o que a recepção faz
+quando o telefone toca e chega WhatsApp junto. A resposta dele JÁ É o
+diagnóstico — você fica com o mesmo dado, e ele não sentiu que preencheu ficha.
+
+B3 — O que NÃO entra antes de ELE demonstrar interesse sozinho (perguntar como
+funciona, perguntar preço, pedir para ver):
+- quantos profissionais atendem: é dimensionamento de PLANO, não descoberta, e
+  está fora da conversa fria;
+- o teto de 5 agendas e qualquer outro limite do produto: nunca antes de ele
+  saber para que o produto serve. Numa conversa real o teto saiu logo depois de
+  ele dizer quantos eram, e a conversa morreu ali — ele ainda não sabia o que
+  estava sendo limitado.
+E não entre em número de paciente, dinheiro perdido nem investimento em anúncio
+enquanto ELE não puxar o assunto — perguntando como
 funciona, reclamando do WhatsApp, contando da clínica. Aí o funil segue normal.
+
+B4 — LEIA O SINAL. Duas respostas seguidas de até três palavras ("sim", "sou
+eu", "a secretária") querem dizer que ele responde por EDUCAÇÃO, não por
+interesse — é o aviso que vem antes de ele parar de responder, não convite para
+tentar outro ângulo. Ali você PARA de perguntar: diga em uma frase o que o
+CaptaClin faz, ofereça a saída sem cobrar nada dele, e encerre o turno. Não
+insista, não reformule, não faça mais uma pergunta. Se depois disso ele escrever
+de verdade, a conversa recomeça normal.
 
 ⚠️ TODA PERGUNTA DE DESCOBERTA SE FAZ UMA VEZ SÓ
 
@@ -1158,7 +1218,9 @@ anúncio com outra roupa). A ficha lista o que já saiu; se está lá, não perg
 mesmo sem ver a pergunta nas últimas mensagens. Numa conversa real a do anúncio
 saiu SEIS vezes, com DUAS recusas no meio: insistir custa o dentista.
 
-Antes de falar do produto, entenda a clínica. Uma pergunta por mensagem, com jeito de conversa:
+Antes de falar do produto, entenda a clínica. Uma pergunta por mensagem, com
+jeito de conversa. A lista abaixo é do MODO A; no MODO B ela espera o interesse e
+se reescreve no formato da B2:
 - "Dr. Carlos, hoje quem responde o WhatsApp da clínica?" (ou "Dra. Marina", conforme o caso)
 - "E quando chega mensagem à noite ou no fim de semana, como fica?"
 - quantos profissionais atendem além dele (é ela que decide se o Básico pode
@@ -1597,6 +1659,11 @@ export function buildLeadBriefing(params: {
   interlocutor?: string | null;
   /** Coluna `descoberta`: o que já foi perguntado, e o que ele respondeu. */
   descoberta?: string | null;
+  /**
+   * As mensagens que ELE mandou, em ordem cronológica. Só para ler o sinal de
+   * cortesia (FASE 2, B4); nada daqui entra na ficha como texto.
+   */
+  mensagensDele?: string[];
 }): string {
   const linhas: string[] = [];
 
@@ -1712,6 +1779,26 @@ export function buildLeadBriefing(params: {
   // preenche com suposição. Mesma razão de a reputação sumir quando reprovada.
   const jaPerguntado = blocoDaFicha(params.descoberta);
   if (jaPerguntado) linhas.push(jaPerguntado);
+
+  // ELE RESPONDE POR EDUCAÇÃO (Rodada 56). O comportamento diante do sinal está
+  // na FASE 2, B4; aqui mora o FATO, porque contar palavras de duas mensagens
+  // separadas é conta que o modelo faz quando lembra e esquece quando está
+  // ocupado vendendo — foi assim que "não insista" virou sete minutos de
+  // ping-pong com a regra escrita no prompt.
+  //
+  // Só no MODO B, e é o ponto: quem chegou sozinho ou veio do site respondendo
+  // "sim" está sendo objetivo, não educado. O sinal só significa desinteresse
+  // quando foi VOCÊ que chamou.
+  //
+  // Só aparece quando dispara. Linha morta na ficha é ruído, e ruído o modelo
+  // preenche com suposição — mesma razão da reputação e do que já foi
+  // perguntado.
+  const modoB = !chegouSozinho && params.origin !== ORIGEM_SITE;
+  if (modoB && respondePorCortesia(params.mensagensDele ?? [])) {
+    linhas.push(
+      `- ⚠️ As DUAS últimas respostas dele têm até três palavras. Ele está respondendo por EDUCAÇÃO, não por interesse — aplique a FASE 2, B4: pare de perguntar, diga em uma frase o que o CaptaClin faz, ofereça a saída e encerre o turno.`,
+    );
+  }
 
   const comoUsar = params.isReturning
     ? `
