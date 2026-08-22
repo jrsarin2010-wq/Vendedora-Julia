@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { followUpsTable, leadsTable, leadMessagesTable } from "@workspace/db";
-import { eq, lte, and, asc, desc } from "drizzle-orm";
+import { eq, lte, and, asc, desc, inArray } from "drizzle-orm";
 import { enviarWhatsAppComDiagnostico } from "./integrations";
 import { logger } from "./logger";
 import { saudacao } from "./tratamento";
@@ -32,8 +32,12 @@ import {
   ABORDAGEM_DELAYS_HOURS,
   TOQUES_REATIVACAO,
   REATIVACAO_DELAYS_DIAS,
+  conversaFoiProfunda,
 } from "../julia-persona";
-import { gerarMensagemDeToque } from "./outreach-message";
+import {
+  gerarMensagemDeToque,
+  gerarMensagemDeToqueDeConversa,
+} from "./outreach-message";
 import {
   LIMITE_REATIVACOES_POR_DIA,
   EXPLICACAO_FORA,
@@ -130,6 +134,44 @@ const TOQUES_FRIOS_POR_CICLO = 1;
 const REATIVACOES_POR_CICLO = 1;
 
 /**
+ * Toques de CONVERSA por rodada: UM, desde 22/08/2026.
+ *
+ * Era ilimitado — o laço mandava todos os vencidos que coubessem nos 20 da
+ * consulta. Ficou invisível enquanto nada segurou a fila, porque os quatro
+ * toques de um lead vencem espaçados e raramente coincidem.
+ *
+ * O QUE REVELOU: a pausa por erro nosso (lib/restricao.ts) segurou tudo por
+ * três dias, e no minuto em que ela caiu o represado saiu junto — NOVE
+ * mensagens em seis minutos, pelo mesmo número que o WhatsApp tinha
+ * restringido quatro dias antes. Rajada seguida de silêncio é exatamente o
+ * padrão que o agendador de abordagem já existia para evitar, e agora está
+ * escrito onde faltava: **toda pausa longa é um acumulador**, e o gesto de
+ * retomar é o momento de maior volume que este sistema produz.
+ *
+ * O que NÃO entra junto, de propósito: o toque de conversa continua fora da
+ * cota da prospecção (OUTREACH_PER_DAY/PER_HOUR), fora da janela de 9h-18h e
+ * fora do botão do painel — quem respondeu está conversando, e nada disso o
+ * governa (ver `foraDoHorarioDeConversa`, que é a única trava de horário que
+ * vale aqui). O que entra é só o ESPAÇAMENTO: um por rodada de 5 minutos, o
+ * mesmo teto dos outros dois, que desfaz a rajada sem tirar o toque de
+ * ninguém.
+ */
+const TOQUES_DE_CONVERSA_POR_CICLO = 1;
+
+/**
+ * A identidade de um toque: (lead, cadência, número do toque).
+ *
+ * É por ela que se sabe que duas linhas da tabela são a MESMA mensagem. Não é
+ * pelo texto: desde 22/08 o texto do toque de conversa nasce do modelo e sai
+ * diferente nas duas linhas — comparar texto deixaria de pegar exatamente o
+ * caso que a deduplicação existe para pegar. O que define "é o mesmo toque" é
+ * o LUGAR dele na cadência, não a frase que calhou de sair.
+ */
+function chaveDoToque(leadId: number, kind: string, touchNumber: number): string {
+  return `${leadId}|${kind}|${touchNumber}`;
+}
+
+/**
  * Uma passada do agendador: pega os follow-ups vencidos e manda os que devem
  * sair. Exportada (como `rodarCicloDeAbordagem`, do outreach) para o teste
  * conseguir exercitar a decisão sem depender de `setInterval`.
@@ -168,6 +210,7 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
     }
     let toquesFriosNesteCiclo = 0;
     let reativacoesNesteCiclo = 0;
+    let toquesDeConversaNesteCiclo = 0;
     // Contado no banco (não em memória) para o limite diário sobreviver a
     // restart — mesma decisão do agendador de abordagem. Preguiçoso: só
     // consulta quando uma reativação de fato vence neste ciclo.
@@ -201,7 +244,14 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       return ativoNoPainel;
     };
 
-    // Find pending follow-ups that are due
+    // Find pending follow-ups that are due.
+    //
+    // EM ORDEM DE VENCIMENTO, e isso passou a importar em 22/08: com cota por
+    // ciclo (`TOQUES_DE_CONVERSA_POR_CICLO`), "qual dos vencidos sai primeiro"
+    // deixou de ser indiferente. Sem `ORDER BY` o Postgres devolve na ordem que
+    // for mais barata para ele, e num represamento o mesmo toque atrasado
+    // poderia perder a vez a cada rodada, indefinidamente, enquanto outros
+    // passam na frente. Cota sem ordem não é cota: é sorteio.
     const due = await db
       .select({
         followUp: followUpsTable,
@@ -215,7 +265,74 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
           lte(followUpsTable.scheduledAt, now),
         ),
       )
+      .orderBy(asc(followUpsTable.scheduledAt))
       .limit(20);
+
+    /**
+     * OS TOQUES QUE JÁ SAÍRAM para estes leads, por `chaveDoToque`.
+     *
+     * Existe porque a tabela TEM linhas duplicadas e vai continuar tendo. Até
+     * 17/08/2026 o webhook não serializava por lead: duas respostas quase
+     * simultâneas cancelavam a leva pendente e inseriam DUAS levas novas. A
+     * trava de `lib/turno-do-lead.ts` conserta a PRODUÇÃO de duplicatas — ela
+     * não apaga as que já estavam gravadas, e ninguém tinha feito essa segunda
+     * pergunta.
+     *
+     * O estrago só apareceu em 22/08, quando a pausa de três dias caiu e a fila
+     * represada saiu de uma vez: um lead recebeu a MESMA mensagem duas vezes,
+     * com 11 segundos entre elas, porque as duas linhas venceram juntas e o
+     * laço não tinha como saber que eram a mesma coisa. O sintoma chega ao dono
+     * idêntico ao defeito de 17/08 — "a Júlia está repetindo mensagem" — e faz
+     * duvidar da trava, que estava certa e no ar.
+     *
+     * ⚠️ A CHAVE SOZINHA NÃO BASTA, e a cerca pegou isto: (lead, kind, número)
+     * se REPETE de leva em leva. Toda resposta do dentista cancela a leva
+     * pendente e arma outra começando do toque 1 — então um lead que responde
+     * depois de já ter recebido o toque 1 tem, legitimamente, um toque 1 novo
+     * pendente e um toque 1 antigo `sent`. Cancelar por chave calaria justamente
+     * quem voltou a falar, que é o oposto do que se quer. O mesmo vale para a
+     * reativação, que é rearmada toda vez que uma cadência de conversa esgota.
+     *
+     * O que separa o gêmeo do rearme é o RELÓGIO: o toque de uma leva nova é
+     * agendado DEPOIS de o anterior ter saído, e o gêmeo é agendado no mesmo
+     * instante do irmão — ou seja, antes de ele sair. Então a condição é
+     * `sentAt >= scheduledAt`: o irmão saiu quando esta linha já estava
+     * vencida, e duas linhas vencidas para o mesmo lugar da cadência são a
+     * mesma mensagem.
+     *
+     * `sentAt` nulo (linha anterior à coluna) não conclui nada e não cancela:
+     * errar para o lado de mandar de novo custa uma mensagem; errar para o
+     * outro cala uma conversa viva.
+     *
+     * Uma consulta por ciclo, só para os leads que têm toque vencido agora.
+     */
+    const enviadoEm = new Map<string, number>();
+    if (due.length > 0) {
+      const enviados = await db
+        .select()
+        .from(followUpsTable)
+        .where(
+          and(
+            eq(followUpsTable.status, "sent"),
+            inArray(followUpsTable.leadId, [
+              ...new Set(due.map(({ lead }) => lead.id)),
+            ]),
+          ),
+        );
+      for (const f of enviados) {
+        if (!f.sentAt) continue;
+        const chave = chaveDoToque(f.leadId, f.kind, f.touchNumber);
+        const quando = new Date(f.sentAt).getTime();
+        const atual = enviadoEm.get(chave);
+        if (atual === undefined || quando > atual) enviadoEm.set(chave, quando);
+      }
+    }
+
+    /** Este toque já saiu, e saiu como GÊMEO desta linha (ver `enviadoEm`)? */
+    const jaSaiuIgual = (chave: string, scheduledAt: Date | string): boolean => {
+      const quando = enviadoEm.get(chave);
+      return quando !== undefined && quando >= new Date(scheduledAt).getTime();
+    };
 
     for (const { followUp, lead } of due) {
       // Skip if lead is closed/lost
@@ -224,6 +341,50 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
           .update(followUpsTable)
           .set({ status: "cancelled" })
           .where(eq(followUpsTable.id, followUp.id));
+        continue;
+      }
+
+      // ESTE TOQUE JÁ SAIU PARA ESTE LEAD (22/08/2026) — ver `jaSaiu`.
+      //
+      // CANCELADO, e não adiado. É a única coisa deste laço que cancela sem o
+      // lead ter virado closed/lost, e a diferença é o que está sendo tratado:
+      // todo o resto aqui adia porque o toque ainda TEM que sair um dia; duas
+      // linhas para o mesmo lugar da cadência não são um toque atrasado, são um
+      // toque a mais. Deixá-las pendentes só adia a mensagem repetida para a
+      // rodada seguinte, e ela voltaria para sempre.
+      //
+      // Vem ANTES de qualquer trava de horário e de qualquer geração de texto:
+      // uma linha duplicada não deve custar nem uma chamada de modelo.
+      const chave = chaveDoToque(lead.id, followUp.kind, followUp.touchNumber);
+      if (jaSaiuIgual(chave, followUp.scheduledAt)) {
+        await db
+          .update(followUpsTable)
+          .set({ status: "cancelled" })
+          .where(eq(followUpsTable.id, followUp.id));
+        logger.warn(
+          {
+            leadId: lead.id,
+            followUpId: followUp.id,
+            kind: followUp.kind,
+            touchNumber: followUp.touchNumber,
+          },
+          "Toque duplicado cancelado: este lead ja recebeu este toque desta cadencia",
+        );
+        continue;
+      }
+
+      // A COTA DO TOQUE DE CONVERSA (22/08/2026), pelo mesmo desenho do
+      // `TOQUES_FRIOS_POR_CICLO`. Fica PENDING: a próxima rodada é daqui a 5
+      // minutos, e perder o toque é pior que atrasá-lo — mesmo tratamento da
+      // pausa humana, da madrugada e do toque frio fora da janela.
+      //
+      // Depois da deduplicação de propósito: linha duplicada tem que sumir
+      // mesmo com a cota estourada, senão limpar o estoque de duplicatas
+      // andaria a uma por rodada junto com os toques de verdade.
+      if (
+        followUp.kind === "conversa" &&
+        toquesDeConversaNesteCiclo >= TOQUES_DE_CONVERSA_POR_CICLO
+      ) {
         continue;
       }
 
@@ -496,22 +657,108 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
         }
       }
 
-      // Rede de segurança: só cai aqui se um follow-up de CONVERSA foi criado
-      // sem template. Tom igual ao dos templates: curto, usa o mesmo saudacao()
-      // dos demais (Dr./Dra. conforme o nome, ou só o nome quando ambíguo) e
-      // não promete nada — só abre a porta e deixa o link.
+      // O TOQUE DE CONVERSA TAMBÉM NASCE DO MODELO (22/08/2026).
       //
-      // O texto diz "ainda te incomoda", que pressupõe que ele contou que
-      // incomoda — verdade só para quem conversou. Para a abordagem esta rede
-      // não existe mais: o toque frio ou nasce do modelo, ou não sai.
+      // Era o último texto congelado que restava: os quatro
+      // `FOLLOW_UP_TEMPLATES` eram gravados em `message_template` no instante
+      // em que a leva era armada e saíam dias depois exatamente iguais — a
+      // mesma sentença para todo dentista, e com a saudação do dia do
+      // armamento em vez da do relógio de hoje.
+      const ehConversa = followUp.kind === "conversa";
+      let mensagemDeConversa: string | null = null;
+      if (ehConversa) {
+        // O PAPEL do toque, que NÃO é o número dele.
+        //
+        // O último toque de qualquer cadência é a despedida: numa cadência de
+        // dois, prometer "essa é minha última mensagem" e nunca mandá-la
+        // deixaria a porta entreaberta para sempre, e mandar um toque do meio
+        // como final quebraria a promessa ao contrário. Quem decide isso é o
+        // webhook, na hora de armar (`idx === cadencia.length - 1`) — mas o
+        // TAMANHO da cadência não fica gravado em lugar nenhum, então aqui se
+        // descobre pela fila: é o último se não sobrou nenhum depois dele.
+        const pendentesDaLeva = await db
+          .select()
+          .from(followUpsTable)
+          .where(
+            and(
+              eq(followUpsTable.leadId, lead.id),
+              eq(followUpsTable.kind, "conversa"),
+              eq(followUpsTable.status, "pending"),
+            ),
+          );
+        const ehUltimo = !pendentesDaLeva.some(
+          (f) => f.touchNumber > followUp.touchNumber,
+        );
+        const papel = (ehUltimo ? 4 : Math.min(followUp.touchNumber, 3)) as
+          | 1
+          | 2
+          | 3
+          | 4;
+
+        const mensagens = await db
+          .select()
+          .from(leadMessagesTable)
+          .where(eq(leadMessagesTable.leadId, lead.id))
+          .orderBy(asc(leadMessagesTable.createdAt));
+
+        // A conversa ANDOU? Conta as mensagens DELE, não o total: as respostas
+        // da Júlia inflariam o número e fariam toda conversa parecer profunda.
+        // Mesma conta do webhook, que é onde esta distinção nasceu (Rodada 53)
+        // — e é ela que decide entre "ficou pela metade" e "a gente conversou
+        // bastante", que era o defeito de escolher o texto pelo índice.
+        const profunda = conversaFoiProfunda(
+          mensagens.filter((m) => m.direction === "inbound").length,
+        );
+        const jaEnviadas = mensagens
+          .filter((m) => m.direction === "outbound")
+          .map((m) => m.content);
+
+        try {
+          mensagemDeConversa = await gerarMensagemDeToqueDeConversa(
+            {
+              name: lead.name,
+              clinicName: lead.clinicName,
+              painPoints: lead.painPoints,
+            },
+            papel,
+            profunda,
+            jaEnviadas,
+            now,
+          );
+        } catch (err) {
+          // Ao contrário do toque frio, aqui NÃO se adia: cai no texto gravado
+          // logo abaixo. É a diferença de quem está do outro lado — o frio não
+          // pediu nada e pode esperar o próximo ciclo; este respondeu, e o
+          // silêncio depois de uma conversa custa mais que uma frase repetida.
+          logger.error(
+            { err, leadId: lead.id, touchNumber: followUp.touchNumber, papel },
+            "Falha ao gerar o toque de conversa — cai no texto gravado",
+          );
+        }
+      }
+
+      // A ORDEM É A DECISÃO. Texto gerado na hora vence texto gravado, sempre.
       //
-      // Repare na ordem: o toque de abordagem vem ANTES do `messageTemplate`,
-      // e é de propósito. As linhas gravadas antes de 19/08/2026 ainda carregam
-      // a frase fixa antiga no banco — respeitá-la faria os toques já agendados
-      // saírem com o texto idêntico que esta mudança existe para eliminar.
+      // Para a ABORDAGEM isso vale desde 19/08/2026, e para a CONVERSA desde
+      // 22/08: as linhas armadas antes dessas datas ainda carregam a frase fixa
+      // antiga no banco (com o link no fim), e respeitá-la faria os toques já
+      // agendados saírem com exatamente o texto que estas mudanças existem para
+      // eliminar. O `messageTemplate` sobrou como o que ele sempre deveria ter
+      // sido: o que sai quando o modelo falha, e não o normal.
+      //
+      // ⚠️ Ele é uma porta dos fundos conhecida — se a OpenAI cair, a frase
+      // idêntica volta para vários leads de uma vez, que é exatamente o cenário
+      // que o toque frio recusou ter (lá não há rede: ou nasce do modelo, ou
+      // não sai). Aqui a rede ficou porque quem recebe já conversou, e deixá-lo
+      // no silêncio é pior. É uma escolha, não um esquecimento.
+      //
+      // A última linha é a rede da rede: só cai nela um follow-up de conversa
+      // criado sem template nenhum. Tom igual ao dos templates — curto, com o
+      // mesmo `saudacao()` dos demais, sem prometer nada.
       const message =
         mensagemDeReativacao ??
         mensagemDeToqueFrio ??
+        mensagemDeConversa ??
         followUp.messageTemplate ??
         `${saudacao(lead.name)}aqui é a Júlia do CaptaClin 😊 Passando pra saber se o WhatsApp da sua clínica ainda te incomoda. Se quiser dar uma olhada por conta: https://www.captaclin.com.br`;
 
@@ -586,6 +833,16 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
         .set({ status: "sent", sentAt: now })
         .where(eq(followUpsTable.id, followUp.id));
 
+      // A partir daqui este toque existe para o resto do ciclo. É o que faz a
+      // deduplicação pegar o gêmeo que está no MESMO lote de vencidos — o caso
+      // real de 22/08, e o único que a consulta do `enviadoEm` não podia ter
+      // visto, porque quando ela rodou nenhum dos dois tinha saído ainda.
+      //
+      // Carimba com `now`, o mesmo relógio gravado em `sentAt` logo acima: é o
+      // que faz a comparação com o `scheduledAt` do gêmeo dar o mesmo veredito
+      // que daria no ciclo seguinte, lendo do banco.
+      enviadoEm.set(chave, now.getTime());
+
       if (ehReativacao) {
         reativacoesNesteCiclo++;
         if (reativacoesDeHoje !== null) reativacoesDeHoje++;
@@ -601,6 +858,8 @@ export async function rodarCicloDeFollowUp(agora: Date = new Date()): Promise<vo
       // pendente e arma uma cadência de conversa nova — e quando ELA acabar,
       // a reativação é rearmada daqui, contando do zero.
       if (followUp.kind === "conversa") {
+        toquesDeConversaNesteCiclo++;
+
         const restantes = await db
           .select()
           .from(followUpsTable)

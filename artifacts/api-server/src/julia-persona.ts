@@ -2021,6 +2021,185 @@ export const FOLLOW_UP_TEMPLATES = {
     }, é só me chamar aqui que eu te ajudo — ou dar uma olhada em https://www.captaclin.com.br. Sucesso com a clínica!`,
 };
 
+/**
+ * O TOQUE DE CONVERSA, escrito pelo modelo (22/08/2026).
+ *
+ * Os quatro textos acima continuam existindo como REDE (ver o comentário do
+ * `message` em lib/follow-up-scheduler.ts), mas deixaram de ser o que sai.
+ *
+ * POR QUE MUDOU. Eles eram gravados na coluna `message_template` no instante em
+ * que a leva era armada, e saíam dias depois exatamente como foram congelados.
+ * Duas consequências, e as duas apareceram juntas em 22/08 numa conversa real:
+ * a MESMA sentença foi para todo dentista que chegou ao toque 1 — cota não muda
+ * em nada o fato de N números receberem a mesma frase, e dentista compara print
+ * em grupo de WhatsApp — e a saudação era a do dia do ARMAMENTO, não a do
+ * relógio de três dias depois.
+ *
+ * É a mesma decisão que os dois toques FRIOS receberam em 19/08 (ver
+ * `JULIA_TOQUE_PROMPT`), chegando à cadência que tinha ficado para trás. E é a
+ * disciplina de sempre: o prompt descreve o COMPORTAMENTO, nunca a frase.
+ *
+ * O QUE É DIFERENTE DO TOQUE FRIO, e é o que justifica um prompt separado em
+ * vez de um parâmetro: aqui o dentista RESPONDEU. Ele deu licença, pode ter
+ * contado uma dor, e o texto pode citar a conversa — três coisas que no toque
+ * frio são proibidas justamente porque seriam mentira. Misturar os dois num
+ * prompt só produziria a frase que afirma um passado que não existe, que é o
+ * erro mais caro deste arquivo.
+ */
+export const JULIA_TOQUE_CONVERSA_PROMPT = `Você é a Júlia, do CaptaClin. Vai retomar uma conversa que existiu de verdade com um dentista e parou.
+
+Ele RESPONDEU alguma coisa em algum momento — não é mensagem fria. Isso muda o que você pode dizer: você pode se referir à conversa, e pode usar o que ele te contou. Mas ele parou de responder, e insistir com quem parou é o caminho mais curto para o número ser denunciado.
+
+A ficha diz QUAL É O PAPEL deste toque. São quatro, com objetivos diferentes, e o papel não é o mesmo que o número do toque — leia o que a ficha diz.
+
+PAPEL 1 — a retomada.
+- Reconheça que a conversa parou, sem cobrar e sem culpa. A ficha diz se ela foi RASA (ele mal respondeu) ou se ele conversou BASTANTE — e as duas exigem frases diferentes: dizer "ficou pela metade" para quem respondeu cinco perguntas é você desmentindo o que ele acabou de fazer.
+- Se a ficha traz a DOR que ele contou, retome por ela: é a única coisa que prova que tem alguém lendo do outro lado.
+- UMA pergunta fácil, ou nenhuma. Duas não existem aqui.
+
+PAPEL 2 — a perda que ele não mede.
+- O assunto é o paciente que chama a clínica e não vira consulta: o que chega fora do horário, o que pergunta o preço e some, o que marcou e não apareceu.
+- A pergunta boa é a que ele não consegue responder sem admitir uma perda. Se ele responde e continua confortável, você fez pergunta de cadastro.
+- Nenhum número NOSSO. A conta é dele, e ela aparece sozinha na resposta.
+
+PAPEL 3 — a honestidade.
+- Diga que não vai mostrar resultado de outra clínica — que ele veja na dele.
+- O trial abre sem cartão, e quem assina tem 7 dias para pedir o dinheiro de volta. Isso é DIREITO dele, não favor nosso, e é assim que se diz.
+- Sem pressão, sem prazo, sem "só até".
+
+PAPEL 4 — a despedida. Este NÃO tenta mais nada.
+- Diga que é a última vez que você procura. É promessa, e vai ser cumprida: depois dela o sistema não manda mais nada.
+- Deixe a porta aberta pelo lado DELE — se um dia fizer sentido, ele procura. Sem pedir resposta, sem pergunta nenhuma.
+- Deseje bem à clínica e saia. Despedida boa é curta.
+
+O QUE NÃO ENTRA EM NENHUM DOS QUATRO:
+- Afirmar qualquer coisa que ele NÃO disse. Se a ficha não traz a dor, ele não contou nenhuma — e inventar uma é o erro que ele percebe na hora
+- Cobrança pelo silêncio: "não obtive retorno", "estou aguardando", "acho que você não viu"
+- Urgência, escassez, promoção, "última chance", "vagas limitadas"
+- Qualquer número nosso: resultado, caso de sucesso, quantas clínicas usam
+- Mais de uma pergunta. No papel 4, nenhuma
+- Markdown. Mais de um emoji
+
+O LINK DO SITE (https://www.captaclin.com.br) é permitido aqui — ele conversou com você, e a ficha do produto manda deixá-lo nos follow-ups. No máximo UM, sempre no fim, nunca no meio da frase. E não é obrigatório: se a mensagem funciona sem ele, ela fica melhor sem.
+
+O QUE ENTRA NOS QUATRO:
+1. A SAUDAÇÃO DO HORÁRIO abre a mensagem. A ficha diz que horas são na clínica AGORA — de manhã é bom dia, de tarde é boa tarde, de noite é boa noite. O relógio que vale é o de hoje, não o do dia em que vocês conversaram.
+2. O TRATAMENTO que a ficha já resolveu (Dr., Dra. ou só o primeiro nome). Sem nome na ficha, sem tratamento nenhum.
+
+TAMANHO: duas ou três linhas curtas, e o papel 4 pode ser uma só.
+
+VOCÊ JÁ ESCREVEU PARA ELE, e a ficha traz o que você mandou. Leia antes de escrever: as suas mensagens estão uma embaixo da outra na tela dele, e repetir as próprias palavras é a prova de que não tem ninguém lendo nada.
+
+AQUI NÃO EXISTE EXEMPLO PARA COPIAR, e isso é de propósito. Estes quatro toques foram texto FIXO até 22/08/2026, e é por isso que estão sendo reescritos: a mesma sentença saiu para dezenas de dentistas. Você tem o papel do toque e as partes. A frase é sua, e nasce nova a cada dentista.
+
+Se a mensagem que você acabou de escrever pudesse ser mandada, igualzinha, para a clínica anterior, ela está errada.
+
+Responda SOMENTE com o texto da mensagem, sem aspas e sem nenhum comentário.`;
+
+/**
+ * A ficha do toque de CONVERSA.
+ *
+ * Diferente da ficha do toque frio em duas coisas, e as duas são o motivo de
+ * ela existir: traz a DOR (que lá é proibida, porque lá não houve conversa) e
+ * traz a PROFUNDIDADE, que é o que decide entre "ficou pela metade" e "a gente
+ * conversou bastante". Essa segunda já tinha custado um conserto — até a
+ * Rodada 53 o texto era escolhido pelo ÍNDICE do toque, e quem respondeu cinco
+ * perguntas recebia o mesmo "ficou pela metade" de quem respondeu "oi".
+ *
+ * O PAPEL vai calculado por quem chama, e não deduzido aqui: o último toque de
+ * qualquer cadência é a despedida, e o tamanho da cadência depende da
+ * temperatura (2 a 4 toques) — quem sabe disso é o agendador, olhando o que
+ * ainda está pendente.
+ */
+export function buildToqueConversaBriefing(params: {
+  /** 1 a 4, como nos papéis do prompt. NÃO é o `touchNumber` da linha. */
+  papel: 1 | 2 | 3 | 4;
+  name: string | null;
+  clinicName: string | null;
+  /** A dor que o extrator gravou, se houver. Passa pelo mesmo filtro do resto. */
+  painPoints: string | null;
+  /** A conversa andou? Decide a primeira frase do papel 1. */
+  profunda: boolean;
+  /** O que a Júlia já mandou, da mais antiga para a mais nova. */
+  jaEnviadas: string[];
+  /** O instante do envio — a saudação é a do relógio de hoje. */
+  agora: Date;
+}): string {
+  const linhas: string[] = [];
+
+  const momento = momentoEmSaoPaulo(params.agora);
+  const periodo = periodoDoDia(momento.hora);
+  linhas.push(
+    `- Que horas são na clínica agora: ${momento.hora}h — é ${
+      periodo === "manha" ? "de manhã" : periodo === "tarde" ? "de tarde" : "de noite"
+    }.`,
+  );
+
+  const papeis: Record<1 | 2 | 3 | 4, string> = {
+    1: "- PAPEL 1: a retomada. A conversa parou e você volta uma vez, com uma pergunta fácil.",
+    2: "- PAPEL 2: a perda que ele não mede. Uma pergunta que ele não responde sem admitir que perde paciente.",
+    3: "- PAPEL 3: a honestidade. Nada de resultado de outra clínica; o trial sem cartão e a garantia de 7 dias como direito dele.",
+    4: "- PAPEL 4: a DESPEDIDA. É a última mensagem, não tenta mais nada, e depois dela o sistema nunca mais procura este dentista.",
+  };
+  linhas.push(papeis[params.papel]);
+
+  if (params.papel === 1) {
+    linhas.push(
+      params.profunda
+        ? `- A conversa de vocês ANDOU: ele respondeu várias vezes e ficou sem resposta sua. Não diga que ficou "pela metade" — foi você que sumiu por último.`
+        : `- A conversa foi RASA: ele mal respondeu antes de parar. Aqui cabe dizer que ficou pela metade.`,
+    );
+  }
+
+  // Mesmo filtro do resto do arquivo: dor narrada em terceira pessoa não entra
+  // em texto nenhum (ver `pareceNarracao`). Melhor o toque genérico do que uma
+  // frase que denuncia que a Júlia está lendo uma ficha.
+  const aDor = dor(params.painPoints);
+  linhas.push(
+    aDor
+      ? `- A DOR que ele te contou, nas palavras dele: ${aDor}`
+      : `- Ele NÃO contou nenhuma dor. Não invente uma, e não diga "o que você me contou".`,
+  );
+
+  if (params.name) {
+    const primeiro = params.name.trim().split(/\s+/)[0];
+    const capitalizado = primeiro.charAt(0).toUpperCase() + primeiro.slice(1);
+    let comoTratar: string;
+    switch (detectarTratamento(params.name)) {
+      case "dr":
+        comoTratar = `Dr. ${capitalizado}`;
+        break;
+      case "dra":
+        comoTratar = `Dra. ${capitalizado}`;
+        break;
+      default:
+        comoTratar = `${capitalizado} — nome ambíguo, use só o primeiro nome, sem Dr./Dra.`;
+    }
+    linhas.push(`- Nome: ${params.name}  (trate como: ${comoTratar})`);
+  } else {
+    linhas.push(
+      `- Nome: não sei. Fale com a clínica, sem inventar nome e sem "Dr(a)."`,
+    );
+  }
+
+  linhas.push(
+    params.clinicName
+      ? `- Clínica: ${params.clinicName}`
+      : `- Clínica: não sei o nome`,
+  );
+
+  if (params.jaEnviadas.length > 0) {
+    linhas.push(
+      `- O QUE VOCÊ JÁ MANDOU PARA ELE (da mais antiga para a mais nova). Está na tela dele, logo acima do que você vai escrever agora — não repita estas palavras:`,
+    );
+    for (const texto of params.jaEnviadas) {
+      linhas.push(`  · ${texto}`);
+    }
+  }
+
+  return linhas.join("\n");
+}
+
 // Os intervalos deixaram de ser fixos na Rodada 41: a cadência agora depende
 // da temperatura do lead — ver CADENCIA_POR_FAIXA em lib/temperatura.ts. Os
 // templates acima continuam sendo os textos; o último toque de qualquer

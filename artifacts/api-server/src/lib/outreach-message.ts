@@ -1,6 +1,12 @@
 /**
- * Geração das mensagens FRIAS: a primeira abordagem e os dois toques de quem
- * nunca respondeu.
+ * Geração das mensagens que a JÚLIA INICIA: a primeira abordagem, os dois
+ * toques de quem nunca respondeu e os quatro toques de quem conversou e parou.
+ *
+ * Era só o frio até 22/08/2026 — os toques de conversa entraram quando
+ * deixaram de ser texto congelado no banco. O que junta os três aqui não é o
+ * público (o de conversa já respondeu, os outros dois não), é o modo de falhar:
+ * teto estourado, conteúdo vazio, texto que volta entre aspas. Ver
+ * `gerarTextoDoModelo`.
  *
  * A abertura fica num arquivo próprio porque tem DOIS donos: o agendador que
  * envia de verdade e a rota de prévia que só mostra. É essencial que os dois
@@ -11,7 +17,7 @@
  *
  * Os toques entraram aqui em 19/08/2026, quando deixaram de ser texto fixo.
  * Moram no mesmo arquivo porque falham do mesmo jeito e dividem a chamada ao
- * modelo (ver `gerarTextoFrio`) — o que muda entre eles é o prompt e a ficha.
+ * modelo (ver `gerarTextoDoModelo`) — o que muda entre eles é o prompt e a ficha.
  */
 import { openai } from "@workspace/integrations-openai-ai-server";
 import {
@@ -19,6 +25,8 @@ import {
   buildOutreachBriefing,
   JULIA_TOQUE_PROMPT,
   buildToqueBriefing,
+  JULIA_TOQUE_CONVERSA_PROMPT,
+  buildToqueConversaBriefing,
 } from "../julia-persona";
 import { comRepique, esperasDeRepique } from "./repique";
 // Nome e default do modelo moram em lib/modelos.ts (fonte única, conferida
@@ -69,7 +77,7 @@ export async function gerarMensagemDeAbordagem(
     agora,
   });
 
-  return gerarTextoFrio(JULIA_OUTREACH_PROMPT, briefing, "Abordagem");
+  return gerarTextoDoModelo(JULIA_OUTREACH_PROMPT, briefing, "Abordagem");
 }
 
 /**
@@ -107,24 +115,67 @@ export async function gerarMensagemDeToque(
     agora,
   });
 
-  return gerarTextoFrio(JULIA_TOQUE_PROMPT, briefing, `Toque ${toque}`);
+  return gerarTextoDoModelo(JULIA_TOQUE_PROMPT, briefing, `Toque ${toque}`);
+}
+
+/**
+ * Devolve o texto de um toque da cadência de CONVERSA — quem já respondeu
+ * alguma coisa — ou null se o modelo não produziu nada aproveitável.
+ *
+ * Existe desde 22/08/2026, e é a mesma mudança que os toques FRIOS receberam em
+ * 19/08 chegando à cadência que tinha ficado para trás. Até aqui estes quatro
+ * textos eram congelados na coluna `message_template` no instante em que a leva
+ * era armada, e saíam dias depois exatamente como foram gravados: a mesma
+ * sentença para todo dentista, e com a saudação do dia errado.
+ *
+ * Mora neste arquivo pelo mesmo motivo dos outros dois — falha do mesmo jeito e
+ * divide a chamada ao modelo. O que muda é o prompt e a ficha.
+ *
+ * O PAPEL vem de fora, e não do número do toque: o último toque de qualquer
+ * cadência é a despedida, e a cadência tem de 2 a 4 toques conforme a
+ * temperatura. Quem sabe se este é o último é quem olha a fila.
+ */
+export async function gerarMensagemDeToqueDeConversa(
+  lead: Pick<DadosDoLead, "name" | "clinicName"> & { painPoints: string | null },
+  papel: 1 | 2 | 3 | 4,
+  /** A conversa andou? Decide a primeira frase do papel 1. */
+  profunda: boolean,
+  /** O que a Júlia já mandou para este dentista, da mais antiga para a mais nova. */
+  jaEnviadas: string[],
+  agora: Date,
+): Promise<string | null> {
+  const briefing = buildToqueConversaBriefing({
+    papel,
+    name: lead.name,
+    clinicName: lead.clinicName,
+    painPoints: lead.painPoints,
+    profunda,
+    jaEnviadas,
+    agora,
+  });
+
+  return gerarTextoDoModelo(
+    JULIA_TOQUE_CONVERSA_PROMPT,
+    briefing,
+    `Toque de conversa (papel ${papel})`,
+  );
 }
 
 /**
  * A chamada ao modelo que a abertura e os toques dividem: repique, teto,
  * diagnóstico do vazio e limpeza das aspas.
  *
- * Um lugar só de propósito. As duas mensagens frias falham exatamente pelos
- * mesmos motivos — teto estourado, conteúdo vazio, texto que volta entre aspas
- * — e foi um desses casos (a prévia muda de 18/08) que mostrou o preço de ter
- * o diagnóstico em quem chama: um dono logava, o outro não, e o defeito
- * escolheu justamente o lado cego.
+ * Um lugar só de propósito. Todas falham exatamente pelos mesmos motivos —
+ * teto estourado, conteúdo vazio, texto que volta entre aspas — e foi um
+ * desses casos (a prévia muda de 18/08) que mostrou o preço de ter o
+ * diagnóstico em quem chama: um dono logava, o outro não, e o defeito escolheu
+ * justamente o lado cego.
  *
- * `rotulo` é o que aparece no log ("Abordagem", "Toque 1") — sem ele as três
- * mensagens de erro ficariam indistinguíveis, que é o mesmo buraco por outro
- * caminho.
+ * `rotulo` é o que aparece no log ("Abordagem", "Toque 1", "Toque de conversa
+ * (papel 3)") — sem ele as mensagens de erro ficariam indistinguíveis, que é o
+ * mesmo buraco por outro caminho.
  */
-async function gerarTextoFrio(
+async function gerarTextoDoModelo(
   prompt: string,
   briefing: string,
   rotulo: string,

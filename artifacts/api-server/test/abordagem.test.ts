@@ -529,11 +529,21 @@ secao("toque de conversa — fim de semana e botão do painel continuam NÃO fre
     messageTemplate: "toque de conversa",
   });
   delete process.env.OUTREACH_ENABLED;
+  ctrl.reply = "TOQUE DE CONVERSA GERADO AGORA";
   // Domingo, 14h em SP, trava mestra desligada: sai assim mesmo.
   await rodarCicloDeFollowUp(new Date("2026-08-16T17:00:00.000Z"));
   ok(
     "domingo à tarde, com a trava mestra desligada, o toque de conversa sai",
-    wa.enviadas.length === 1 && wa.enviadas[0].message === "toque de conversa",
+    wa.enviadas.length === 1,
+    JSON.stringify(wa.enviadas),
+  );
+  // 22/08/2026: a asserção media o `messageTemplate` do banco, porque até aqui
+  // era ele que saía. Agora o texto nasce do modelo na hora do envio, e medir o
+  // template de novo seria travar a versão CONGELADA que esta mudança existe
+  // para eliminar — a fixture modelava o defeito.
+  ok(
+    "e com o texto gerado agora, não com o congelado no banco",
+    wa.enviadas[0]?.message === "TOQUE DE CONVERSA GERADO AGORA",
     JSON.stringify(wa.enviadas),
   );
   process.env.OUTREACH_ENABLED = "true";
@@ -578,11 +588,20 @@ secao("toque de conversa — a MADRUGADA freia, e o toque fica pendente");
   ok("de noite também não sai", wa.enviadas.length === 0);
   ok("continua pendente", pendentes().length === 1);
 
-  // 9h em SP do dia seguinte: sai, com o texto que já estava gravado.
+  // 9h em SP do dia seguinte: sai — e o texto é escrito NESTE momento, que é
+  // metade do motivo de gerar na hora do envio em vez de no armamento. O toque
+  // ficou três ciclos parado esperando o horário; um texto congelado abriria
+  // com a saudação da madrugada em que ele venceu.
+  ctrl.reply = "TOQUE DE CONVERSA GERADO AGORA";
   await rodarCicloDeFollowUp(new Date("2026-08-19T12:00:00.000Z"));
   ok(
-    "quando o horário abre, sai — e com o mesmo texto",
-    wa.enviadas.length === 1 && wa.enviadas[0].message === "toque de conversa",
+    "quando o horário abre, sai",
+    wa.enviadas.length === 1,
+    JSON.stringify(wa.enviadas),
+  );
+  ok(
+    "e com o texto gerado agora, não com o congelado no banco",
+    wa.enviadas[0]?.message === "TOQUE DE CONVERSA GERADO AGORA",
     JSON.stringify(wa.enviadas),
   );
   // O toque vira 'sent'. Os pendentes NÃO zeram, e é correto: era o último da
@@ -634,6 +653,154 @@ secao("ele responde: sai da cadência de abordagem e entra na de conversa");
     state.leads[0].outreachStatus !== "nao_respondeu",
     state.leads[0].outreachStatus,
   );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 22/08/2026 — O TOQUE DUPLICADO, e a cota que impede a rajada.
+//
+// O caso real: até 17/08 o webhook não serializava por lead, e duas respostas
+// quase simultâneas cancelavam a leva pendente e inseriam DUAS levas novas. A
+// trava de `lib/turno-do-lead.ts` fechou a produção de duplicatas — e as linhas
+// já gravadas continuaram no banco. Em 22/08 uma pausa de três dias caiu, a
+// fila represada saiu de uma vez, e um lead recebeu a MESMA mensagem duas
+// vezes, com 11 segundos entre elas.
+//
+// A asserção que MAIS importa aqui não é "o gêmeo é cancelado" — é a de baixo,
+// a do rearme: (lead, kind, touchNumber) se repete de leva em leva, e a
+// primeira versão desta regra, escrita só com essa chave, cancelava o toque 1
+// de quem tinha VOLTADO A RESPONDER. Calar quem voltou a falar é pior do que o
+// defeito que a regra conserta.
+// ───────────────────────────────────────────────────────────────────────────
+secao("toque duplicado — o gêmeo é cancelado, o rearme não");
+{
+  state.reset();
+  wa.reset();
+  ctrl.reset();
+  abordagemNoPainel(true);
+  ctrl.reply = "TOQUE GERADO";
+  const id = state.nextId++;
+  state.leads.push({
+    id,
+    phone: NUMERO,
+    name: "Marina",
+    status: "warm",
+    funnelStage: "qualified",
+    outreachStatus: "none",
+    createdAt: new Date(),
+  });
+  // Os dois gêmeos: mesma leva, mesmo lugar da cadência, armados com segundos
+  // de diferença por dois handlers que corriam em paralelo.
+  for (const atraso of [0, 3000]) {
+    state.followUps.push({
+      id: state.nextId++,
+      leadId: id,
+      status: "pending",
+      touchNumber: 1,
+      kind: "conversa",
+      scheduledAt: new Date(TERCA_14H.getTime() - HORA + atraso),
+      messageTemplate: "texto congelado",
+    });
+  }
+
+  await rodarCicloDeFollowUp(TERCA_14H);
+  ok(
+    "os dois venceram juntos e UMA mensagem saiu",
+    wa.enviadas.length === 1,
+    JSON.stringify(wa.enviadas.map((e: any) => e.message)),
+  );
+  ok(
+    "o gêmeo foi CANCELADO, não adiado — adiar só empurra a repetição",
+    state.followUps.filter((f: any) => f.status === "cancelled").length === 1,
+    JSON.stringify(state.followUps.map((f: any) => f.status)),
+  );
+  // E a prova de que ele não volta. Sem esta passada, a asserção de cima é a
+  // única que enxerga a deduplicação: no PRIMEIRO ciclo a cota de um por rodada
+  // já seguraria a segunda mensagem sozinha, e o teste passaria verde mesmo com
+  // a deduplicação desligada. É no ciclo seguinte que o gêmeo adiado sairia.
+  await rodarCicloDeFollowUp(new Date(TERCA_14H.getTime() + 5 * 60 * 1000));
+  ok(
+    "e no ciclo seguinte ele NÃO volta — continua uma mensagem só",
+    wa.enviadas.length === 1,
+    JSON.stringify(wa.enviadas.map((e: any) => e.message)),
+  );
+
+  // O REARME, que é o falso positivo. O dentista responde depois de o toque 1
+  // já ter saído, e o webhook arma uma leva nova começando do 1 de novo. Este
+  // toque 1 é agendado DEPOIS de o anterior ter saído — e é isso, e só isso,
+  // que o distingue de um gêmeo.
+  wa.reset();
+  state.followUps.push({
+    id: state.nextId++,
+    leadId: id,
+    status: "pending",
+    touchNumber: 1,
+    kind: "conversa",
+    scheduledAt: new Date(TERCA_14H.getTime() + HORA),
+    messageTemplate: null,
+  });
+  await rodarCicloDeFollowUp(new Date(TERCA_14H.getTime() + 2 * HORA));
+  ok(
+    "quem voltou a responder recebe o toque 1 da leva NOVA",
+    wa.enviadas.length === 1,
+    JSON.stringify(wa.enviadas.map((e: any) => e.message)),
+  );
+}
+
+secao("toque de conversa — um por ciclo, para a pausa não virar rajada");
+{
+  state.reset();
+  wa.reset();
+  ctrl.reset();
+  abordagemNoPainel(true);
+  ctrl.reply = "TOQUE GERADO";
+  // Três leads diferentes com toque vencido, como no represamento de 22/08:
+  // leads distintos de propósito, para provar que a cota é do CICLO e não do
+  // lead — a deduplicação já cuida do mesmo lead.
+  for (let i = 0; i < 3; i++) {
+    const id = state.nextId++;
+    state.leads.push({
+      id,
+      phone: `55859999900${i}0`,
+      name: "Marina",
+      status: "warm",
+      funnelStage: "qualified",
+      outreachStatus: "none",
+      createdAt: new Date(),
+    });
+    state.followUps.push({
+      id: state.nextId++,
+      leadId: id,
+      status: "pending",
+      touchNumber: 1,
+      kind: "conversa",
+      scheduledAt: new Date(TERCA_14H.getTime() - HORA),
+      messageTemplate: null,
+    });
+  }
+
+  // Só os de CONVERSA: o toque 1 aqui é o último da cadência de cada lead,
+  // então cada envio arma a fila de reativação em seguida (Rodada 41) e o total
+  // de pendentes cresce por um motivo que nada tem a ver com esta cota.
+  const conversaPendentes = () =>
+    state.followUps.filter(
+      (f: any) => f.kind === "conversa" && f.status === "pending",
+    );
+
+  await rodarCicloDeFollowUp(TERCA_14H);
+  ok(
+    "três vencidos, UMA mensagem no ciclo",
+    wa.enviadas.length === 1,
+    JSON.stringify(wa.enviadas.map((e: any) => e.phone)),
+  );
+  ok(
+    "os outros dois seguem PENDENTES — atrasar é o certo, cancelar não",
+    conversaPendentes().length === 2,
+    JSON.stringify(state.followUps.map((f: any) => `${f.kind}:${f.status}`)),
+  );
+
+  await rodarCicloDeFollowUp(new Date(TERCA_14H.getTime() + 5 * 60 * 1000));
+  ok("no ciclo seguinte sai o segundo", wa.enviadas.length === 2);
+  ok("e um ainda espera", conversaPendentes().length === 1);
 }
 
 delete process.env.OUTREACH_ENABLED;
