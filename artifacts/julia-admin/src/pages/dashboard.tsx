@@ -281,16 +281,27 @@ function ControleDaAbordagem() {
   }
 
   /*
-   * O texto de estado. São três histórias diferentes, e trocar uma pela outra
+   * O texto de estado. São QUATRO histórias diferentes, e trocar uma pela outra
    * faz o painel mentir:
-   *   - pausada    → o que NÃO acontece, e o que continua acontecendo;
+   *   - desligada      → o que NÃO acontece, e o que continua acontecendo;
+   *   - parada sozinha → está ligada, e mesmo assim nada sai, e por quê;
    *   - fora da janela → está ligada, e mesmo assim nada sai hoje;
-   *   - abordando  → quando sai a próxima.
+   *   - abordando      → quando sai a próxima.
+   *
+   * A SEGUNDA ENTROU EM 22/08/2026, e a falta dela custou três dias de fila
+   * parada. O servidor mandava `pausadaPorErro` desde 18/08 e esta função nunca
+   * o leu: com o botão ligado e a pausa ativa, caía direto no "Abordando" e a
+   * tela prometia uma próxima mensagem que não existia. Vem ANTES da janela de
+   * propósito — a pausa vale a qualquer hora, e dizer "fora do horário" para
+   * quem está parado por restrição do WhatsApp manda consertar o relógio.
    */
   let estado: string;
   if (!data.ativo) {
     estado =
       "Nenhuma abordagem nova. Conversas em andamento continuam sendo respondidas.";
+  } else if (data.pausadaPorErro) {
+    estado =
+      "Ligada, mas o sistema parou sozinho: o problema é do nosso número, não dos dentistas. Nenhum lead foi penalizado.";
   } else if (!data.dentroDaJanela) {
     estado = `Ligada, mas fora do horário (${data.janela.inicio}h–${data.janela.fim}h, dias úteis). Nada sai até amanhã.`;
   } else if (data.naFila === 0) {
@@ -327,6 +338,42 @@ function ControleDaAbordagem() {
           </div>
         )}
 
+        {/* A PAUSA QUE O SISTEMA SE IMPÔS (22/08/2026).
+            Faixa própria, e não uma frase no texto de estado, porque ela tem
+            três coisas a dizer que não cabem numa linha: o que houve, desde
+            quando, e o que fazer. E é vermelha, como as faixas gêmeas da
+            varredura e da verificação, porque é o mesmo tipo de aviso — o
+            trabalho parou por erro NOSSO. */}
+        {data.pausadaPorErro && (
+          <div
+            className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm"
+            data-testid="aviso-outreach-pausada"
+          >
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-destructive" />
+            <div>
+              <p className="font-medium text-foreground">
+                Abordagem parada por um problema nosso.
+                {data.pausadaDesde && (
+                  <span className="font-normal text-muted-foreground">
+                    {" "}
+                    Desde {new Date(data.pausadaDesde).toLocaleString("pt-BR")}.
+                  </span>
+                )}
+              </p>
+              <p className="text-muted-foreground">
+                {data.motivoPausa ?? "Sem detalhe."}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Nenhum dentista foi penalizado, e a fila continua inteira. Só
+                gente tira esta pausa: <strong>ligar o botão abaixo é o que a
+                apaga</strong> — e é de propósito, porque quem sabe se a
+                restrição acabou é quem olha o aparelho. Voltar cedo demais
+                agrava.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-1">
             <p className="text-base font-semibold font-mono flex items-center gap-2">
@@ -336,6 +383,19 @@ function ControleDaAbordagem() {
             <p className="text-sm text-muted-foreground" data-testid="texto-estado-abordagem">
               {estado}
             </p>
+            {/* O aviso colado no controle, para quem já entendeu a faixa e vai
+                direto no botão: o gesto tem DOIS efeitos, e o segundo não é
+                óbvio em nenhum lugar do desenho. */}
+            {data.pausadaPorErro && (
+              <p
+                className="text-xs font-medium text-destructive"
+                data-testid="aviso-ligar-apaga-pausa"
+              >
+                {data.ativo
+                  ? "Desligar e ligar de novo é o que apaga a pausa acima."
+                  : "Ligar aqui também apaga a pausa acima."}
+              </p>
+            )}
           </div>
           <Switch
             checked={data.ativo}

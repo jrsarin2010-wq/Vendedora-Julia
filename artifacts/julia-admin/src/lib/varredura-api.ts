@@ -140,6 +140,28 @@ export interface StatusDaAbordagem {
    * não adianta: o agendador nem chega a olhar o banco.
    */
   interruptorGeral: boolean;
+  /**
+   * O SISTEMA parou sozinho por concluir que o problema é do NOSSO número
+   * (lib/restricao.ts): três leads diferentes falharam o envio em sequência,
+   * sem nenhuma entrega no meio.
+   *
+   * Os três campos existem em `/api/outreach/status` desde 18/08/2026 e não
+   * estavam declarados aqui — o servidor mandava, este tipo não conhecia, e
+   * como a interface é escrita à mão por cima de um `fetch`, campo a mais não
+   * quebra typecheck nenhum: não houve erro, houve silêncio. O resultado foi o
+   * pior possível: com o botão LIGADO e a pausa ativa, a tela dizia "Abordando.
+   * Próxima em X min" enquanto zero mensagens saíam, e a fila ficou três dias
+   * parada sem ninguém conseguir explicar por quê.
+   *
+   * Fica SEPARADO de `ativo` porque as duas coisas podem ser verdade ao mesmo
+   * tempo, e é essa combinação que a tela precisa saber contar: o botão está
+   * como você deixou, E o sistema parou por conta própria.
+   */
+  pausadaPorErro: boolean;
+  /** O que houve e o que fazer, em texto corrido. Nulo quando não há pausa. */
+  motivoPausa: string | null;
+  /** Quando a pausa começou, em ISO. Nulo quando não há pausa. */
+  pausadaDesde: string | null;
   /** Dia útil E dentro do horário comercial, no fuso de São Paulo. */
   dentroDaJanela: boolean;
   janela: { inicio: number; fim: number };
